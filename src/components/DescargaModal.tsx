@@ -33,6 +33,23 @@ type DescargaPrevistoItem = {
   previsto: number;
 };
 
+type LoteFatores = {
+  fatorRaca: number;
+  fatorGec: number;
+  fatorImplante: number;
+  fatorCompensatorio: number;
+  fatorAditivo: number;
+};
+
+type LoteInfoItem = {
+  piqueteId: string;
+  cmsAtual: number;
+  qtdAnimais: number;
+  pesoMedio: number;
+  gmdEstimado: number;
+  fatores: LoteFatores;
+};
+
 type DescargaModalProps = {
   visible: boolean;
   roteiroNumero: number;
@@ -40,6 +57,8 @@ type DescargaModalProps = {
   descargaPrevistos: DescargaPrevistoItem[];
   descargas: DescargaTrato[];
   percentualMSFinal: number;
+  lotesInfo: LoteInfoItem[];
+  ndt: number;
   onSave: (descargas: DescargaTrato[]) => void;
   onClose: () => void;
 };
@@ -51,6 +70,8 @@ export function DescargaModal({
   descargaPrevistos,
   descargas,
   percentualMSFinal,
+  lotesInfo,
+  ndt,
   onSave,
   onClose,
 }: DescargaModalProps) {
@@ -84,6 +105,61 @@ export function DescargaModal({
   const descargaAtual = localDescargas.find(
     (d) => d.tratoNumero === tratoAtual
   );
+
+  // Calculate CMS realizado per lote (sum realizado across all tratos, then compute MS)
+  function getCmsRealizado(piqueteId: string): number | null {
+    const info = lotesInfo.find((l) => l.piqueteId === piqueteId);
+    if (!info || percentualMSFinal <= 0) return null;
+    let totalRealizadoLote = 0;
+    for (const d of localDescargas) {
+      for (const it of d.itens) {
+        if (it.piqueteId === piqueteId) {
+          totalRealizadoLote += it.realizado;
+        }
+      }
+    }
+    if (totalRealizadoLote <= 0 || info.qtdAnimais <= 0 || info.pesoMedio <= 0) return null;
+    const msRealizado = totalRealizadoLote * (percentualMSFinal / 100);
+    return (msRealizado / (info.qtdAnimais * info.pesoMedio)) * 100;
+  }
+
+  // Calculate GMD real per lote via NRC model
+  function getGmdReal(piqueteId: string): number | null {
+    const info = lotesInfo.find((l) => l.piqueteId === piqueteId);
+    if (!info || percentualMSFinal <= 0 || ndt <= 0) return null;
+    let totalRealizadoLote = 0;
+    for (const d of localDescargas) {
+      for (const it of d.itens) {
+        if (it.piqueteId === piqueteId) {
+          totalRealizadoLote += it.realizado;
+        }
+      }
+    }
+    if (totalRealizadoLote <= 0 || info.qtdAnimais <= 0 || info.pesoMedio <= 0) return null;
+    const totalMS = totalRealizadoLote * (percentualMSFinal / 100);
+    const cmsAnimal = totalMS / info.qtdAnimais;
+
+    // NRC energy
+    const DE = ndt * 0.04409;
+    const ME = 0.82 * DE;
+    const NEm = 1.37 * ME - 0.138 * ME * ME + 0.0105 * ME * ME * ME - 1.12;
+    const NEg = 1.42 * ME - 0.174 * ME * ME + 0.0122 * ME * ME * ME - 1.65;
+    if (NEm <= 0 || NEg <= 0) return null;
+
+    const SBW = info.pesoMedio * 0.96;
+    const EQSBW = SBW * info.fatores.fatorGec;
+    const NEmReq = 0.077 * Math.pow(EQSBW, 0.75);
+    const NEmIntake = cmsAnimal * NEm;
+    if (NEmIntake <= NEmReq) return 0;
+
+    const feedGain = cmsAnimal - (NEmReq / NEm);
+    const RE = feedGain * NEg;
+    if (RE <= 0) return 0;
+
+    const base = RE / (0.0557 * Math.pow(EQSBW, 0.75));
+    const gmdBase = Math.pow(base, 1 / 1.097);
+    return gmdBase * info.fatores.fatorRaca * info.fatores.fatorImplante * info.fatores.fatorCompensatorio * info.fatores.fatorAditivo;
+  }
 
   function updateRealizado(piqueteId: string, value: string) {
     setLocalDescargas((prev) =>
@@ -175,35 +251,78 @@ export function DescargaModal({
                 )}
               </View>
 
-              {descargaAtual?.itens.map((item) => (
-                <View key={item.piqueteId} style={styles.tableRow}>
-                  <View style={{ flex: 2 }}>
-                    <Text style={styles.cellText}>{item.piqueteNome}</Text>
-                    <Text style={styles.cellSubText}>
-                      Lote {item.loteNumero}
+              {descargaAtual?.itens.map((item) => {
+                const info = lotesInfo.find((l) => l.piqueteId === item.piqueteId);
+                const cmsRealizado = getCmsRealizado(item.piqueteId);
+                const gmdReal = getGmdReal(item.piqueteId);
+                return (
+                  <View key={item.piqueteId} style={styles.tableRow}>
+                    <View style={{ flex: 2 }}>
+                      <Text style={styles.cellText}>{item.piqueteNome}</Text>
+                      <Text style={styles.cellSubText}>
+                        Lote {item.loteNumero}
+                      </Text>
+                      {info && (
+                        <View style={styles.cmsInfoRow}>
+                          <Text style={styles.cmsPrevisto}>
+                            CMS: {info.cmsAtual.toFixed(2)}%
+                          </Text>
+                          {cmsRealizado !== null && (
+                            <Text style={[
+                              styles.cmsRealizado,
+                              cmsRealizado > info.cmsAtual
+                                ? styles.cmsRealizadoUp
+                                : cmsRealizado < info.cmsAtual
+                                  ? styles.cmsRealizadoDown
+                                  : undefined,
+                            ]}>
+                              Real: {cmsRealizado.toFixed(2)}%
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                      {info && (
+                        <View style={styles.cmsInfoRow}>
+                          <Text style={styles.cmsPrevisto}>
+                            GMD Est: {info.gmdEstimado.toFixed(3)} kg
+                          </Text>
+                          {gmdReal !== null && (
+                            <Text style={[
+                              styles.cmsRealizado,
+                              gmdReal > info.gmdEstimado
+                                ? styles.cmsRealizadoUp
+                                : gmdReal < info.gmdEstimado
+                                  ? styles.cmsRealizadoDown
+                                  : undefined,
+                            ]}>
+                              Real: {gmdReal.toFixed(3)} kg
+                            </Text>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.cellPrevisto, { flex: 1 }]}>
+                      {Math.round(item.previsto)} kg
                     </Text>
+                    <View style={{ flex: 1 }}>
+                      <TextInput
+                        style={styles.cellInput}
+                        value={
+                          item.realizado > 0 ? item.realizado.toString() : ""
+                        }
+                        onChangeText={(v) => updateRealizado(item.piqueteId, v)}
+                        keyboardType="numeric"
+                        placeholder="0"
+                      />
+                    </View>
+                    {percentualMSFinal > 0 && (
+                      <Text style={[styles.cellMS, { flex: 1 }]}>
+                        {item.realizado > 0 ? (item.realizado * (percentualMSFinal / 100)).toFixed(1) : "-"}
+                      </Text>
+                    )}
                   </View>
-                  <Text style={[styles.cellPrevisto, { flex: 1 }]}>
-                    {Math.round(item.previsto)} kg
-                  </Text>
-                  <View style={{ flex: 1 }}>
-                    <TextInput
-                      style={styles.cellInput}
-                      value={
-                        item.realizado > 0 ? item.realizado.toString() : ""
-                      }
-                      onChangeText={(v) => updateRealizado(item.piqueteId, v)}
-                      keyboardType="numeric"
-                      placeholder="0"
-                    />
-                  </View>
-                  {percentualMSFinal > 0 && (
-                    <Text style={[styles.cellMS, { flex: 1 }]}>
-                      {item.realizado > 0 ? (item.realizado * (percentualMSFinal / 100)).toFixed(1) : "-"}
-                    </Text>
-                  )}
-                </View>
-              ))}
+                );
+              })}
 
               {/* MS Info */}
               {percentualMSFinal > 0 && (
@@ -315,6 +434,27 @@ const styles = StyleSheet.create({
   cellSubText: {
     fontSize: 12,
     color: "#888",
+  },
+  cmsInfoRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 2,
+  },
+  cmsPrevisto: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#3366FF",
+  },
+  cmsRealizado: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#666",
+  },
+  cmsRealizadoUp: {
+    color: "#4CAF50",
+  },
+  cmsRealizadoDown: {
+    color: "#E53935",
   },
   cellPrevisto: {
     fontSize: 14,

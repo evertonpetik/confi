@@ -25,6 +25,7 @@ import {
 import { db } from "../../firebaseConfig";
 
 const CMS_INICIAL = 1.3;
+const CMS_BASE = 2.6;
 
 type NotaLeitura = {
   descricao: string;
@@ -160,7 +161,7 @@ export default function Leitura() {
         ? leituraExistente.cmsAnterior
         : lote.cmsAtual;
       const cmsNovo = parseFloat(
-        (cmsAnterior * nota.fator).toFixed(4)
+        (cmsAnterior + CMS_BASE * (nota.fator - 1)).toFixed(4)
       );
 
       try {

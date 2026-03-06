@@ -49,6 +49,7 @@ export default function Lotes() {
   const [fatVisible, setFatVisible] = useState(false);
   const [fatLote, setFatLote] = useState<Lote | null>(null);
   const [lancamentosMap, setLancamentosMap] = useState<Map<string, LancamentoFinanceiro[]>>(new Map());
+  const [gmdRealMap, setGmdRealMap] = useState<Map<string, { data: string; gmdReal: number }[]>>(new Map());
 
   // Opcoes dos selects
   const [racaOptions, setRacaOptions] = useState<SelectOption[]>([]);
@@ -200,17 +201,24 @@ export default function Lotes() {
     try {
       const histSnap = await getDocs(collection(db, "historicoMapaTrato"));
       const map = new Map<string, LancamentoFinanceiro[]>();
+      const gmdMap = new Map<string, { data: string; gmdReal: number }[]>();
       for (const hDoc of histSnap.docs) {
         const h = hDoc.data();
         const custoPorLote = h.custoPorLote as { loteId: string; custo: number }[] | undefined;
         if (!custoPorLote || !h.data) continue;
 
         // Build msPorLote lookup if available (real MS from descarga + percentualMSFinal)
-        const msPorLoteData = h.msPorLote as { loteId: string; totalMS: number }[] | undefined;
+        const msPorLoteData = h.msPorLote as { loteId: string; totalMS: number; gmdReal?: number }[] | undefined;
         const msLookup = new Map<string, number>();
         if (msPorLoteData) {
           for (const ml of msPorLoteData) {
             msLookup.set(ml.loteId, ml.totalMS);
+            // Extract gmdReal per lote per day
+            if (ml.gmdReal != null && ml.gmdReal > 0) {
+              const prev = gmdMap.get(ml.loteId) ?? [];
+              prev.push({ data: h.data as string, gmdReal: ml.gmdReal });
+              gmdMap.set(ml.loteId, prev);
+            }
           }
         }
 
@@ -239,6 +247,7 @@ export default function Lotes() {
         }
       }
       setLancamentosMap(map);
+      setGmdRealMap(gmdMap);
     } catch (error) {
       console.error("Erro ao buscar financeiro:", error);
     }
@@ -474,6 +483,7 @@ export default function Lotes() {
                   <LoteCard
                     key={lote.id}
                     lote={lote}
+                    gmdRealDiario={gmdRealMap.get(lote.id) ?? []}
                     onEdit={handleEdit}
                     onDelete={handleDeleteRequest}
                     onMovimentacoes={handleMovimentacoes}

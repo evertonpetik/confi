@@ -32,6 +32,7 @@ export type Lote = {
 
 type LoteCardProps = {
   lote: Lote;
+  gmdRealDiario: { data: string; gmdReal: number }[];
   onEdit: (lote: Lote) => void;
   onDelete: (lote: Lote) => void;
   onMovimentacoes: (lote: Lote) => void;
@@ -81,10 +82,20 @@ function calcularPesoMedioInicial(movimentacoes: Movimentacao[]): number {
 
 export { calcularPesoMedio, calcularQuantidadeAtual };
 
-export function LoteCard({ lote, onEdit, onDelete, onMovimentacoes, onFaturamento }: LoteCardProps) {
+export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoes, onFaturamento }: LoteCardProps) {
   const qtdAtual = calcularQuantidadeAtual(lote.movimentacoes);
   const pesoMedio = calcularPesoMedio(lote.movimentacoes, lote.gmdEstimado);
   const pesoMedioInicial = calcularPesoMedioInicial(lote.movimentacoes);
+
+  // GMD Real medio and Peso Real
+  const gmdRealMedio = gmdRealDiario.length > 0
+    ? gmdRealDiario.reduce((acc, g) => acc + g.gmdReal, 0) / gmdRealDiario.length
+    : null;
+
+  // Peso Real = peso medio inicial + soma dos GMD reais diarios
+  const pesoReal = gmdRealDiario.length > 0
+    ? pesoMedioInicial + gmdRealDiario.reduce((acc, g) => acc + g.gmdReal, 0)
+    : null;
 
   return (
     <View style={styles.card}>
@@ -133,16 +144,42 @@ export function LoteCard({ lote, onEdit, onDelete, onMovimentacoes, onFaturament
             </Text>
           </View>
           <View style={styles.stat}>
-            <Text style={styles.statLabel}>KG Previsto Hoje</Text>
+            <Text style={styles.statLabel}>KG Previsto</Text>
             <Text style={styles.statValue}>
               {pesoMedio > 0 ? `${pesoMedio.toFixed(1)} kg` : "-"}
             </Text>
           </View>
           <View style={styles.stat}>
-            <Text style={styles.statLabel}>GMD</Text>
+            <Text style={styles.statLabel}>GMD Est.</Text>
             <Text style={styles.statValue}>{lote.gmdEstimado} kg</Text>
           </View>
         </View>
+        {(pesoReal !== null || gmdRealMedio !== null) && (
+          <View style={styles.statsRow}>
+            {pesoReal !== null && (
+              <View style={styles.stat}>
+                <Text style={styles.statLabel}>KG Real</Text>
+                <Text style={[styles.statValue, styles.statValueReal]}>
+                  {pesoReal.toFixed(1)} kg
+                </Text>
+              </View>
+            )}
+            {gmdRealMedio !== null && (
+              <View style={styles.stat}>
+                <Text style={styles.statLabel}>GMD Real</Text>
+                <Text style={[styles.statValue, styles.statValueReal]}>
+                  {gmdRealMedio.toFixed(3)} kg
+                </Text>
+              </View>
+            )}
+            {gmdRealDiario.length > 0 && (
+              <View style={styles.stat}>
+                <Text style={styles.statLabel}>Dias</Text>
+                <Text style={styles.statValue}>{gmdRealDiario.length}</Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
       <View style={styles.actions}>
         <TouchableOpacity
@@ -242,6 +279,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#1a1a1a",
+  },
+  statValueReal: {
+    color: "#3366FF",
   },
   actions: {
     flexDirection: "column",

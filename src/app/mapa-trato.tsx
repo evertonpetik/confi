@@ -5,6 +5,7 @@ import { Select, SelectOption } from "@/components/Select";
 import { useResponsive } from "@/hooks/useResponsive";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
+import { useFocusEffect } from "@react-navigation/native";
 import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -18,7 +19,7 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -49,6 +50,8 @@ type DietaData = {
   nome: string;
   insumos: DietaInsumo[];
   percentualMS: number;
+  ndt: number;
+  aditivoNome: string;
 };
 
 type RoteiroData = {
@@ -67,9 +70,23 @@ type LoteData = {
   gmdEstimado: number;
   movimentacoes: { evento: string; quantidade: number; pesoMedio: number; data: string }[];
   cmsAtual: number;
+  raca: string;
+  categoria: string;
+  compensatorio: string;
+  implante: string;
+  tamanhoCorporal: string;
+  dietaId: string;
 };
 
 type InsumoMS = { id: string; percentualMateriaSeca: number; precoMedio: number };
+
+type LoteFatores = {
+  fatorRaca: number;
+  fatorGec: number;
+  fatorImplante: number;
+  fatorCompensatorio: number;
+  fatorAditivo: number;
+};
 
 // Calculated per roteiro
 type RoteiroCalculado = {
@@ -81,6 +98,7 @@ type RoteiroCalculado = {
     pesoMedio: number;
     msLote: number;
     moLote: number;
+    fatores: LoteFatores;
   }[];
   totalMS: number;
   totalMO: number;
@@ -132,6 +150,51 @@ function calcPesoMedio(movs: LoteData["movimentacoes"], gmd: number): number {
   return pesoTotal / qtd;
 }
 
+// ---- NRC GMD Calculation ----
+
+function calcGmdNRC(
+  cmsAnimalKgMS: number,
+  pesoVivo: number,
+  ndt: number,
+  fatores: LoteFatores
+): number {
+  if (cmsAnimalKgMS <= 0 || pesoVivo <= 0 || ndt <= 0) return 0;
+
+  // 1. Diet energy concentrations
+  const DE = ndt * 0.04409;                                       // Mcal/kg
+  const ME = 0.82 * DE;                                           // Mcal/kg
+  const NEm = 1.37 * ME - 0.138 * ME * ME + 0.0105 * ME * ME * ME - 1.12;  // Mcal/kg MS
+  const NEg = 1.42 * ME - 0.174 * ME * ME + 0.0122 * ME * ME * ME - 1.65;  // Mcal/kg MS
+
+  if (NEm <= 0 || NEg <= 0) return 0;
+
+  // 2. Body weight adjustments
+  const SBW = pesoVivo * 0.96;
+  const EQSBW = SBW * fatores.fatorGec;
+
+  // 3. Maintenance requirement
+  const NEmReq = 0.077 * Math.pow(EQSBW, 0.75);  // Mcal/dia
+
+  // 4. Energy intake
+  const NEmIntake = cmsAnimalKgMS * NEm;          // Mcal/dia
+
+  // 5. Energy for gain
+  if (NEmIntake <= NEmReq) return 0;
+  const feedMaint = NEmReq / NEm;                 // kg MS for maintenance
+  const feedGain = cmsAnimalKgMS - feedMaint;     // kg MS for gain
+  const RE = feedGain * NEg;                      // Mcal retained energy
+
+  if (RE <= 0) return 0;
+
+  // 6. Convert to ADG: RE = 0.0557 * EQSBW^0.75 * ADG^1.097
+  //    => ADG = (RE / (0.0557 * EQSBW^0.75))^(1/1.097)
+  const base = RE / (0.0557 * Math.pow(EQSBW, 0.75));
+  const gmdBase = Math.pow(base, 1 / 1.097);
+
+  // 7. Apply correction factors
+  return gmdBase * fatores.fatorRaca * fatores.fatorImplante * fatores.fatorCompensatorio * fatores.fatorAditivo;
+}
+
 // ---- Component ----
 
 export default function MapaTrato() {
@@ -160,19 +223,28 @@ export default function MapaTrato() {
 
   const hoje = new Date().toISOString().split("T")[0];
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [])
+  );
 
   async function fetchData() {
     try {
       setLoading(true);
-      const [vagaoSnap, rotSnap, dietaSnap, lotesSnap, insumosSnap] = await Promise.all([
+      const [vagaoSnap, rotSnap, dietaSnap, lotesSnap, insumosSnap, racaSnap, implSnap, compSnap, gecSnap, aditSnap, tcSnap] = await Promise.all([
         getDocs(collection(db, "vagao")),
         getDocs(collection(db, "roteiros")),
         getDocs(collection(db, "dietas")),
         getDocs(collection(db, "lotes")),
         getDocs(collection(db, "insumos")),
+        getDocs(collection(db, "raca")),
+        getDocs(collection(db, "implante")),
+        getDocs(collection(db, "compensatorio")),
+        getDocs(collection(db, "gec")),
+        getDocs(collection(db, "aditivos")),
+        getDocs(collection(db, "tamanhoCorporal")),
       ]);
 
       // Vagões
@@ -195,7 +267,34 @@ export default function MapaTrato() {
           nome: d.data().nome,
           insumos: d.data().insumos ?? [],
           percentualMS: d.data().percentualMS ?? 50,
+          ndt: d.data().ndt ?? 0,
+          aditivoNome: d.data().aditivoNome ?? "",
         });
+      }
+
+      // Factor lookup maps from auxiliary tables
+      const racaFatorMap = new Map<string, number>();
+      for (const d of racaSnap.docs) racaFatorMap.set(d.data().descricao, d.data().fator ?? 1);
+
+      const implanteFatorMap = new Map<string, number>();
+      for (const d of implSnap.docs) implanteFatorMap.set(d.data().descricao, d.data().fator ?? 1);
+
+      const compensFatorMap = new Map<string, number>();
+      for (const d of compSnap.docs) compensFatorMap.set(d.data().descricao, d.data().fator ?? 1);
+
+      const aditivoFatorMap = new Map<string, number>();
+      for (const d of aditSnap.docs) aditivoFatorMap.set(d.data().descricao, d.data().fator ?? 1);
+
+      // tamanhoCorporal: descricao -> fator (the numeric TC value)
+      const tcFatorMap = new Map<string, number>();
+      for (const d of tcSnap.docs) tcFatorMap.set(d.data().descricao, d.data().fator ?? 5);
+
+      // GEC: key "(tcNumero)_(categoria)" -> fator
+      const gecFatorMap = new Map<string, number>();
+      for (const d of gecSnap.docs) {
+        const tc = d.data().tamanhoCorporal ?? 0;
+        const cat = d.data().categoria ?? "";
+        gecFatorMap.set(`${tc}_${cat}`, d.data().fator ?? 1);
       }
 
       // Insumos MS map (with precoMedio via média ponderada móvel)
@@ -275,6 +374,12 @@ export default function MapaTrato() {
           gmdEstimado: ld.gmdEstimado ?? 0,
           movimentacoes: movs,
           cmsAtual,
+          raca: ld.raca ?? "",
+          categoria: ld.categoria ?? "",
+          compensatorio: ld.compensatorio ?? "",
+          implante: ld.implante ?? "",
+          tamanhoCorporal: ld.tamanhoCorporal ?? "",
+          dietaId: ld.dietaId ?? "",
         });
       }
 
@@ -296,9 +401,12 @@ export default function MapaTrato() {
         lotesByPiquete.set(l.piqueteId, l);
       }
 
+      // Factor maps object for buildCalcData
+      const fatorMaps = { racaFatorMap, implanteFatorMap, compensFatorMap, aditivoFatorMap, tcFatorMap, gecFatorMap };
+
       // Store for later calculation when vagão is selected
       setRoteirosCalc(
-        buildCalcData(roteiros, dietasMap, insumosMap, lotesByPiquete, vagoesData[0]?.capacidade ?? 7000)
+        buildCalcData(roteiros, dietasMap, insumosMap, lotesByPiquete, vagoesData[0]?.capacidade ?? 7000, fatorMaps)
       );
 
       // Load today's historico
@@ -329,14 +437,22 @@ export default function MapaTrato() {
     dietasMap: Map<string, DietaData>,
     insumosMap: Map<string, InsumoMS>,
     lotesByPiquete: Map<string, LoteData>,
-    vagaoCapacidade: number
+    vagaoCapacidade: number,
+    fMaps: {
+      racaFatorMap: Map<string, number>;
+      implanteFatorMap: Map<string, number>;
+      compensFatorMap: Map<string, number>;
+      aditivoFatorMap: Map<string, number>;
+      tcFatorMap: Map<string, number>;
+      gecFatorMap: Map<string, number>;
+    }
   ): RoteiroCalculado[] {
     return roteiros.map((roteiro) => {
       const dieta = dietasMap.get(roteiro.dietaId);
       if (!dieta) {
         return {
           roteiro,
-          dieta: { id: "", nome: "", insumos: [], percentualMS: 50 },
+          dieta: { id: "", nome: "", insumos: [], percentualMS: 50, ndt: 0, aditivoNome: "" },
           lotes: [],
           totalMS: 0,
           totalMO: 0,
@@ -357,7 +473,19 @@ export default function MapaTrato() {
           const pesoMedio = calcPesoMedio(lote.movimentacoes, lote.gmdEstimado);
           const msLote = qtdAnimais * pesoMedio * (lote.cmsAtual / 100);
           const moLote = dieta.percentualMS > 0 ? msLote / (dieta.percentualMS / 100) : 0;
-          return { lote, qtdAnimais, pesoMedio, msLote, moLote };
+
+          // Resolve factors for this lote
+          const tcNumero = fMaps.tcFatorMap.get(lote.tamanhoCorporal) ?? 5;
+          const gecKey = `${tcNumero}_${lote.categoria}`;
+          const fatores: LoteFatores = {
+            fatorRaca: fMaps.racaFatorMap.get(lote.raca) ?? 1,
+            fatorGec: fMaps.gecFatorMap.get(gecKey) ?? 1,
+            fatorImplante: fMaps.implanteFatorMap.get(lote.implante) ?? 1,
+            fatorCompensatorio: fMaps.compensFatorMap.get(lote.compensatorio) ?? 1,
+            fatorAditivo: fMaps.aditivoFatorMap.get(dieta.aditivoNome) ?? 1,
+          };
+
+          return { lote, qtdAnimais, pesoMedio, msLote, moLote, fatores };
         })
         .filter(Boolean) as RoteiroCalculado["lotes"];
 
@@ -603,7 +731,7 @@ export default function MapaTrato() {
       // Calculate MS volume per lot using percentualMSFinal from carga
       const percMS = percentualMSPorRoteiro.get(rc.roteiro.id) ?? 0;
       if (percMS > 0) {
-        const msPorLote: { loteId: string; loteNumero: number; piqueteNome: string; totalMO: number; totalMS: number }[] = [];
+        const msPorLote: { loteId: string; loteNumero: number; piqueteNome: string; totalMO: number; totalMS: number; cmsPrevisto: number; cmsRealizado: number; gmdEstimado: number; gmdReal: number }[] = [];
         for (const l of rc.lotes) {
           let totalRealizadoLote = 0;
           for (const descarga of descargas) {
@@ -613,12 +741,26 @@ export default function MapaTrato() {
               }
             }
           }
+          const totalMS = totalRealizadoLote * (percMS / 100);
+          const cmsPrevisto = l.lote.cmsAtual;
+          const cmsRealizado = (l.qtdAnimais > 0 && l.pesoMedio > 0 && totalRealizadoLote > 0)
+            ? (totalMS / (l.qtdAnimais * l.pesoMedio)) * 100
+            : 0;
+
+          // GMD real via NRC
+          const cmsAnimal = l.qtdAnimais > 0 ? totalMS / l.qtdAnimais : 0;
+          const gmdReal = calcGmdNRC(cmsAnimal, l.pesoMedio, rc.dieta.ndt, l.fatores);
+
           msPorLote.push({
             loteId: l.lote.id,
             loteNumero: l.lote.numero,
             piqueteNome: l.lote.piqueteNome,
             totalMO: totalRealizadoLote,
-            totalMS: totalRealizadoLote * (percMS / 100),
+            totalMS,
+            cmsPrevisto,
+            cmsRealizado,
+            gmdEstimado: l.lote.gmdEstimado,
+            gmdReal: parseFloat(gmdReal.toFixed(4)),
           });
         }
         updateData.msPorLote = msPorLote;
@@ -1182,6 +1324,15 @@ export default function MapaTrato() {
             historicoDescargas.get(activeRoteiros[descargaModal.index].roteiro.id) ?? []
           }
           percentualMSFinal={percentualMSPorRoteiro.get(activeRoteiros[descargaModal.index].roteiro.id) ?? 0}
+          lotesInfo={activeRoteiros[descargaModal.index].lotes.map((l) => ({
+            piqueteId: l.lote.piqueteId,
+            cmsAtual: l.lote.cmsAtual,
+            qtdAnimais: l.qtdAnimais,
+            pesoMedio: l.pesoMedio,
+            gmdEstimado: l.lote.gmdEstimado,
+            fatores: l.fatores,
+          }))}
+          ndt={activeRoteiros[descargaModal.index].dieta.ndt}
           onSave={(descargas) =>
             handleSaveDescarga(descargaModal.index, descargas)
           }
