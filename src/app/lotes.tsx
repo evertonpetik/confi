@@ -203,17 +203,33 @@ export default function Lotes() {
       for (const hDoc of histSnap.docs) {
         const h = hDoc.data();
         const custoPorLote = h.custoPorLote as { loteId: string; custo: number }[] | undefined;
-        if (!custoPorLote || !h.totalMS || !h.data) continue;
+        if (!custoPorLote || !h.data) continue;
+
+        // Build msPorLote lookup if available (real MS from descarga + percentualMSFinal)
+        const msPorLoteData = h.msPorLote as { loteId: string; totalMS: number }[] | undefined;
+        const msLookup = new Map<string, number>();
+        if (msPorLoteData) {
+          for (const ml of msPorLoteData) {
+            msLookup.set(ml.loteId, ml.totalMS);
+          }
+        }
+
         for (const cl of custoPorLote) {
           if (!cl.loteId || cl.custo <= 0) continue;
           const prev = map.get(cl.loteId) ?? [];
-          // Calculate MS proportional to this lote
-          const totalMO = (h.totalMO as number) ?? 0;
-          const numLotes = custoPorLote.length;
-          // MS for this lote = totalMS * (custo_lote / custoTotal)
-          const custoTotal = (h.custoTotal as number) ?? 0;
-          const proporcao = custoTotal > 0 ? cl.custo / custoTotal : (numLotes > 0 ? 1 / numLotes : 0);
-          const kgMS = ((h.totalMS as number) ?? 0) * proporcao;
+
+          // Use real MS per lot if available, otherwise fallback to proportional estimate
+          let kgMS: number;
+          if (msLookup.has(cl.loteId)) {
+            kgMS = msLookup.get(cl.loteId)!;
+          } else {
+            const totalMS = (h.totalMS as number) ?? 0;
+            const custoTotal = (h.custoTotal as number) ?? 0;
+            const numLotes = custoPorLote.length;
+            const proporcao = custoTotal > 0 ? cl.custo / custoTotal : (numLotes > 0 ? 1 / numLotes : 0);
+            kgMS = totalMS * proporcao;
+          }
+
           prev.push({
             data: h.data as string,
             kgMS,

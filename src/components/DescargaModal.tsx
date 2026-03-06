@@ -39,6 +39,7 @@ type DescargaModalProps = {
   numTratos: number;
   descargaPrevistos: DescargaPrevistoItem[];
   descargas: DescargaTrato[];
+  percentualMSFinal: number;
   onSave: (descargas: DescargaTrato[]) => void;
   onClose: () => void;
 };
@@ -49,6 +50,7 @@ export function DescargaModal({
   numTratos,
   descargaPrevistos,
   descargas,
+  percentualMSFinal,
   onSave,
   onClose,
 }: DescargaModalProps) {
@@ -166,6 +168,11 @@ export function DescargaModal({
                 <Text style={[styles.tableHeaderText, { flex: 1 }]}>
                   Realizado
                 </Text>
+                {percentualMSFinal > 0 && (
+                  <Text style={[styles.tableHeaderText, { flex: 1 }]}>
+                    MS (kg)
+                  </Text>
+                )}
               </View>
 
               {descargaAtual?.itens.map((item) => (
@@ -190,8 +197,21 @@ export function DescargaModal({
                       placeholder="0"
                     />
                   </View>
+                  {percentualMSFinal > 0 && (
+                    <Text style={[styles.cellMS, { flex: 1 }]}>
+                      {item.realizado > 0 ? (item.realizado * (percentualMSFinal / 100)).toFixed(1) : "-"}
+                    </Text>
+                  )}
                 </View>
               ))}
+
+              {/* MS Info */}
+              {percentualMSFinal > 0 && (
+                <View style={styles.msRow}>
+                  <Text style={styles.msLabel}>% MS do Trato</Text>
+                  <Text style={styles.msValue}>{percentualMSFinal.toFixed(2)}%</Text>
+                </View>
+              )}
 
               <View style={styles.buttonWrapper}>
                 <Button
@@ -309,6 +329,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     fontSize: 14,
     backgroundColor: "#FFF",
+  },
+  cellMS: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2E7D32",
+    textAlign: "center",
+  },
+  msRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#E8F5E9",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  msLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2E7D32",
+  },
+  msValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1B5E20",
   },
   buttonWrapper: {
     marginTop: 16,

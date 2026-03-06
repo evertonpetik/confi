@@ -86,7 +86,7 @@ type RoteiroCalculado = {
   totalMO: number;
   numTratos: number;
   moPerTrato: number;
-  insumosPrevistos: { insumoId: string; insumoNome: string; previsto: number; precoMedio: number }[];
+  insumosPrevistos: { insumoId: string; insumoNome: string; previsto: number; precoMedio: number; percentualMS: number }[];
   aguaPrevista: number;
   descargaPrevistos: { piqueteId: string; piqueteNome: string; loteNumero: number; previsto: number }[];
 };
@@ -156,6 +156,7 @@ export default function MapaTrato() {
   });
   const [historicoCargas, setHistoricoCargas] = useState<Map<string, CargaTrato[]>>(new Map());
   const [historicoDescargas, setHistoricoDescargas] = useState<Map<string, DescargaTrato[]>>(new Map());
+  const [percentualMSPorRoteiro, setPercentualMSPorRoteiro] = useState<Map<string, number>>(new Map());
 
   const hoje = new Date().toISOString().split("T")[0];
 
@@ -305,14 +306,17 @@ export default function MapaTrato() {
       const histSnap = await getDocs(histQ);
       const cargasMap = new Map<string, CargaTrato[]>();
       const descargasMap = new Map<string, DescargaTrato[]>();
+      const msMap = new Map<string, number>();
       for (const hDoc of histSnap.docs) {
         const h = hDoc.data();
         const key = h.roteiroId;
         if (h.cargas?.length > 0) cargasMap.set(key, h.cargas);
         if (h.descargas?.length > 0) descargasMap.set(key, h.descargas);
+        if (h.percentualMSFinal) msMap.set(key, h.percentualMSFinal);
       }
       setHistoricoCargas(cargasMap);
       setHistoricoDescargas(descargasMap);
+      setPercentualMSPorRoteiro(msMap);
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
     } finally {
@@ -371,7 +375,7 @@ export default function MapaTrato() {
         const percMS = insumoData?.percentualMateriaSeca ?? 100;
         const moInsumo = percMS > 0 ? msInsumo / (percMS / 100) : 0;
         somaMOInsumos += moInsumo;
-        return { insumoId: di.insumoId, insumoNome: di.insumoNome, previsto: moInsumo, precoMedio: insumoData?.precoMedio ?? 0 };
+        return { insumoId: di.insumoId, insumoNome: di.insumoNome, previsto: moInsumo, precoMedio: insumoData?.precoMedio ?? 0, percentualMS: percMS };
       });
 
       const aguaPrevista = Math.max(0, moPerTrato - somaMOInsumos);
@@ -526,6 +530,18 @@ export default function MapaTrato() {
         }));
       }
 
+      // Calculate percentualMSFinal from realized amounts
+      let totalMSRealizada = 0;
+      let totalMORealizada = 0;
+      for (const carga of cargas) {
+        for (const ins of carga.insumos) {
+          totalMSRealizada += ins.realizado * ((ins.percentualMS ?? 100) / 100);
+          totalMORealizada += ins.realizado;
+        }
+        totalMORealizada += carga.aguaRealizada;
+      }
+      const percentualMSFinal = totalMORealizada > 0 ? (totalMSRealizada / totalMORealizada) * 100 : 0;
+
       // Save historico with cost data
       const docId = `${rc.roteiro.id}_${hoje}`;
       await setDoc(doc(db, "historicoMapaTrato", docId), {
@@ -542,10 +558,16 @@ export default function MapaTrato() {
         cargas,
         custoTotal,
         custoPorLote,
+        percentualMSFinal,
       }, { merge: true });
       setHistoricoCargas((prev) => {
         const next = new Map(prev);
         next.set(rc.roteiro.id, cargas);
+        return next;
+      });
+      setPercentualMSPorRoteiro((prev) => {
+        const next = new Map(prev);
+        next.set(rc.roteiro.id, percentualMSFinal);
         return next;
       });
       setCargaModal({ visible: false, index: 0 });
@@ -577,6 +599,31 @@ export default function MapaTrato() {
         numTratos: rc.numTratos,
         descargas,
       };
+
+      // Calculate MS volume per lot using percentualMSFinal from carga
+      const percMS = percentualMSPorRoteiro.get(rc.roteiro.id) ?? 0;
+      if (percMS > 0) {
+        const msPorLote: { loteId: string; loteNumero: number; piqueteNome: string; totalMO: number; totalMS: number }[] = [];
+        for (const l of rc.lotes) {
+          let totalRealizadoLote = 0;
+          for (const descarga of descargas) {
+            for (const item of descarga.itens) {
+              if (item.piqueteId === l.lote.piqueteId) {
+                totalRealizadoLote += item.realizado;
+              }
+            }
+          }
+          msPorLote.push({
+            loteId: l.lote.id,
+            loteNumero: l.lote.numero,
+            piqueteNome: l.lote.piqueteNome,
+            totalMO: totalRealizadoLote,
+            totalMS: totalRealizadoLote * (percMS / 100),
+          });
+        }
+        updateData.msPorLote = msPorLote;
+        updateData.percentualMSFinal = percMS;
+      }
 
       // Recalculate custoPorLote based on descarga realizado if carga data exists
       const cargasData = historicoCargas.get(rc.roteiro.id);
@@ -713,6 +760,7 @@ export default function MapaTrato() {
                     insumoNome: ip.insumoNome,
                     previsto: ip.previsto,
                     realizado: match?.quantidade ?? 0,
+                    percentualMS: ip.percentualMS,
                   };
                 }),
                 aguaPrevista: rc.aguaPrevista,
@@ -1133,6 +1181,7 @@ export default function MapaTrato() {
           descargas={
             historicoDescargas.get(activeRoteiros[descargaModal.index].roteiro.id) ?? []
           }
+          percentualMSFinal={percentualMSPorRoteiro.get(activeRoteiros[descargaModal.index].roteiro.id) ?? 0}
           onSave={(descargas) =>
             handleSaveDescarga(descargaModal.index, descargas)
           }

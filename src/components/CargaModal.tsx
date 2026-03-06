@@ -17,11 +17,12 @@ type InsumoPrevistoItem = {
   insumoId: string;
   insumoNome: string;
   previsto: number;
+  percentualMS: number;
 };
 
 export type CargaTrato = {
   tratoNumero: number;
-  insumos: { insumoId: string; insumoNome: string; previsto: number; realizado: number }[];
+  insumos: { insumoId: string; insumoNome: string; previsto: number; realizado: number; percentualMS: number }[];
   aguaPrevista: number;
   aguaRealizada: number;
 };
@@ -58,7 +59,7 @@ export function CargaModal({
           ...c,
           insumos: c.insumos.map((ins) => {
             const ip = insumosPrevistos.find((p) => p.insumoId === ins.insumoId);
-            return { ...ins, insumoNome: ip?.insumoNome ?? ins.insumoNome, previsto: ip?.previsto ?? ins.previsto };
+            return { ...ins, insumoNome: ip?.insumoNome ?? ins.insumoNome, previsto: ip?.previsto ?? ins.previsto, percentualMS: ip?.percentualMS ?? ins.percentualMS ?? 100 };
           }),
         })));
       } else {
@@ -71,6 +72,7 @@ export function CargaModal({
               insumoNome: ins.insumoNome,
               previsto: ins.previsto,
               realizado: 0,
+              percentualMS: ins.percentualMS,
             })),
             aguaPrevista,
             aguaRealizada: 0,
@@ -82,6 +84,15 @@ export function CargaModal({
   }, [visible]);
 
   const cargaAtual = localCargas.find((c) => c.tratoNumero === tratoAtual);
+
+  // Calculate % MS final across ALL tratos
+  const msTotal = localCargas.reduce((acc, c) => {
+    return acc + c.insumos.reduce((sum, ins) => sum + ins.realizado * (ins.percentualMS / 100), 0);
+  }, 0);
+  const moTotal = localCargas.reduce((acc, c) => {
+    return acc + c.insumos.reduce((sum, ins) => sum + ins.realizado, 0) + c.aguaRealizada;
+  }, 0);
+  const percentualMSFinal = moTotal > 0 ? (msTotal / moTotal) * 100 : 0;
 
   function updateInsumoRealizado(insumoId: string, value: string) {
     setLocalCargas((prev) =>
@@ -221,6 +232,14 @@ export function CargaModal({
                 </View>
               </View>
 
+              {/* % MS Final */}
+              {moTotal > 0 && (
+                <View style={styles.msRow}>
+                  <Text style={styles.msLabel}>% MS Final do Trato</Text>
+                  <Text style={styles.msValue}>{percentualMSFinal.toFixed(2)}%</Text>
+                </View>
+              )}
+
               <View style={styles.buttonWrapper}>
                 <Button
                   label="Salvar Carga"
@@ -346,5 +365,25 @@ const styles = StyleSheet.create({
   buttonWrapper: {
     marginTop: 16,
     paddingBottom: 8,
+  },
+  msRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#E8F5E9",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  msLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2E7D32",
+  },
+  msValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1B5E20",
   },
 });
