@@ -60,6 +60,7 @@ type RoteiroData = {
   dietaId: string;
   dietaNome: string;
   piquetes: { piqueteId: string; piqueteNome: string }[];
+  minTratos: number;
 };
 
 type LoteData = {
@@ -221,7 +222,10 @@ export default function MapaTrato() {
   const [historicoDescargas, setHistoricoDescargas] = useState<Map<string, DescargaTrato[]>>(new Map());
   const [percentualMSPorRoteiro, setPercentualMSPorRoteiro] = useState<Map<string, number>>(new Map());
 
-  const hoje = new Date().toISOString().split("T")[0];
+  const hoje = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
 
 
   useFocusEffect(
@@ -338,6 +342,24 @@ export default function MapaTrato() {
         });
       }
 
+      // CMS realizado do dia anterior por lote
+      const ontem = new Date();
+      ontem.setDate(ontem.getDate() - 1);
+      const ontemStr = `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, "0")}-${String(ontem.getDate()).padStart(2, "0")}`;
+      const histOntemQ = query(collection(db, "historicoMapaTrato"), where("data", "==", ontemStr));
+      const histOntemSnap = await getDocs(histOntemQ);
+      const cmsRealizadoOntemMap = new Map<string, number>();
+      for (const hDoc of histOntemSnap.docs) {
+        const msPorLote = hDoc.data().msPorLote as { loteId: string; cmsRealizado?: number }[] | undefined;
+        if (msPorLote) {
+          for (const ml of msPorLote) {
+            if (ml.cmsRealizado && ml.cmsRealizado > 0) {
+              cmsRealizadoOntemMap.set(ml.loteId, ml.cmsRealizado);
+            }
+          }
+        }
+      }
+
       // Lotes with movimentacoes and CMS
       const lotesData: LoteData[] = [];
       for (const loteDoc of lotesSnap.docs) {
@@ -352,8 +374,10 @@ export default function MapaTrato() {
           data: m.data().data as string,
         }));
 
-        // Last CMS reading
+        // CMS: priorizar leitura de hoje (decisão do operador), senão CMS realizado do dia anterior,
+        // senão última leitura (mais antiga), senão CMS_INICIAL
         let cmsAtual = CMS_INICIAL;
+        let leituraHojeCms = 0;
         try {
           const leitQ = query(
             collection(db, "lotes", loteDoc.id, "leituras"),
@@ -362,9 +386,22 @@ export default function MapaTrato() {
           );
           const leitSnap = await getDocs(leitQ);
           if (!leitSnap.empty) {
-            cmsAtual = leitSnap.docs[0].data().cmsNovo ?? CMS_INICIAL;
+            const ultimaLeitura = leitSnap.docs[0].data();
+            if (ultimaLeitura.data === hoje) {
+              leituraHojeCms = ultimaLeitura.cmsNovo ?? 0;
+            } else {
+              cmsAtual = ultimaLeitura.cmsNovo ?? CMS_INICIAL;
+            }
           }
         } catch { /* no index yet */ }
+
+        if (leituraHojeCms > 0) {
+          // Leitura de hoje tem prioridade máxima
+          cmsAtual = leituraHojeCms;
+        } else if (cmsRealizadoOntemMap.get(loteDoc.id) && cmsRealizadoOntemMap.get(loteDoc.id)! > 0) {
+          // CMS realizado de ontem como segunda prioridade
+          cmsAtual = cmsRealizadoOntemMap.get(loteDoc.id)!;
+        }
 
         lotesData.push({
           id: loteDoc.id,
@@ -392,6 +429,7 @@ export default function MapaTrato() {
           dietaId: d.data().dietaId ?? "",
           dietaNome: d.data().dietaNome ?? "",
           piquetes: d.data().piquetes ?? [],
+          minTratos: d.data().minTratos ?? 1,
         }))
         .sort((a, b) => a.numero - b.numero);
 
@@ -491,7 +529,7 @@ export default function MapaTrato() {
 
       const totalMS = lotesCalc.reduce((acc, l) => acc + l.msLote, 0);
       const totalMO = dieta.percentualMS > 0 ? totalMS / (dieta.percentualMS / 100) : 0;
-      const numTratos = totalMO > 0 ? Math.ceil(totalMO / vagaoCapacidade) : 0;
+      const numTratos = totalMO > 0 ? Math.max(roteiro.minTratos ?? 1, Math.ceil(totalMO / vagaoCapacidade)) : 0;
       const moPerTrato = numTratos > 0 ? totalMO / numTratos : 0;
       const msPerTrato = numTratos > 0 ? totalMS / numTratos : 0;
 
@@ -543,7 +581,7 @@ export default function MapaTrato() {
     setRoteirosCalc((prev) =>
       prev.map((rc) => {
         const { totalMS, totalMO, dieta, lotes: lotesCalc } = rc;
-        const numTratos = totalMO > 0 ? Math.ceil(totalMO / vagao.capacidade) : 0;
+        const numTratos = totalMO > 0 ? Math.max(rc.roteiro.minTratos ?? 1, Math.ceil(totalMO / vagao.capacidade)) : 0;
         const moPerTrato = numTratos > 0 ? totalMO / numTratos : 0;
         const msPerTrato = numTratos > 0 ? totalMS / numTratos : 0;
 
@@ -731,7 +769,7 @@ export default function MapaTrato() {
       // Calculate MS volume per lot using percentualMSFinal from carga
       const percMS = percentualMSPorRoteiro.get(rc.roteiro.id) ?? 0;
       if (percMS > 0) {
-        const msPorLote: { loteId: string; loteNumero: number; piqueteNome: string; totalMO: number; totalMS: number; cmsPrevisto: number; cmsRealizado: number; gmdEstimado: number; gmdReal: number }[] = [];
+        const msPorLote: { loteId: string; loteNumero: number; piqueteNome: string; totalMO: number; previsto: number; totalMS: number; cmsPrevisto: number; cmsRealizado: number; gmdEstimado: number; gmdReal: number }[] = [];
         for (const l of rc.lotes) {
           let totalRealizadoLote = 0;
           for (const descarga of descargas) {
@@ -756,6 +794,7 @@ export default function MapaTrato() {
             loteNumero: l.lote.numero,
             piqueteNome: l.lote.piqueteNome,
             totalMO: totalRealizadoLote,
+            previsto: l.moLote,
             totalMS,
             cmsPrevisto,
             cmsRealizado,

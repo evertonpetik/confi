@@ -14,7 +14,8 @@ import {
   getDocs,
   updateDoc,
 } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -51,10 +52,12 @@ export default function Roteiros() {
   const [dietaOptions, setDietaOptions] = useState<SelectOption[]>([]);
   const [lotesRef, setLotesRef] = useState<LoteRef[]>([]);
 
-  useEffect(() => {
-    fetchRoteiros();
-    fetchOptions();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchRoteiros();
+      fetchOptions();
+    }, [])
+  );
 
   async function fetchOptions() {
     try {
@@ -96,6 +99,7 @@ export default function Roteiros() {
         dietaId: d.data().dietaId ?? "",
         dietaNome: d.data().dietaNome ?? "",
         piquetes: d.data().piquetes ?? [],
+        minTratos: d.data().minTratos ?? 1,
         ativo: d.data().ativo ?? true,
       }));
       data.sort((a, b) => a.numero - b.numero);

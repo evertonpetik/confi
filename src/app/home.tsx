@@ -74,7 +74,10 @@ export default function Home() {
       ]);
 
       // Build historico lookups: loteId -> { gmdReal[], msPorLote (today) }
-      const hoje = new Date().toISOString().split("T")[0];
+      const hoje = (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      })();
       const gmdRealByLote = new Map<string, number[]>();
       const cmsByLote = new Map<string, number[]>();
       const todayMOByLote = new Map<string, number>();

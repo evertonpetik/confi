@@ -12,6 +12,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -35,6 +36,7 @@ type RoteiroForm = {
   dietaId: string;
   dietaNome: string;
   piqueteIds: string[];
+  minTratos: number;
   ativo: boolean;
 };
 
@@ -42,6 +44,7 @@ const emptyForm: RoteiroForm = {
   dietaId: "",
   dietaNome: "",
   piqueteIds: [],
+  minTratos: 1,
   ativo: true,
 };
 
@@ -64,6 +67,7 @@ export function RoteiroFormModal({
           dietaId: roteiro.dietaId ?? "",
           dietaNome: roteiro.dietaNome ?? "",
           piqueteIds: roteiro.piquetes.map((p) => p.piqueteId),
+          minTratos: roteiro.minTratos ?? 1,
           ativo: roteiro.ativo ?? true,
         });
       } else {
@@ -86,6 +90,24 @@ export function RoteiroFormModal({
     }));
   }
 
+  function handleMoveUp(index: number) {
+    if (index === 0) return;
+    setForm((prev) => {
+      const ids = [...prev.piqueteIds];
+      [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]];
+      return { ...prev, piqueteIds: ids };
+    });
+  }
+
+  function handleMoveDown(index: number) {
+    setForm((prev) => {
+      if (index >= prev.piqueteIds.length - 1) return prev;
+      const ids = [...prev.piqueteIds];
+      [ids[index], ids[index + 1]] = [ids[index + 1], ids[index]];
+      return { ...prev, piqueteIds: ids };
+    });
+  }
+
   function handleSave() {
     if (!form.dietaId) {
       Alert.alert("Atenção", "Selecione uma dieta.");
@@ -106,6 +128,7 @@ export function RoteiroFormModal({
       dietaId: form.dietaId,
       dietaNome: form.dietaNome,
       piquetes,
+      minTratos: form.minTratos,
       ativo: form.ativo,
     });
   }
@@ -173,6 +196,82 @@ export function RoteiroFormModal({
                     Nenhum piquete com lote vinculado a esta dieta.
                   </Text>
                 )}
+
+                {/* Ordem de Trato */}
+                {form.piqueteIds.length > 1 && (
+                  <>
+                    <Text style={styles.label}>Ordem de Trato</Text>
+                    <View style={styles.orderList}>
+                      {form.piqueteIds.map((id, index) => {
+                        const opt = availablePiquetes.find(
+                          (p) => p.value === id
+                        );
+                        return (
+                          <View key={id} style={styles.orderItem}>
+                            <Text style={styles.orderNumber}>
+                              {index + 1}.
+                            </Text>
+                            <Text style={styles.orderName} numberOfLines={1}>
+                              {opt?.label ?? id}
+                            </Text>
+                            <View style={styles.orderButtons}>
+                              <TouchableOpacity
+                                style={[
+                                  styles.orderButton,
+                                  index === 0 && styles.orderButtonDisabled,
+                                ]}
+                                activeOpacity={0.7}
+                                onPress={() => handleMoveUp(index)}
+                                disabled={index === 0}
+                              >
+                                <Feather
+                                  name="chevron-up"
+                                  size={18}
+                                  color={index === 0 ? "#CCC" : "#3366FF"}
+                                />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={[
+                                  styles.orderButton,
+                                  index === form.piqueteIds.length - 1 &&
+                                    styles.orderButtonDisabled,
+                                ]}
+                                activeOpacity={0.7}
+                                onPress={() => handleMoveDown(index)}
+                                disabled={
+                                  index === form.piqueteIds.length - 1
+                                }
+                              >
+                                <Feather
+                                  name="chevron-down"
+                                  size={18}
+                                  color={
+                                    index === form.piqueteIds.length - 1
+                                      ? "#CCC"
+                                      : "#3366FF"
+                                  }
+                                />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
+
+                {/* Min. Tratos */}
+                <Text style={styles.label}>Min. Tratos</Text>
+                <TextInput
+                  style={styles.input}
+                  value={form.minTratos > 0 ? form.minTratos.toString() : ""}
+                  onChangeText={(v) => {
+                    const n = parseInt(v) || 0;
+                    setForm((p) => ({ ...p, minTratos: n < 1 ? 1 : n }));
+                  }}
+                  keyboardType="numeric"
+                  placeholder="1"
+                />
 
                 {/* Toggle Ativo */}
                 <Text style={styles.label}>Status</Text>
@@ -287,10 +386,66 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
   },
+  input: {
+    width: "100%",
+    height: 48,
+    borderWidth: 1,
+    borderColor: "#DCDCDC",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    backgroundColor: "#FFF",
+    color: "#1a1a1a",
+  },
   hintText: {
     fontSize: 12,
     color: "#E53935",
     marginTop: 2,
+  },
+  orderList: {
+    borderWidth: 1,
+    borderColor: "#DCDCDC",
+    borderRadius: 8,
+    backgroundColor: "#FFF",
+    overflow: "hidden",
+  },
+  orderItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#ECECEC",
+  },
+  orderNumber: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#3366FF",
+    width: 28,
+  },
+  orderName: {
+    flex: 1,
+    fontSize: 14,
+    color: "#1a1a1a",
+    fontWeight: "500",
+  },
+  orderButtons: {
+    flexDirection: "row",
+    gap: 4,
+  },
+  orderButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#DCDCDC",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF",
+  },
+  orderButtonDisabled: {
+    backgroundColor: "#F5F5F5",
+    borderColor: "#ECECEC",
   },
   toggleRow: {
     flexDirection: "row",

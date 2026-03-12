@@ -265,7 +265,7 @@ export function DescargaModal({
                       {info && (
                         <View style={styles.cmsInfoRow}>
                           <Text style={styles.cmsPrevisto}>
-                            CMS: {info.cmsAtual.toFixed(2)}%
+                            CMS Previsto: {info.cmsAtual.toFixed(2)}%
                           </Text>
                           {cmsRealizado !== null && (
                             <Text style={[
@@ -276,16 +276,14 @@ export function DescargaModal({
                                   ? styles.cmsRealizadoDown
                                   : undefined,
                             ]}>
-                              Real: {cmsRealizado.toFixed(2)}%
+                              CMS Realizado: {cmsRealizado.toFixed(2)}%
                             </Text>
                           )}
                         </View>
                       )}
                       {info && (
                         <View style={styles.cmsInfoRow}>
-                          <Text style={styles.cmsPrevisto}>
-                            GMD Est: {info.gmdEstimado.toFixed(3)} kg
-                          </Text>
+
                           {gmdReal !== null && (
                             <Text style={[
                               styles.cmsRealizado,
@@ -295,7 +293,7 @@ export function DescargaModal({
                                   ? styles.cmsRealizadoDown
                                   : undefined,
                             ]}>
-                              Real: {gmdReal.toFixed(3)} kg
+                              GMD Consumo: {gmdReal.toFixed(3)} kg
                             </Text>
                           )}
                         </View>
@@ -324,13 +322,6 @@ export function DescargaModal({
                 );
               })}
 
-              {/* MS Info */}
-              {percentualMSFinal > 0 && (
-                <View style={styles.msRow}>
-                  <Text style={styles.msLabel}>% MS do Trato</Text>
-                  <Text style={styles.msValue}>{percentualMSFinal.toFixed(2)}%</Text>
-                </View>
-              )}
 
               <View style={styles.buttonWrapper}>
                 <Button

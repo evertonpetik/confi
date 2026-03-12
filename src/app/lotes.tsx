@@ -284,20 +284,48 @@ export default function Lotes() {
 
   async function handleSave(data: Omit<Lote, "id" | "movimentacoes">) {
     try {
+      const isInativando =
+        editingLote && editingLote.ativo && !data.ativo;
+
+      const saveData = isInativando
+        ? { ...data, piqueteId: "", piqueteNome: "" }
+        : data;
+
       if (editingLote) {
         const ref = doc(db, "lotes", editingLote.id);
-        await updateDoc(ref, { ...data });
+        await updateDoc(ref, { ...saveData });
+
+        // Se inativou, remover piquete dos roteiros que o contenham
+        if (isInativando && editingLote.piqueteId) {
+          const piqIdToRemove = editingLote.piqueteId;
+          const rotSnap = await getDocs(collection(db, "roteiros"));
+          for (const rDoc of rotSnap.docs) {
+            const piquetes = (rDoc.data().piquetes ?? []) as {
+              piqueteId: string;
+              piqueteNome: string;
+            }[];
+            const filtered = piquetes.filter(
+              (p) => p.piqueteId !== piqIdToRemove
+            );
+            if (filtered.length !== piquetes.length) {
+              await updateDoc(doc(db, "roteiros", rDoc.id), {
+                piquetes: filtered,
+              });
+            }
+          }
+        }
+
         setLotes((prev) =>
           prev.map((l) =>
             l.id === editingLote.id
-              ? { ...l, ...data }
+              ? { ...l, ...saveData }
               : l
           )
         );
       } else {
-        const docRef = await addDoc(collection(db, "lotes"), data);
+        const docRef = await addDoc(collection(db, "lotes"), saveData);
         setLotes((prev) =>
-          [...prev, { id: docRef.id, ...data, movimentacoes: [] }].sort(
+          [...prev, { id: docRef.id, ...saveData, movimentacoes: [] }].sort(
             (a, b) => a.numero - b.numero
           )
         );
@@ -320,18 +348,65 @@ export default function Lotes() {
         movData
       );
       const newMov: Movimentacao = { id: docRef.id, ...movData };
-      setLotes((prev) =>
-        prev.map((l) =>
-          l.id === loteId
-            ? { ...l, movimentacoes: [...l.movimentacoes, newMov] }
-            : l
-        )
+
+      const lote = lotes.find((l) => l.id === loteId);
+      const allMovs = lote ? [...lote.movimentacoes, newMov] : [newMov];
+      const qtdAtual = allMovs.reduce(
+        (acc, m) => (m.evento === "Entrada" ? acc + m.quantidade : acc - m.quantidade),
+        0
       );
-      setMovLote((prev) =>
-        prev && prev.id === loteId
-          ? { ...prev, movimentacoes: [...prev.movimentacoes, newMov] }
-          : prev
-      );
+
+      // Se quantidade chegou a zero ou menos, inativar lote automaticamente
+      if (qtdAtual <= 0 && lote && lote.ativo) {
+        const loteRef = doc(db, "lotes", loteId);
+        await updateDoc(loteRef, { ativo: false, piqueteId: "", piqueteNome: "" });
+
+        // Remover piquete dos roteiros
+        if (lote.piqueteId) {
+          const rotSnap = await getDocs(collection(db, "roteiros"));
+          for (const rDoc of rotSnap.docs) {
+            const piquetes = (rDoc.data().piquetes ?? []) as {
+              piqueteId: string;
+              piqueteNome: string;
+            }[];
+            const filtered = piquetes.filter(
+              (p) => p.piqueteId !== lote.piqueteId
+            );
+            if (filtered.length !== piquetes.length) {
+              await updateDoc(doc(db, "roteiros", rDoc.id), {
+                piquetes: filtered,
+              });
+            }
+          }
+        }
+
+        setLotes((prev) =>
+          prev.map((l) =>
+            l.id === loteId
+              ? { ...l, movimentacoes: allMovs, ativo: false, piqueteId: "", piqueteNome: "" }
+              : l
+          )
+        );
+        setMovLote((prev) =>
+          prev && prev.id === loteId
+            ? { ...prev, movimentacoes: allMovs, ativo: false, piqueteId: "", piqueteNome: "" }
+            : prev
+        );
+        Alert.alert("Lote Inativado", "O lote foi inativado automaticamente pois a quantidade de animais chegou a zero.");
+      } else {
+        setLotes((prev) =>
+          prev.map((l) =>
+            l.id === loteId
+              ? { ...l, movimentacoes: allMovs }
+              : l
+          )
+        );
+        setMovLote((prev) =>
+          prev && prev.id === loteId
+            ? { ...prev, movimentacoes: allMovs }
+            : prev
+        );
+      }
     } catch (error) {
       console.error("Erro ao adicionar movimentação:", error);
       Alert.alert("Erro", "Não foi possível adicionar a movimentação.");

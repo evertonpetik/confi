@@ -12,6 +12,7 @@ export type Roteiro = {
   dietaId: string;
   dietaNome: string;
   piquetes: RoteiroPiquete[];
+  minTratos: number;
   ativo: boolean;
 };
 
@@ -55,6 +56,10 @@ export function RoteiroCard({ roteiro, onEdit, onDelete }: RoteiroCardProps) {
           <View style={styles.stat}>
             <Text style={styles.statLabel}>Piquetes</Text>
             <Text style={styles.statValue}>{roteiro.piquetes.length}</Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={styles.statLabel}>Min. Tratos</Text>
+            <Text style={styles.statValue}>{roteiro.minTratos ?? 1}</Text>
           </View>
         </View>
       </View>

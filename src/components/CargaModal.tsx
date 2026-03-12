@@ -232,14 +232,6 @@ export function CargaModal({
                 </View>
               </View>
 
-              {/* % MS Final */}
-              {moTotal > 0 && (
-                <View style={styles.msRow}>
-                  <Text style={styles.msLabel}>% MS Final do Trato</Text>
-                  <Text style={styles.msValue}>{percentualMSFinal.toFixed(2)}%</Text>
-                </View>
-              )}
-
               <View style={styles.buttonWrapper}>
                 <Button
                   label="Salvar Carga"

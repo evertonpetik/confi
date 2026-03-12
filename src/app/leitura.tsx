@@ -9,6 +9,7 @@ import {
   limit,
   orderBy,
   query,
+  where,
 } from "firebase/firestore";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -50,6 +51,12 @@ type LeituraHoje = {
   cmsNovo: number;
 };
 
+type AlertaCmsLote = {
+  tipo: "acima" | "abaixo";
+  cmsRealizado: number;
+  cmsPrevisto: number;
+};
+
 export default function Leitura() {
   const { isTablet, maxWidthContent } = useResponsive();
   const [lotes, setLotes] = useState<LoteComPiquete[]>([]);
@@ -59,8 +66,14 @@ export default function Leitura() {
   const [leiturasHoje, setLeiturasHoje] = useState<Map<string, LeituraHoje>>(
     new Map()
   );
+  const [alertasCms, setAlertasCms] = useState<Map<string, AlertaCmsLote>>(
+    new Map()
+  );
 
-  const hoje = new Date().toISOString().split("T")[0];
+  const hoje = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
 
   useEffect(() => {
     fetchData();
@@ -89,6 +102,46 @@ export default function Leitura() {
       const lotesComPiquete: LoteComPiquete[] = [];
       const leiturasHojeMap = new Map<string, LeituraHoje>();
 
+      // CMS realizado do dia anterior por lote
+      const ontem = new Date();
+      ontem.setDate(ontem.getDate() - 1);
+      const ontemStr = `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, "0")}-${String(ontem.getDate()).padStart(2, "0")}`;
+      const histOntemQ = query(collection(db, "historicoMapaTrato"), where("data", "==", ontemStr));
+      const histOntemSnap = await getDocs(histOntemQ);
+      const cmsRealizadoOntemMap = new Map<string, number>();
+      const cmsPrevistoOntemMap = new Map<string, number>();
+      for (const hDoc of histOntemSnap.docs) {
+        const msPorLote = hDoc.data().msPorLote as { loteId: string; cmsRealizado?: number; cmsPrevisto?: number }[] | undefined;
+        if (msPorLote) {
+          for (const ml of msPorLote) {
+            if (ml.cmsRealizado && ml.cmsRealizado > 0) {
+              cmsRealizadoOntemMap.set(ml.loteId, ml.cmsRealizado);
+            }
+            if (ml.cmsPrevisto && ml.cmsPrevisto > 0) {
+              cmsPrevistoOntemMap.set(ml.loteId, ml.cmsPrevisto);
+            }
+          }
+        }
+      }
+
+      // Alertas: CMS realizado de ontem fora dos limites dos fatores de leitura
+      const fatoresLeitura = notasData.map((n) => n.fator);
+      const maiorFator = fatoresLeitura.length > 0 ? Math.max(...fatoresLeitura) : 1.1;
+      const menorFator = fatoresLeitura.length > 0 ? Math.min(...fatoresLeitura) : 0.9;
+      const alertasMap = new Map<string, AlertaCmsLote>();
+      for (const [loteId, cmsRealizado] of cmsRealizadoOntemMap) {
+        const cmsPrevisto = cmsPrevistoOntemMap.get(loteId);
+        if (!cmsPrevisto || cmsPrevisto <= 0) continue;
+        const limiteMax = cmsPrevisto * maiorFator;
+        const limiteMin = cmsPrevisto * menorFator;
+        if (cmsRealizado > limiteMax) {
+          alertasMap.set(loteId, { tipo: "acima", cmsRealizado, cmsPrevisto });
+        } else if (cmsRealizado < limiteMin) {
+          alertasMap.set(loteId, { tipo: "abaixo", cmsRealizado, cmsPrevisto });
+        }
+      }
+      setAlertasCms(alertasMap);
+
       for (const loteDoc of lotesSnap.docs) {
         const data = loteDoc.data();
         if (!data.piqueteId || data.ativo === false) continue;
@@ -103,12 +156,15 @@ export default function Leitura() {
         const q = query(leiturasRef, orderBy("data", "desc"), limit(1));
         const leituraSnap = await getDocs(q);
 
-        let cmsAtual = CMS_INICIAL;
+        // CMS: priorizar CMS realizado do dia anterior, senão última leitura, senão CMS_INICIAL
+        let cmsAtual = cmsRealizadoOntemMap.get(loteDoc.id) ?? 0;
         let ultimaLeituraData = "";
 
         if (!leituraSnap.empty) {
           const ultimaLeitura = leituraSnap.docs[0].data();
-          cmsAtual = ultimaLeitura.cmsNovo ?? CMS_INICIAL;
+          if (cmsAtual <= 0) {
+            cmsAtual = ultimaLeitura.cmsNovo ?? CMS_INICIAL;
+          }
           ultimaLeituraData = ultimaLeitura.data ?? "";
 
           // Se a ultima leitura é de hoje, marcar como ja feita
@@ -121,6 +177,10 @@ export default function Leitura() {
               cmsNovo: ultimaLeitura.cmsNovo,
             });
           }
+        }
+
+        if (cmsAtual <= 0) {
+          cmsAtual = CMS_INICIAL;
         }
 
         lotesComPiquete.push({
@@ -205,6 +265,57 @@ export default function Leitura() {
 
   function formatCms(cms: number): string {
     return `${cms.toFixed(2)}%`;
+  }
+
+  async function handleRepetirPrevisto(lote: LoteComPiquete) {
+    const alerta = alertasCms.get(lote.id);
+    if (!alerta || saving) return;
+
+    const cmsNovo = alerta.cmsPrevisto;
+
+    try {
+      setSaving(lote.id);
+
+      // Salvar leitura no Firestore para que o mapa-trato reconheça a decisão
+      await addDoc(collection(db, "lotes", lote.id, "leituras"), {
+        data: hoje,
+        nota: "Repetir Previsto",
+        fator: 1,
+        cmsAnterior: lote.cmsAtual,
+        cmsNovo,
+      });
+
+      // Atualizar estado local
+      setLotes((prev) =>
+        prev.map((l) =>
+          l.id === lote.id ? { ...l, cmsAtual: cmsNovo, ultimaLeituraData: hoje } : l
+        )
+      );
+
+      setLeiturasHoje((prev) => {
+        const next = new Map(prev);
+        next.set(lote.id, {
+          loteId: lote.id,
+          nota: "Repetir Previsto",
+          fator: 1,
+          cmsAnterior: lote.cmsAtual,
+          cmsNovo,
+        });
+        return next;
+      });
+
+      // Remover o alerta para este lote
+      setAlertasCms((prev) => {
+        const next = new Map(prev);
+        next.delete(lote.id);
+        return next;
+      });
+    } catch (error) {
+      console.error("Erro ao salvar repetição:", error);
+      Alert.alert("Erro", "Não foi possível salvar a repetição.");
+    } finally {
+      setSaving(null);
+    }
   }
 
   const handleAjusteFino = useCallback(
@@ -312,9 +423,37 @@ export default function Leitura() {
                 {lotes.map((lote) => {
                   const leituraHoje = leiturasHoje.get(lote.id);
                   const isSaving = saving === lote.id;
+                  const alerta = alertasCms.get(lote.id);
 
                   return (
-                    <View key={lote.id} style={styles.loteRow}>
+                    <View key={lote.id}>
+                      {alerta && (
+                        <View style={styles.alertaRow}>
+                          <View style={styles.alertaContent}>
+                            <Feather
+                              name="alert-triangle"
+                              size={14}
+                              color="#E65100"
+                            />
+                            <Text style={styles.alertaText}>
+                              {lote.piqueteNome}: CMS realizado ontem ({alerta.cmsRealizado.toFixed(2)}%)
+                              {alerta.tipo === "acima" ? " acima " : " abaixo "}
+                              do limite (previsto: {alerta.cmsPrevisto.toFixed(2)}%)
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.alertaButton}
+                            activeOpacity={0.7}
+                            onPress={() => handleRepetirPrevisto(lote)}
+                          >
+                            <Feather name="repeat" size={12} color="#FFF" />
+                            <Text style={styles.alertaButtonText}>
+                              Repetir Previsto ({alerta.cmsPrevisto.toFixed(2)}%)
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                      <View style={styles.loteRow}>
                       <View style={styles.loteInfo}>
                         <Text style={styles.piqueteNome}>
                           {lote.piqueteNome}
@@ -391,6 +530,7 @@ export default function Leitura() {
                           );
                         })}
                       </View>
+                    </View>
                     </View>
                   );
                 })}
@@ -573,6 +713,41 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   notaButtonTextSelected: {
+    color: "#FFF",
+  },
+  alertaRow: {
+    backgroundColor: "#FFF3E0",
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 4,
+    borderLeftWidth: 3,
+    borderLeftColor: "#E65100",
+  },
+  alertaContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 6,
+  },
+  alertaText: {
+    fontSize: 11,
+    color: "#BF360C",
+    fontWeight: "600",
+    flex: 1,
+  },
+  alertaButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#E65100",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignSelf: "flex-start",
+  },
+  alertaButtonText: {
+    fontSize: 11,
+    fontWeight: "700",
     color: "#FFF",
   },
 });
