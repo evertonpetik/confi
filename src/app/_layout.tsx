@@ -109,6 +109,15 @@ export default function Layout() {
             ),
           }} />
         <Drawer.Screen
+          name="tratador"
+          options={{
+            title: "Tratador",
+            drawerLabel: "Tratador",
+            drawerIcon: ({ color }) => (
+              <Feather name="play-circle" size={20} color={color} />
+            ),
+          }} />
+        <Drawer.Screen
           name="configuracoes"
           options={{
             title: "Configurações",
