@@ -104,6 +104,7 @@ export default function Dietas() {
         percentualMateriaSeca: insumoData.percentualMateriaSeca ?? 0,
         materiaSecaVariavel: insumoData.materiaSecaVariavel ?? false,
         compras,
+        saidas: [],
       });
     }
 
@@ -162,10 +163,10 @@ export default function Dietas() {
     setDeleteTarget(dieta);
   }
 
-  async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras">) {
+  async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras" | "saidas">) {
     try {
       const docRef = await addDoc(collection(db, "insumos"), data);
-      const newInsumo: Insumo = { id: docRef.id, ...data, compras: [] };
+      const newInsumo: Insumo = { id: docRef.id, ...data, compras: [], saidas: [] };
       setInsumos((prev) =>
         [...prev, newInsumo].sort((a, b) => a.nome.localeCompare(b.nome))
       );
@@ -295,6 +296,7 @@ export default function Dietas() {
         dieta={editingDieta}
         insumoOptions={insumoOptions}
         aditivoOptions={aditivoOptions}
+        insumosMap={insumosMap}
         onSave={handleSave}
         onClose={() => {
           setFormVisible(false);

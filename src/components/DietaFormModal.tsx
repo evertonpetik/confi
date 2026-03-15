@@ -1,6 +1,7 @@
 import { Button } from "@/components/Button";
 import { Dieta, DietaInsumo } from "@/components/DietaCard";
 import { Input } from "@/components/Input";
+import { Insumo } from "@/components/InsumoCard";
 import { Select, SelectOption } from "@/components/Select";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
@@ -21,6 +22,7 @@ type DietaFormModalProps = {
   dieta?: Dieta | null;
   insumoOptions: SelectOption[];
   aditivoOptions: SelectOption[];
+  insumosMap?: Map<string, Insumo>;
   onSave: (data: Omit<Dieta, "id">) => void;
   onClose: () => void;
   onAddInsumo?: () => void;
@@ -55,12 +57,14 @@ export function DietaFormModal({
   dieta,
   insumoOptions,
   aditivoOptions,
+  insumosMap = new Map(),
   onSave,
   onClose,
   onAddInsumo,
 }: DietaFormModalProps) {
   const [form, setForm] = useState<DietaForm>(emptyForm);
   const [insumoRows, setInsumoRows] = useState<InsumoRow[]>([]);
+  const [manterMS, setManterMS] = useState<boolean>(false);
   const isEditing = !!dieta;
 
   useEffect(() => {
@@ -81,12 +85,46 @@ export function DietaFormModal({
             percentual: i.percentual.toString(),
           }))
         );
+
+        // Inferir estado do toggle a partir dos dados salvos
+        const savedMS = dieta.percentualMS ?? 0;
+        const naturalMS = dieta.insumos.reduce((acc, di) => {
+          const insumo = insumosMap.get(di.insumoId);
+          const percMS = insumo?.percentualMateriaSeca ?? 0;
+          return acc + (di.percentual / 100) * percMS;
+        }, 0);
+
+        if (naturalMS > 0 && Math.abs(savedMS - naturalMS) < 0.01) {
+          setManterMS(true);
+        } else {
+          setManterMS(false);
+        }
       } else {
         setForm(emptyForm);
         setInsumoRows([]);
+        setManterMS(false);
       }
     }
   }, [visible, dieta]);
+
+  // MS da dieta calculada (media ponderada)
+  const msDieta = insumoRows.reduce((acc, row) => {
+    const perc = parseFloat(row.percentual.replace(",", "."));
+    if (isNaN(perc) || perc <= 0 || !row.insumoId) return acc;
+    const insumo = insumosMap.get(row.insumoId);
+    const percMS = insumo?.percentualMateriaSeca ?? 0;
+    return acc + (perc / 100) * percMS;
+  }, 0);
+
+  // Sincronizar percentualMS quando "Manter MS" estiver ativo
+  useEffect(() => {
+    if (manterMS && msDieta > 0) {
+      setForm((prev) => ({
+        ...prev,
+        percentualMS: msDieta.toFixed(2),
+      }));
+    }
+  }, [manterMS, msDieta]);
 
   function handleAddInsumoRow() {
     setInsumoRows((prev) => [
@@ -202,6 +240,8 @@ export function DietaFormModal({
     return acc + (isNaN(val) ? 0 : val);
   }, 0);
 
+  const msInputDisabled = manterMS;
+
   return (
     <Modal
       visible={visible}
@@ -241,9 +281,16 @@ export function DietaFormModal({
                 {/* Insumos Section */}
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Composição da Dieta</Text>
-                  <Text style={styles.sectionSubtitle}>
-                    Total: {somaAtual.toFixed(2).replace(".", ",")}%
-                  </Text>
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={styles.sectionSubtitle}>
+                      Total: {somaAtual.toFixed(2).replace(".", ",")}%
+                    </Text>
+                    {msDieta > 0 && (
+                      <Text style={[styles.sectionSubtitle, { color: "#3366FF" }]}>
+                        MS da Dieta: {msDieta.toFixed(2).replace(".", ",")}%
+                      </Text>
+                    )}
+                  </View>
                 </View>
 
                 {insumoRows.map((row, index) => (
@@ -288,16 +335,63 @@ export function DietaFormModal({
                   <Text style={styles.addInsumoLabel}>Adicionar Insumo</Text>
                 </TouchableOpacity>
 
+                {/* Toggle Manter MS da Dieta */}
+                {insumoRows.length > 0 && msDieta > 0 && (
+                  <>
+                    <Text style={styles.label}>Manter MS da Dieta?</Text>
+                    <View style={styles.toggleRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.toggleButton,
+                          manterMS && styles.toggleActive,
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => setManterMS(true)}
+                      >
+                        <Text
+                          style={[
+                            styles.toggleText,
+                            manterMS && styles.toggleTextActive,
+                          ]}
+                        >
+                          Sim
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.toggleButton,
+                          !manterMS && styles.toggleActive,
+                        ]}
+                        activeOpacity={0.8}
+                        onPress={() => setManterMS(false)}
+                      >
+                        <Text
+                          style={[
+                            styles.toggleText,
+                            !manterMS && styles.toggleTextActive,
+                          ]}
+                        >
+                          Não
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+
                 {/* Percentual MS */}
                 <Text style={styles.label}>Percentual de MS Desejada (%) *</Text>
-                <Input
-                  placeholder="Ex: 55"
-                  value={form.percentualMS}
-                  onChangeText={(v) =>
-                    setForm((p) => ({ ...p, percentualMS: v }))
-                  }
-                  keyboardType="decimal-pad"
-                />
+                <View style={msInputDisabled ? { opacity: 0.6 } : undefined}>
+                  <Input
+                    placeholder="Ex: 55"
+                    value={form.percentualMS}
+                    onChangeText={(v) =>
+                      setForm((p) => ({ ...p, percentualMS: v }))
+                    }
+                    keyboardType="decimal-pad"
+                    editable={!msInputDisabled}
+                    style={msInputDisabled ? { backgroundColor: "#F0F0F0" } : undefined}
+                  />
+                </View>
 
                 {/* NDT */}
                 <Text style={styles.label}>NDT (%) *</Text>
