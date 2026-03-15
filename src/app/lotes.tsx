@@ -1,9 +1,15 @@
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Dieta } from "@/components/DietaCard";
+import { DietaFormModal } from "@/components/DietaFormModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { FaturamentoModal, LancamentoFinanceiro } from "@/components/FaturamentoModal";
+import { Insumo } from "@/components/InsumoCard";
+import { InsumoFormModal } from "@/components/InsumoFormModal";
 import { Lote, LoteCard, Movimentacao } from "@/components/LoteCard";
 import { LoteFormModal } from "@/components/LoteFormModal";
 import { MovimentacaoFormModal } from "@/components/MovimentacaoFormModal";
+import { Produtor } from "@/components/ProdutorCard";
+import { ProdutorFormModal } from "@/components/ProdutorFormModal";
 import { SelectOption } from "@/components/Select";
 import { useResponsive } from "@/hooks/useResponsive";
 import { Feather } from "@expo/vector-icons";
@@ -62,6 +68,13 @@ export default function Lotes() {
   const [dietaOptions, setDietaOptions] = useState<SelectOption[]>([]);
   const [allPiqueteOptions, setAllPiqueteOptions] = useState<SelectOption[]>([]);
 
+  // Modais inline para cadastro rápido
+  const [inlineProdutorVisible, setInlineProdutorVisible] = useState(false);
+  const [inlineDietaVisible, setInlineDietaVisible] = useState(false);
+  const [inlineInsumoVisible, setInlineInsumoVisible] = useState(false);
+  const [insumoOptions, setInsumoOptions] = useState<SelectOption[]>([]);
+  const [aditivoOptions, setAditivoOptions] = useState<SelectOption[]>([]);
+
   useFocusEffect(
     useCallback(() => {
       fetchLotes();
@@ -72,7 +85,7 @@ export default function Lotes() {
 
   async function fetchOptions() {
     try {
-      const [racaSnap, catSnap, compSnap, impSnap, tamSnap, prodSnap, movSnap, dietaSnap, piqueteSnap] =
+      const [racaSnap, catSnap, compSnap, impSnap, tamSnap, prodSnap, movSnap, dietaSnap, piqueteSnap, insumoSnap, aditivoSnap] =
         await Promise.all([
           getDocs(collection(db, "raca")),
           getDocs(collection(db, "categoria")),
@@ -83,49 +96,51 @@ export default function Lotes() {
           getDocs(collection(db, "movimentacao")),
           getDocs(collection(db, "dietas")),
           getDocs(collection(db, "piquetes")),
+          getDocs(collection(db, "insumos")),
+          getDocs(collection(db, "aditivos")),
         ]);
 
       setRacaOptions(
         racaSnap.docs.map((d) => ({
           label: d.data().descricao,
           value: d.data().descricao,
-        }))
+        })).sort((a, b) => a.label.localeCompare(b.label))
       );
       setCategoriaOptions(
         catSnap.docs.map((d) => ({
           label: d.data().descricao,
           value: d.data().descricao,
-        }))
+        })).sort((a, b) => a.label.localeCompare(b.label))
       );
       setCompensatorioOptions(
         compSnap.docs.map((d) => ({
           label: d.data().descricao,
           value: d.data().descricao,
-        }))
+        })).sort((a, b) => a.label.localeCompare(b.label))
       );
       setImplanteOptions(
         impSnap.docs.map((d) => ({
           label: d.data().descricao,
           value: d.data().descricao,
-        }))
+        })).sort((a, b) => a.label.localeCompare(b.label))
       );
       setTamanhoCorporalOptions(
         tamSnap.docs.map((d) => ({
           label: d.data().descricao,
           value: d.data().descricao,
-        }))
+        })).sort((a, b) => a.label.localeCompare(b.label))
       );
       setProdutorOptions(
         prodSnap.docs.map((d) => ({
           label: d.data().nome,
           value: d.id,
-        }))
+        })).sort((a, b) => a.label.localeCompare(b.label))
       );
       setMovimentacaoOptions(
         movSnap.docs.map((d) => ({
           descricao: d.data().descricao as string,
           tipo: d.data().tipo as string,
-        }))
+        })).sort((a, b) => a.descricao.localeCompare(b.descricao))
       );
       setDietaOptions(
         dietaSnap.docs
@@ -134,6 +149,7 @@ export default function Lotes() {
             label: d.data().nome,
             value: d.id,
           }))
+          .sort((a, b) => a.label.localeCompare(b.label))
       );
       setAllPiqueteOptions(
         piqueteSnap.docs
@@ -146,6 +162,19 @@ export default function Lotes() {
             const numB = parseInt(b.label.replace(/\D/g, "")) || 0;
             return numA - numB;
           })
+      );
+      setInsumoOptions(
+        insumoSnap.docs
+          .map((d) => ({ label: d.data().nome as string, value: d.id }))
+          .sort((a, b) => a.label.localeCompare(b.label))
+      );
+      setAditivoOptions(
+        aditivoSnap.docs
+          .map((d) => ({
+            label: d.data().descricao as string,
+            value: d.data().descricao as string,
+          }))
+          .sort((a, b) => a.label.localeCompare(b.label))
       );
     } catch (error) {
       console.error("Erro ao buscar opções:", error);
@@ -280,6 +309,51 @@ export default function Lotes() {
   function handleFaturamento(lote: Lote) {
     setFatLote(lote);
     setFatVisible(true);
+  }
+
+  async function handleInlineProdutorSave(data: Omit<Produtor, "id">) {
+    try {
+      const docRef = await addDoc(collection(db, "produtores"), data);
+      setProdutorOptions((prev) =>
+        [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
+          a.label.localeCompare(b.label)
+        )
+      );
+      setInlineProdutorVisible(false);
+    } catch (error) {
+      console.error("Erro ao salvar produtor:", error);
+      Alert.alert("Erro", "Não foi possível salvar o produtor.");
+    }
+  }
+
+  async function handleInlineDietaSave(data: Omit<Dieta, "id">) {
+    try {
+      const docRef = await addDoc(collection(db, "dietas"), data);
+      setDietaOptions((prev) =>
+        [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
+          a.label.localeCompare(b.label)
+        )
+      );
+      setInlineDietaVisible(false);
+    } catch (error) {
+      console.error("Erro ao salvar dieta:", error);
+      Alert.alert("Erro", "Não foi possível salvar a dieta.");
+    }
+  }
+
+  async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras">) {
+    try {
+      const docRef = await addDoc(collection(db, "insumos"), data);
+      setInsumoOptions((prev) =>
+        [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
+          a.label.localeCompare(b.label)
+        )
+      );
+      setInlineInsumoVisible(false);
+    } catch (error) {
+      console.error("Erro ao salvar insumo:", error);
+      Alert.alert("Erro", "Não foi possível salvar o insumo.");
+    }
   }
 
   async function handleSave(data: Omit<Lote, "id" | "movimentacoes">) {
@@ -572,7 +646,7 @@ export default function Lotes() {
       </KeyboardAvoidingView>
 
       <LoteFormModal
-        visible={modalVisible}
+        visible={modalVisible && !inlineProdutorVisible && !inlineDietaVisible}
         lote={editingLote}
         nextNumero={getNextNumero()}
         racaOptions={racaOptions}
@@ -588,6 +662,29 @@ export default function Lotes() {
           setModalVisible(false);
           setEditingLote(null);
         }}
+        onAddProdutor={() => setInlineProdutorVisible(true)}
+        onAddDieta={() => setInlineDietaVisible(true)}
+      />
+
+      <ProdutorFormModal
+        visible={inlineProdutorVisible}
+        onSave={handleInlineProdutorSave}
+        onClose={() => setInlineProdutorVisible(false)}
+      />
+
+      <DietaFormModal
+        visible={inlineDietaVisible && !inlineInsumoVisible}
+        insumoOptions={insumoOptions}
+        aditivoOptions={aditivoOptions}
+        onSave={handleInlineDietaSave}
+        onClose={() => setInlineDietaVisible(false)}
+        onAddInsumo={() => setInlineInsumoVisible(true)}
+      />
+
+      <InsumoFormModal
+        visible={inlineInsumoVisible}
+        onSave={handleInlineInsumoSave}
+        onClose={() => setInlineInsumoVisible(false)}
       />
 
       <MovimentacaoFormModal

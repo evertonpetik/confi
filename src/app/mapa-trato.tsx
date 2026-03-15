@@ -260,6 +260,7 @@ export default function MapaTrato() {
       setVagoes(vagoesData);
       setVagaoOptions(
         vagoesData.map((v) => ({ label: `${v.descricao} (${v.capacidade} kg)`, value: v.id }))
+          .sort((a, b) => a.label.localeCompare(b.label))
       );
       if (vagoesData.length === 1) setSelectedVagaoId(vagoesData[0].id);
 

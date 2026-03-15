@@ -1,11 +1,16 @@
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Dieta } from "@/components/DietaCard";
+import { DietaFormModal } from "@/components/DietaFormModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
+import { Insumo } from "@/components/InsumoCard";
+import { InsumoFormModal } from "@/components/InsumoFormModal";
 import { Roteiro, RoteiroCard } from "@/components/RoteiroCard";
 import { RoteiroFormModal } from "@/components/RoteiroFormModal";
 import { SelectOption } from "@/components/Select";
 import { useResponsive } from "@/hooks/useResponsive";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   addDoc,
   collection,
@@ -14,7 +19,6 @@ import {
   getDocs,
   updateDoc,
 } from "firebase/firestore";
-import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -52,6 +56,12 @@ export default function Roteiros() {
   const [dietaOptions, setDietaOptions] = useState<SelectOption[]>([]);
   const [lotesRef, setLotesRef] = useState<LoteRef[]>([]);
 
+  // Modais inline para cadastro rápido
+  const [inlineDietaVisible, setInlineDietaVisible] = useState(false);
+  const [inlineInsumoVisible, setInlineInsumoVisible] = useState(false);
+  const [insumoOptions, setInsumoOptions] = useState<SelectOption[]>([]);
+  const [aditivoOptions, setAditivoOptions] = useState<SelectOption[]>([]);
+
   useFocusEffect(
     useCallback(() => {
       fetchRoteiros();
@@ -61,9 +71,11 @@ export default function Roteiros() {
 
   async function fetchOptions() {
     try {
-      const [dietaSnap, lotesSnap] = await Promise.all([
+      const [dietaSnap, lotesSnap, insumoSnap, aditivoSnap] = await Promise.all([
         getDocs(collection(db, "dietas")),
         getDocs(collection(db, "lotes")),
+        getDocs(collection(db, "insumos")),
+        getDocs(collection(db, "aditivos")),
       ]);
 
       setDietaOptions(
@@ -73,6 +85,7 @@ export default function Roteiros() {
             label: d.data().nome,
             value: d.id,
           }))
+          .sort((a, b) => a.label.localeCompare(b.label))
       );
 
       setLotesRef(
@@ -83,6 +96,20 @@ export default function Roteiros() {
           piqueteNome: d.data().piqueteNome ?? "",
           ativo: d.data().ativo ?? true,
         }))
+      );
+
+      setInsumoOptions(
+        insumoSnap.docs
+          .map((d) => ({ label: d.data().nome as string, value: d.id }))
+          .sort((a, b) => a.label.localeCompare(b.label))
+      );
+      setAditivoOptions(
+        aditivoSnap.docs
+          .map((d) => ({
+            label: d.data().descricao as string,
+            value: d.data().descricao as string,
+          }))
+          .sort((a, b) => a.label.localeCompare(b.label))
       );
     } catch (error) {
       console.error("Erro ao buscar opções:", error);
@@ -142,6 +169,36 @@ export default function Roteiros() {
 
   function handleDeleteRequest(roteiro: Roteiro) {
     setDeleteTarget(roteiro);
+  }
+
+  async function handleInlineDietaSave(data: Omit<Dieta, "id">) {
+    try {
+      const docRef = await addDoc(collection(db, "dietas"), data);
+      setDietaOptions((prev) =>
+        [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
+          a.label.localeCompare(b.label)
+        )
+      );
+      setInlineDietaVisible(false);
+    } catch (error) {
+      console.error("Erro ao salvar dieta:", error);
+      Alert.alert("Erro", "Não foi possível salvar a dieta.");
+    }
+  }
+
+  async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras">) {
+    try {
+      const docRef = await addDoc(collection(db, "insumos"), data);
+      setInsumoOptions((prev) =>
+        [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
+          a.label.localeCompare(b.label)
+        )
+      );
+      setInlineInsumoVisible(false);
+    } catch (error) {
+      console.error("Erro ao salvar insumo:", error);
+      Alert.alert("Erro", "Não foi possível salvar o insumo.");
+    }
   }
 
   async function handleSave(data: Omit<Roteiro, "id">) {
@@ -291,7 +348,7 @@ export default function Roteiros() {
       </KeyboardAvoidingView>
 
       <RoteiroFormModal
-        visible={modalVisible}
+        visible={modalVisible && !inlineDietaVisible}
         roteiro={editingRoteiro}
         nextNumero={getNextNumero()}
         dietaOptions={dietaOptions}
@@ -301,6 +358,22 @@ export default function Roteiros() {
           setModalVisible(false);
           setEditingRoteiro(null);
         }}
+        onAddDieta={() => setInlineDietaVisible(true)}
+      />
+
+      <DietaFormModal
+        visible={inlineDietaVisible && !inlineInsumoVisible}
+        insumoOptions={insumoOptions}
+        aditivoOptions={aditivoOptions}
+        onSave={handleInlineDietaSave}
+        onClose={() => setInlineDietaVisible(false)}
+        onAddInsumo={() => setInlineInsumoVisible(true)}
+      />
+
+      <InsumoFormModal
+        visible={inlineInsumoVisible}
+        onSave={handleInlineInsumoSave}
+        onClose={() => setInlineInsumoVisible(false)}
       />
 
       <ConfirmDialog

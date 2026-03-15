@@ -23,6 +23,7 @@ type DietaFormModalProps = {
   aditivoOptions: SelectOption[];
   onSave: (data: Omit<Dieta, "id">) => void;
   onClose: () => void;
+  onAddInsumo?: () => void;
 };
 
 type InsumoRow = {
@@ -56,6 +57,7 @@ export function DietaFormModal({
   aditivoOptions,
   onSave,
   onClose,
+  onAddInsumo,
 }: DietaFormModalProps) {
   const [form, setForm] = useState<DietaForm>(emptyForm);
   const [insumoRows, setInsumoRows] = useState<InsumoRow[]>([]);
@@ -207,11 +209,11 @@ export function DietaFormModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <KeyboardAvoidingView
-          style={styles.keyboardView}
-          behavior={Platform.select({ ios: "padding", android: undefined })}
-        >
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.keyboardView}>
           <View style={styles.card}>
             <View style={styles.header}>
               <Text style={styles.title}>
@@ -253,6 +255,7 @@ export function DietaFormModal({
                           value={row.insumoId}
                           options={insumoOptions}
                           onSelect={(v) => handleInsumoSelect(index, v)}
+                          onAdd={onAddInsumo}
                         />
                       </View>
                       <View style={styles.insumoPercentWrapper}>
@@ -362,8 +365,8 @@ export function DietaFormModal({
               </View>
             </ScrollView>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

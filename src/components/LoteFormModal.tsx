@@ -30,6 +30,8 @@ type LoteFormModalProps = {
   piqueteOptions: SelectOption[];
   onSave: (data: Omit<Lote, "id" | "movimentacoes">) => void;
   onClose: () => void;
+  onAddProdutor?: () => void;
+  onAddDieta?: () => void;
 };
 
 type LoteForm = {
@@ -78,6 +80,8 @@ export function LoteFormModal({
   piqueteOptions,
   onSave,
   onClose,
+  onAddProdutor,
+  onAddDieta,
 }: LoteFormModalProps) {
   const [form, setForm] = useState<LoteForm>(emptyForm);
   const isEditing = !!lote;
@@ -168,11 +172,11 @@ export function LoteFormModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <KeyboardAvoidingView
-          style={styles.keyboardView}
-          behavior={Platform.select({ ios: "padding", android: undefined })}
-        >
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.keyboardView}>
           <View style={styles.card}>
             <View style={styles.header}>
               <Text style={styles.title}>
@@ -253,6 +257,7 @@ export function LoteFormModal({
                   value={form.produtorId}
                   options={produtorOptions}
                   onSelect={handleProdutorSelect}
+                  onAdd={onAddProdutor}
                 />
 
                 {/* Dieta */}
@@ -262,6 +267,7 @@ export function LoteFormModal({
                   value={form.dietaId}
                   options={dietaOptions}
                   onSelect={handleDietaSelect}
+                  onAdd={onAddDieta}
                 />
 
                 {/* Piquete */}
@@ -332,8 +338,8 @@ export function LoteFormModal({
               </View>
             </ScrollView>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

@@ -3,6 +3,7 @@ import { Dieta, DietaCard } from "@/components/DietaCard";
 import { DietaFormModal } from "@/components/DietaFormModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { Compra, Insumo } from "@/components/InsumoCard";
+import { InsumoFormModal } from "@/components/InsumoFormModal";
 import { SelectOption } from "@/components/Select";
 import { useResponsive } from "@/hooks/useResponsive";
 import { Feather } from "@expo/vector-icons";
@@ -66,6 +67,7 @@ export default function Dietas() {
   const [formVisible, setFormVisible] = useState(false);
   const [editingDieta, setEditingDieta] = useState<Dieta | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Dieta | null>(null);
+  const [inlineInsumoVisible, setInlineInsumoVisible] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -158,6 +160,30 @@ export default function Dietas() {
 
   function handleDeleteRequest(dieta: Dieta) {
     setDeleteTarget(dieta);
+  }
+
+  async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras">) {
+    try {
+      const docRef = await addDoc(collection(db, "insumos"), data);
+      const newInsumo: Insumo = { id: docRef.id, ...data, compras: [] };
+      setInsumos((prev) =>
+        [...prev, newInsumo].sort((a, b) => a.nome.localeCompare(b.nome))
+      );
+      setInsumosMap((prev) => {
+        const m = new Map(prev);
+        m.set(docRef.id, newInsumo);
+        return m;
+      });
+      setInsumoOptions((prev) =>
+        [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
+          a.label.localeCompare(b.label)
+        )
+      );
+      setInlineInsumoVisible(false);
+    } catch (error) {
+      console.error("Erro ao salvar insumo:", error);
+      Alert.alert("Erro", "Não foi possível salvar o insumo.");
+    }
   }
 
   async function handleSave(data: Omit<Dieta, "id">) {
@@ -265,7 +291,7 @@ export default function Dietas() {
       </KeyboardAvoidingView>
 
       <DietaFormModal
-        visible={formVisible}
+        visible={formVisible && !inlineInsumoVisible}
         dieta={editingDieta}
         insumoOptions={insumoOptions}
         aditivoOptions={aditivoOptions}
@@ -274,6 +300,13 @@ export default function Dietas() {
           setFormVisible(false);
           setEditingDieta(null);
         }}
+        onAddInsumo={() => setInlineInsumoVisible(true)}
+      />
+
+      <InsumoFormModal
+        visible={inlineInsumoVisible}
+        onSave={handleInlineInsumoSave}
+        onClose={() => setInlineInsumoVisible(false)}
       />
 
       <ConfirmDialog

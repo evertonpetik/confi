@@ -30,6 +30,7 @@ type RoteiroFormModalProps = {
   getPiquetesForDieta: (dietaId: string) => PiqueteOption[];
   onSave: (data: Omit<Roteiro, "id">) => void;
   onClose: () => void;
+  onAddDieta?: () => void;
 };
 
 type RoteiroForm = {
@@ -56,6 +57,7 @@ export function RoteiroFormModal({
   getPiquetesForDieta,
   onSave,
   onClose,
+  onAddDieta,
 }: RoteiroFormModalProps) {
   const [form, setForm] = useState<RoteiroForm>(emptyForm);
   const isEditing = !!roteiro;
@@ -140,11 +142,11 @@ export function RoteiroFormModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <KeyboardAvoidingView
-          style={styles.keyboardView}
-          behavior={Platform.select({ ios: "padding", android: undefined })}
-        >
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.keyboardView}>
           <View style={styles.card}>
             <View style={styles.header}>
               <Text style={styles.title}>
@@ -178,6 +180,7 @@ export function RoteiroFormModal({
                   value={form.dietaId}
                   options={dietaOptions}
                   onSelect={handleDietaSelect}
+                  onAdd={onAddDieta}
                 />
 
                 {/* Piquetes */}
@@ -234,7 +237,7 @@ export function RoteiroFormModal({
                                 style={[
                                   styles.orderButton,
                                   index === form.piqueteIds.length - 1 &&
-                                    styles.orderButtonDisabled,
+                                  styles.orderButtonDisabled,
                                 ]}
                                 activeOpacity={0.7}
                                 onPress={() => handleMoveDown(index)}
@@ -321,8 +324,8 @@ export function RoteiroFormModal({
               </View>
             </ScrollView>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

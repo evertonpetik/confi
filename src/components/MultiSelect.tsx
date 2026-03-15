@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -82,7 +84,10 @@ export function MultiSelect({
           setSearch("");
         }}
       >
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={styles.sheet}>
             <View style={styles.header}>
               <Text style={styles.headerTitle}>{placeholder}</Text>
@@ -162,7 +167,7 @@ export function MultiSelect({
               </Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );

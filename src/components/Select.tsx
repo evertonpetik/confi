@@ -2,7 +2,9 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
@@ -24,6 +26,7 @@ type SelectProps = {
   onSelect: (value: string) => void;
   disabled?: boolean;
   loading?: boolean;
+  onAdd?: () => void;
 };
 
 export function Select({
@@ -33,6 +36,7 @@ export function Select({
   onSelect,
   disabled = false,
   loading = false,
+  onAdd,
 }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -54,23 +58,35 @@ export function Select({
 
   return (
     <>
-      <TouchableOpacity
-        style={[styles.trigger, disabled && styles.triggerDisabled]}
-        activeOpacity={0.7}
-        onPress={() => !disabled && setOpen(true)}
-      >
-        {loading ? (
-          <ActivityIndicator size="small" color="#999" />
-        ) : (
-          <Text
-            style={[styles.triggerText, !selectedLabel && styles.placeholder]}
-            numberOfLines={1}
+      <View style={styles.triggerRow}>
+        <TouchableOpacity
+          style={[styles.trigger, disabled && styles.triggerDisabled, onAdd && styles.triggerWithAdd]}
+          activeOpacity={0.7}
+          onPress={() => !disabled && setOpen(true)}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#999" />
+          ) : (
+            <Text
+              style={[styles.triggerText, !selectedLabel && styles.placeholder]}
+              numberOfLines={1}
+            >
+              {selectedLabel || placeholder}
+            </Text>
+          )}
+          <Feather name="chevron-down" size={18} color="#999" />
+        </TouchableOpacity>
+
+        {onAdd && (
+          <TouchableOpacity
+            style={styles.addButton}
+            activeOpacity={0.7}
+            onPress={onAdd}
           >
-            {selectedLabel || placeholder}
-          </Text>
+            <Feather name="plus" size={20} color="#FFF" />
+          </TouchableOpacity>
         )}
-        <Feather name="chevron-down" size={18} color="#999" />
-      </TouchableOpacity>
+      </View>
 
       <Modal
         visible={open}
@@ -81,7 +97,10 @@ export function Select({
           setSearch("");
         }}
       >
-        <View style={styles.overlay}>
+        <KeyboardAvoidingView
+          style={styles.overlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={styles.sheet}>
             <View style={styles.header}>
               <Text style={styles.headerTitle}>{placeholder}</Text>
@@ -143,15 +162,21 @@ export function Select({
               }
             />
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  trigger: {
+  triggerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
     width: "100%",
+  },
+  trigger: {
+    flex: 1,
     height: 48,
     borderWidth: 1,
     borderColor: "#DCDCDC",
@@ -161,6 +186,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#FFF",
+  },
+  triggerWithAdd: {
+    flex: 1,
   },
   triggerDisabled: {
     backgroundColor: "#F0F0F0",
@@ -246,5 +274,13 @@ const styles = StyleSheet.create({
     padding: 24,
     fontSize: 15,
     color: "#999",
+  },
+  addButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: "#3366FF",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

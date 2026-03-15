@@ -180,11 +180,11 @@ export function ProdutorFormModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <KeyboardAvoidingView
-          style={styles.keyboardView}
-          behavior={Platform.select({ ios: "padding", android: undefined })}
-        >
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.keyboardView}>
           <View style={styles.card}>
             <View style={styles.header}>
               <Text style={styles.title}>
@@ -329,8 +329,8 @@ export function ProdutorFormModal({
               </View>
             </ScrollView>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
