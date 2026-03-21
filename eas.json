@@ -1,0 +1,51 @@
+{
+  "cli": {
+    "version": ">= 15.0.10",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyCMjR_kBzNvNrJydFrVhC6kwqAtO9y7Z8s",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "confi-5c988.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "confi-5c988",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "confi-5c988.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "1056486648558",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:1056486648558:web:c9298ab58e7970a5bb61ff",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-E560PKB7BH"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyCMjR_kBzNvNrJydFrVhC6kwqAtO9y7Z8s",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "confi-5c988.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "confi-5c988",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "confi-5c988.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "1056486648558",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:1056486648558:web:c9298ab58e7970a5bb61ff",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-E560PKB7BH"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyCMjR_kBzNvNrJydFrVhC6kwqAtO9y7Z8s",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "confi-5c988.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "confi-5c988",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "confi-5c988.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "1056486648558",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:1056486648558:web:c9298ab58e7970a5bb61ff",
+        "EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID": "G-E560PKB7BH"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
