@@ -17,7 +17,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { doc, setDoc } from "firebase/firestore";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -30,7 +29,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
+import { setDocument } from "@/services/firestoreService";
 
 // ---- CSV Helpers ----
 
@@ -189,7 +188,7 @@ export default function MapaTrato() {
         custoTotal += totalRealizado * precoMedio;
         const saidaDocId = `${rc.roteiro.id}_${hoje}_${insumoId}`;
         saidaPromises.push(
-          setDoc(doc(db, "insumos", insumoId, "saidas", saidaDocId), {
+          setDocument(["insumos", insumoId, "saidas"], saidaDocId, {
             data: hoje,
             quantidade: totalRealizado,
             precoKg: precoMedio,
@@ -253,7 +252,7 @@ export default function MapaTrato() {
 
       // Save historico with cost data
       const docId = `${rc.roteiro.id}_${hoje}`;
-      await setDoc(doc(db, "historicoMapaTrato", docId), {
+      await setDocument(["historicoMapaTrato"], docId, {
         data: hoje,
         roteiroId: rc.roteiro.id,
         roteiroNumero: rc.roteiro.numero,
@@ -391,7 +390,7 @@ export default function MapaTrato() {
         }
       }
 
-      await setDoc(doc(db, "historicoMapaTrato", docId), updateData, { merge: true });
+      await setDocument(["historicoMapaTrato"], docId, updateData, { merge: true });
       setHistoricoDescargas((prev) => {
         const next = new Map(prev);
         next.set(rc.roteiro.id, descargas);

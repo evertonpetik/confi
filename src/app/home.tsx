@@ -1,16 +1,15 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { Movimentacao } from "@/components/LoteCard";
 import { useResponsive } from "@/hooks/useResponsive";
+import {
+  fsLimit,
+  fsOrderBy,
+  getCollection,
+  queryCollection,
+} from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-} from "firebase/firestore";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,7 +20,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
 
 // ---- Types ----
 
@@ -69,8 +67,8 @@ export default function Home() {
     try {
       setLoading(true);
       const [lotesSnap, histSnap] = await Promise.all([
-        getDocs(collection(db, "lotes")),
-        getDocs(collection(db, "historicoMapaTrato")),
+        getCollection("lotes"),
+        getCollection("historicoMapaTrato"),
       ]);
 
       // Build historico lookups: loteId -> { gmdReal[], msPorLote (today) }
@@ -121,7 +119,7 @@ export default function Home() {
         if (ld.ativo !== true) continue;
         ativos++;
 
-        const movSnap = await getDocs(collection(db, "lotes", loteDoc.id, "movimentacoes"));
+        const movSnap = await getCollection("lotes", loteDoc.id, "movimentacoes");
         const movs: Movimentacao[] = movSnap.docs.map((m) => ({
           id: m.id,
           ...(m.data() as Omit<Movimentacao, "id">),
@@ -165,12 +163,10 @@ export default function Home() {
         let leituraCocho = "-";
         let cmsAtual = 0;
         try {
-          const leitQ = query(
-            collection(db, "lotes", loteDoc.id, "leituras"),
-            orderBy("data", "desc"),
-            limit(1)
+          const leitSnap = await queryCollection(
+            ["lotes", loteDoc.id, "leituras"],
+            [fsOrderBy("data", "desc"), fsLimit(1)]
           );
-          const leitSnap = await getDocs(leitQ);
           if (!leitSnap.empty) {
             const l = leitSnap.docs[0].data();
             leituraCocho = l.nota ?? "-";

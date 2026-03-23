@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1056486648558",
+    "project_id": "confi-5c988",
+    "storage_bucket": "confi-5c988.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1056486648558:android:1d0018ab7b72df35bb61ff",
+        "android_client_info": {
+          "package_name": "com.evertompetik.confi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgA4FxyV7CMpwrUFeFcAP211eRrwP04K0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

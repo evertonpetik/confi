@@ -1,5 +1,4 @@
-import { collection, doc, getDocs, writeBatch } from "firebase/firestore"
-import { db } from "../../firebaseConfig"
+import { getCollection, createBatch } from "@/services/firestoreService"
 
 type TabelaAuxiliar = {
   nome: string
@@ -190,18 +189,16 @@ export async function seedTabelasAuxiliares(): Promise<string> {
   const resultados: string[] = []
 
   for (const tabela of tabelasAuxiliares) {
-    const colRef = collection(db, tabela.colecao)
-    const snapshot = await getDocs(colRef)
+    const snapshot = await getCollection(tabela.colecao)
 
     if (!snapshot.empty) {
       resultados.push(`"${tabela.nome}" ja existe (${snapshot.size} registros) - ignorada`)
       continue
     }
 
-    const batch = writeBatch(db)
+    const batch = createBatch()
     for (const item of tabela.dados) {
-      const docRef = doc(colRef)
-      batch.set(docRef, item)
+      batch.set([tabela.colecao], item)
     }
     await batch.commit()
     resultados.push(`"${tabela.nome}" criada com ${tabela.dados.length} registros`)

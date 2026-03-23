@@ -12,17 +12,15 @@ import { Produtor } from "@/components/ProdutorCard";
 import { ProdutorFormModal } from "@/components/ProdutorFormModal";
 import { SelectOption } from "@/components/Select";
 import { useResponsive } from "@/hooks/useResponsive";
+import {
+  addDocument,
+  deleteDocument,
+  getCollection,
+  updateDocument,
+} from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  updateDoc,
-} from "firebase/firestore";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -35,7 +33,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
 
 type FiltroStatus = "ativos" | "inativos";
 
@@ -87,17 +84,17 @@ export default function Lotes() {
     try {
       const [racaSnap, catSnap, compSnap, impSnap, tamSnap, prodSnap, movSnap, dietaSnap, piqueteSnap, insumoSnap, aditivoSnap] =
         await Promise.all([
-          getDocs(collection(db, "raca")),
-          getDocs(collection(db, "categoria")),
-          getDocs(collection(db, "compensatorio")),
-          getDocs(collection(db, "implante")),
-          getDocs(collection(db, "tamanhoCorporal")),
-          getDocs(collection(db, "produtores")),
-          getDocs(collection(db, "movimentacao")),
-          getDocs(collection(db, "dietas")),
-          getDocs(collection(db, "piquetes")),
-          getDocs(collection(db, "insumos")),
-          getDocs(collection(db, "aditivos")),
+          getCollection("raca"),
+          getCollection("categoria"),
+          getCollection("compensatorio"),
+          getCollection("implante"),
+          getCollection("tamanhoCorporal"),
+          getCollection("produtores"),
+          getCollection("movimentacao"),
+          getCollection("dietas"),
+          getCollection("piquetes"),
+          getCollection("insumos"),
+          getCollection("aditivos"),
         ]);
 
       setRacaOptions(
@@ -184,14 +181,12 @@ export default function Lotes() {
   async function fetchLotes() {
     try {
       setLoading(true);
-      const lotesSnap = await getDocs(collection(db, "lotes"));
+      const lotesSnap = await getCollection("lotes");
       const data: Lote[] = [];
 
       for (const loteDoc of lotesSnap.docs) {
         const loteData = loteDoc.data();
-        const movSnap = await getDocs(
-          collection(db, "lotes", loteDoc.id, "movimentacoes")
-        );
+        const movSnap = await getCollection("lotes", loteDoc.id, "movimentacoes");
         const movimentacoes: Movimentacao[] = movSnap.docs.map((mDoc) => ({
           id: mDoc.id,
           ...mDoc.data(),
@@ -228,7 +223,7 @@ export default function Lotes() {
 
   async function fetchFinanceiro() {
     try {
-      const histSnap = await getDocs(collection(db, "historicoMapaTrato"));
+      const histSnap = await getCollection("historicoMapaTrato");
       const map = new Map<string, LancamentoFinanceiro[]>();
       const gmdMap = new Map<string, { data: string; gmdReal: number }[]>();
       for (const hDoc of histSnap.docs) {
@@ -313,7 +308,7 @@ export default function Lotes() {
 
   async function handleInlineProdutorSave(data: Omit<Produtor, "id">) {
     try {
-      const docRef = await addDoc(collection(db, "produtores"), data);
+      const docRef = await addDocument(["produtores"], data);
       setProdutorOptions((prev) =>
         [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
           a.label.localeCompare(b.label)
@@ -328,7 +323,7 @@ export default function Lotes() {
 
   async function handleInlineDietaSave(data: Omit<Dieta, "id">) {
     try {
-      const docRef = await addDoc(collection(db, "dietas"), data);
+      const docRef = await addDocument(["dietas"], data);
       setDietaOptions((prev) =>
         [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
           a.label.localeCompare(b.label)
@@ -343,7 +338,7 @@ export default function Lotes() {
 
   async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras" | "saidas">) {
     try {
-      const docRef = await addDoc(collection(db, "insumos"), data);
+      const docRef = await addDocument(["insumos"], data);
       setInsumoOptions((prev) =>
         [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
           a.label.localeCompare(b.label)
@@ -366,13 +361,12 @@ export default function Lotes() {
         : data;
 
       if (editingLote) {
-        const ref = doc(db, "lotes", editingLote.id);
-        await updateDoc(ref, { ...saveData });
+        await updateDocument(["lotes"], editingLote.id, { ...saveData });
 
         // Se inativou, remover piquete dos roteiros que o contenham
         if (isInativando && editingLote.piqueteId) {
           const piqIdToRemove = editingLote.piqueteId;
-          const rotSnap = await getDocs(collection(db, "roteiros"));
+          const rotSnap = await getCollection("roteiros");
           for (const rDoc of rotSnap.docs) {
             const piquetes = (rDoc.data().piquetes ?? []) as {
               piqueteId: string;
@@ -382,7 +376,7 @@ export default function Lotes() {
               (p) => p.piqueteId !== piqIdToRemove
             );
             if (filtered.length !== piquetes.length) {
-              await updateDoc(doc(db, "roteiros", rDoc.id), {
+              await updateDocument(["roteiros"], rDoc.id, {
                 piquetes: filtered,
               });
             }
@@ -397,7 +391,7 @@ export default function Lotes() {
           )
         );
       } else {
-        const docRef = await addDoc(collection(db, "lotes"), saveData);
+        const docRef = await addDocument(["lotes"], saveData);
         setLotes((prev) =>
           [...prev, { id: docRef.id, ...saveData, movimentacoes: [] }].sort(
             (a, b) => a.numero - b.numero
@@ -417,8 +411,8 @@ export default function Lotes() {
     movData: Omit<Movimentacao, "id">
   ) {
     try {
-      const docRef = await addDoc(
-        collection(db, "lotes", loteId, "movimentacoes"),
+      const docRef = await addDocument(
+        ["lotes", loteId, "movimentacoes"],
         movData
       );
       const newMov: Movimentacao = { id: docRef.id, ...movData };
@@ -432,12 +426,11 @@ export default function Lotes() {
 
       // Se quantidade chegou a zero ou menos, inativar lote automaticamente
       if (qtdAtual <= 0 && lote && lote.ativo) {
-        const loteRef = doc(db, "lotes", loteId);
-        await updateDoc(loteRef, { ativo: false, piqueteId: "", piqueteNome: "" });
+        await updateDocument(["lotes"], loteId, { ativo: false, piqueteId: "", piqueteNome: "" });
 
         // Remover piquete dos roteiros
         if (lote.piqueteId) {
-          const rotSnap = await getDocs(collection(db, "roteiros"));
+          const rotSnap = await getCollection("roteiros");
           for (const rDoc of rotSnap.docs) {
             const piquetes = (rDoc.data().piquetes ?? []) as {
               piqueteId: string;
@@ -447,7 +440,7 @@ export default function Lotes() {
               (p) => p.piqueteId !== lote.piqueteId
             );
             if (filtered.length !== piquetes.length) {
-              await updateDoc(doc(db, "roteiros", rDoc.id), {
+              await updateDocument(["roteiros"], rDoc.id, {
                 piquetes: filtered,
               });
             }
@@ -489,7 +482,7 @@ export default function Lotes() {
 
   async function handleDeleteMovimentacao(loteId: string, movId: string) {
     try {
-      await deleteDoc(doc(db, "lotes", loteId, "movimentacoes", movId));
+      await deleteDocument(["lotes", loteId, "movimentacoes"], movId);
       setLotes((prev) =>
         prev.map((l) =>
           l.id === loteId
@@ -517,15 +510,15 @@ export default function Lotes() {
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     try {
-      const movSnap = await getDocs(
-        collection(db, "lotes", deleteTarget.id, "movimentacoes")
+      const movSnap = await getCollection(
+        "lotes", deleteTarget.id, "movimentacoes"
       );
       for (const movDoc of movSnap.docs) {
-        await deleteDoc(
-          doc(db, "lotes", deleteTarget.id, "movimentacoes", movDoc.id)
+        await deleteDocument(
+          ["lotes", deleteTarget.id, "movimentacoes"], movDoc.id
         );
       }
-      await deleteDoc(doc(db, "lotes", deleteTarget.id));
+      await deleteDocument(["lotes"], deleteTarget.id);
       setLotes((prev) => prev.filter((l) => l.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (error) {

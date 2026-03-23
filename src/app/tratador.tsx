@@ -3,6 +3,7 @@ import { DescargaTrato } from "@/components/DescargaModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { Select, SelectOption } from "@/components/Select";
 import { useResponsive } from "@/hooks/useResponsive";
+import { setDocument } from "@/services/firestoreService";
 import {
   buildCalcData,
   calcGmdNRC,
@@ -15,7 +16,6 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
-import { doc, setDoc } from "firebase/firestore";
 import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -29,7 +29,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
 
 // ---- Types ----
 
@@ -354,7 +353,7 @@ export default function Tratador() {
         custoTotal += totalRealizado * precoMedio;
         const saidaDocId = `${rc.roteiro.id}_${hoje}_${insumoId}`;
         saidaPromises.push(
-          setDoc(doc(db, "insumos", insumoId, "saidas", saidaDocId), {
+          setDocument(["insumos", insumoId, "saidas"], saidaDocId, {
             data: hoje,
             quantidade: totalRealizado,
             precoKg: precoMedio,
@@ -389,8 +388,8 @@ export default function Tratador() {
 
       const vagao = vagoes.find((v) => v.id === selectedVagaoId);
       const docId = `${rc.roteiro.id}_${hoje}`;
-      await setDoc(
-        doc(db, "historicoMapaTrato", docId),
+      await setDocument(
+        ["historicoMapaTrato"], docId,
         {
           data: hoje,
           roteiroId: rc.roteiro.id,
@@ -544,7 +543,7 @@ export default function Tratador() {
         }
       }
 
-      await setDoc(doc(db, "historicoMapaTrato", docId), updateData, { merge: true });
+      await setDocument(["historicoMapaTrato"], docId, updateData, { merge: true });
 
       // Check if more tratos
       if (currentTratoNumero < rc.numTratos) {

@@ -1,6 +1,10 @@
 import { useResponsive } from "@/hooks/useResponsive"
+import { prefetchAllData } from "@/utils/prefetchFirestore"
 import { Feather } from "@expo/vector-icons"
+import AsyncStorage from "@react-native-async-storage/async-storage"
 import { Drawer } from "expo-router/drawer"
+import { useEffect, useState } from "react"
+import { ActivityIndicator, Text, View } from "react-native"
 import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { configureReanimatedLogger, ReanimatedLogLevel } from "react-native-reanimated"
 
@@ -11,6 +15,58 @@ configureReanimatedLogger({
 
 export default function Layout() {
   const { isTablet } = useResponsive()
+  const [checking, setChecking] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [syncMessage, setSyncMessage] = useState("")
+
+  useEffect(() => {
+    checkFirstSync()
+  }, [])
+
+  async function checkFirstSync() {
+    try {
+      const lastSync = await AsyncStorage.getItem("@lastSync")
+      if (!lastSync) {
+        setSyncing(true)
+        setChecking(false)
+        setSyncMessage("Sincronizando dados para uso offline...")
+        await prefetchAllData((msg) => setSyncMessage(msg))
+        const now = new Date().toLocaleString("pt-BR")
+        await AsyncStorage.setItem("@lastSync", now)
+        setSyncing(false)
+      } else {
+        setChecking(false)
+      }
+    } catch {
+      setChecking(false)
+      setSyncing(false)
+    }
+  }
+
+  if (checking) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#FDFDFD" }}>
+        <ActivityIndicator size="large" color="#3366FF" />
+      </View>
+    )
+  }
+
+  if (syncing) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#FDFDFD", padding: 32 }}>
+        <ActivityIndicator size="large" color="#3366FF" />
+        <Text style={{ marginTop: 16, fontSize: 18, fontWeight: "700", color: "#1a1a1a", textAlign: "center" }}>
+          Primeira sincronizacao
+        </Text>
+        <Text style={{ marginTop: 8, fontSize: 14, color: "#666", textAlign: "center" }}>
+          {syncMessage}
+        </Text>
+        <Text style={{ marginTop: 16, fontSize: 13, color: "#999", textAlign: "center" }}>
+          Isso acontece apenas na primeira vez. Aguarde...
+        </Text>
+      </View>
+    )
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

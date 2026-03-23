@@ -3,16 +3,14 @@ import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { Produtor, ProdutorCard } from "@/components/ProdutorCard";
 import { ProdutorFormModal } from "@/components/ProdutorFormModal";
 import { useResponsive } from "@/hooks/useResponsive";
+import {
+  addDocument,
+  deleteDocument,
+  getCollection,
+  updateDocument
+} from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  updateDoc,
-} from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -25,7 +23,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
 
 export default function Produtores() {
   const { isTablet, maxWidthContent } = useResponsive();
@@ -44,7 +41,7 @@ export default function Produtores() {
   async function fetchProdutores() {
     try {
       setLoading(true);
-      const querySnapshot = await getDocs(collection(db, "produtores"));
+      const querySnapshot = await getCollection("produtores");
       const data: Produtor[] = [];
       querySnapshot.forEach((docSnap) => {
         data.push({ id: docSnap.id, ...docSnap.data() } as Produtor);
@@ -74,15 +71,14 @@ export default function Produtores() {
   async function handleSave(data: Omit<Produtor, "id">) {
     try {
       if (editingProdutor) {
-        const ref = doc(db, "produtores", editingProdutor.id);
-        await updateDoc(ref, { ...data });
+        await updateDocument(["produtores"], editingProdutor.id, { ...data });
         setProdutores((prev) =>
           prev.map((p) =>
             p.id === editingProdutor.id ? { ...p, ...data } : p
           )
         );
       } else {
-        const docRef = await addDoc(collection(db, "produtores"), data);
+        const docRef = await addDocument(["produtores"], data);
         setProdutores((prev) => [...prev, { id: docRef.id, ...data }]);
       }
       setModalVisible(false);
@@ -96,7 +92,7 @@ export default function Produtores() {
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     try {
-      await deleteDoc(doc(db, "produtores", deleteTarget.id));
+      await deleteDocument(["produtores"], deleteTarget.id);
       setProdutores((prev) => prev.filter((p) => p.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (error) {

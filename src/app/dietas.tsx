@@ -9,13 +9,11 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  updateDoc,
-} from "firebase/firestore";
+  addDocument,
+  deleteDocument,
+  getCollection,
+  updateDocument,
+} from "@/services/firestoreService";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -28,7 +26,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
 
 function calcularCustoKgMS(
   dietaInsumos: Dieta["insumos"],
@@ -85,13 +82,13 @@ export default function Dietas() {
   }
 
   async function fetchInsumos() {
-    const insumosSnap = await getDocs(collection(db, "insumos"));
+    const insumosSnap = await getCollection("insumos");
     const data: Insumo[] = [];
 
     for (const insumoDoc of insumosSnap.docs) {
       const insumoData = insumoDoc.data();
-      const comprasSnap = await getDocs(
-        collection(db, "insumos", insumoDoc.id, "compras")
+      const comprasSnap = await getCollection(
+        "insumos", insumoDoc.id, "compras"
       );
       const compras: Compra[] = comprasSnap.docs.map((cDoc) => ({
         id: cDoc.id,
@@ -123,7 +120,7 @@ export default function Dietas() {
   }
 
   async function fetchAditivos() {
-    const snap = await getDocs(collection(db, "aditivos"));
+    const snap = await getCollection("aditivos");
     const options: SelectOption[] = snap.docs
       .map((d) => ({
         label: d.data().descricao ?? "",
@@ -134,7 +131,7 @@ export default function Dietas() {
   }
 
   async function fetchDietas() {
-    const snap = await getDocs(collection(db, "dietas"));
+    const snap = await getCollection("dietas");
     const data: Dieta[] = snap.docs.map((d) => ({
       id: d.id,
       nome: d.data().nome ?? "",
@@ -165,7 +162,7 @@ export default function Dietas() {
 
   async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras" | "saidas">) {
     try {
-      const docRef = await addDoc(collection(db, "insumos"), data);
+      const docRef = await addDocument(["insumos"], data);
       const newInsumo: Insumo = { id: docRef.id, ...data, compras: [], saidas: [] };
       setInsumos((prev) =>
         [...prev, newInsumo].sort((a, b) => a.nome.localeCompare(b.nome))
@@ -190,15 +187,14 @@ export default function Dietas() {
   async function handleSave(data: Omit<Dieta, "id">) {
     try {
       if (editingDieta) {
-        const ref = doc(db, "dietas", editingDieta.id);
-        await updateDoc(ref, { ...data });
+        await updateDocument(["dietas"], editingDieta.id, { ...data });
         setDietas((prev) =>
           prev.map((d) =>
             d.id === editingDieta.id ? { ...d, ...data } : d
           )
         );
       } else {
-        const docRef = await addDoc(collection(db, "dietas"), data);
+        const docRef = await addDocument(["dietas"], data);
         setDietas((prev) =>
           [...prev, { id: docRef.id, ...data }].sort((a, b) =>
             a.nome.localeCompare(b.nome)
@@ -216,7 +212,7 @@ export default function Dietas() {
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     try {
-      await deleteDoc(doc(db, "dietas", deleteTarget.id));
+      await deleteDocument(["dietas"], deleteTarget.id);
       setDietas((prev) => prev.filter((d) => d.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (error) {

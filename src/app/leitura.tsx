@@ -1,16 +1,15 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { useResponsive } from "@/hooks/useResponsive";
+import {
+  addDocument,
+  getCollection,
+  queryCollection,
+  fsWhere,
+  fsOrderBy,
+  fsLimit,
+} from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
-import {
-  addDoc,
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  where,
-} from "firebase/firestore";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -23,7 +22,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
 
 const CMS_INICIAL = 1.3;
 const CMS_BASE = 2.6;
@@ -83,8 +81,8 @@ export default function Leitura() {
     try {
       setLoading(true);
       const [lotesSnap, notasSnap] = await Promise.all([
-        getDocs(collection(db, "lotes")),
-        getDocs(collection(db, "notaLeitura")),
+        getCollection("lotes"),
+        getCollection("notaLeitura"),
       ]);
 
       // Notas de leitura
@@ -106,8 +104,7 @@ export default function Leitura() {
       const ontem = new Date();
       ontem.setDate(ontem.getDate() - 1);
       const ontemStr = `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, "0")}-${String(ontem.getDate()).padStart(2, "0")}`;
-      const histOntemQ = query(collection(db, "historicoMapaTrato"), where("data", "==", ontemStr));
-      const histOntemSnap = await getDocs(histOntemQ);
+      const histOntemSnap = await queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", ontemStr)]);
       const cmsRealizadoOntemMap = new Map<string, number>();
       const cmsPrevistoOntemMap = new Map<string, number>();
       for (const hDoc of histOntemSnap.docs) {
@@ -147,14 +144,10 @@ export default function Leitura() {
         if (!data.piqueteId || data.ativo === false) continue;
 
         // Buscar ultima leitura
-        const leiturasRef = collection(
-          db,
-          "lotes",
-          loteDoc.id,
-          "leituras"
+        const leituraSnap = await queryCollection(
+          ["lotes", loteDoc.id, "leituras"],
+          [fsOrderBy("data", "desc"), fsLimit(1)]
         );
-        const q = query(leiturasRef, orderBy("data", "desc"), limit(1));
-        const leituraSnap = await getDocs(q);
 
         // CMS: priorizar CMS realizado do dia anterior, senão última leitura, senão CMS_INICIAL
         let cmsAtual = cmsRealizadoOntemMap.get(loteDoc.id) ?? 0;
@@ -227,7 +220,7 @@ export default function Leitura() {
       try {
         setSaving(loteId);
 
-        await addDoc(collection(db, "lotes", loteId, "leituras"), {
+        await addDocument(["lotes", loteId, "leituras"], {
           data: hoje,
           nota: nota.descricao,
           fator: nota.fator,
@@ -277,7 +270,7 @@ export default function Leitura() {
       setSaving(lote.id);
 
       // Salvar leitura no Firestore para que o mapa-trato reconheça a decisão
-      await addDoc(collection(db, "lotes", lote.id, "leituras"), {
+      await addDocument(["lotes", lote.id, "leituras"], {
         data: hoje,
         nota: "Repetir Previsto",
         fator: 1,
@@ -329,7 +322,7 @@ export default function Leitura() {
       try {
         setSaving(loteId);
 
-        await addDoc(collection(db, "lotes", loteId, "leituras"), {
+        await addDocument(["lotes", loteId, "leituras"], {
           data: hoje,
           nota: delta > 0 ? "Ajuste +" : "Ajuste -",
           fator: 0,
@@ -454,83 +447,83 @@ export default function Leitura() {
                         </View>
                       )}
                       <View style={styles.loteRow}>
-                      <View style={styles.loteInfo}>
-                        <Text style={styles.piqueteNome}>
-                          {lote.piqueteNome}
-                        </Text>
-                        <Text style={styles.loteNumero}>
-                          Lote {lote.numero}
-                        </Text>
-                        <View style={styles.cmsRow}>
-                          <TouchableOpacity
-                            style={styles.ajusteButton}
-                            activeOpacity={0.7}
-                            disabled={isSaving}
-                            onPress={() => handleAjusteFino(lote, -0.01)}
-                          >
-                            <Feather name="minus" size={14} color="#E53935" />
-                          </TouchableOpacity>
-                          <Text style={styles.cmsText}>
-                            {formatCms(lote.cmsAtual)}
+                        <View style={styles.loteInfo}>
+                          <Text style={styles.piqueteNome}>
+                            {lote.piqueteNome}
                           </Text>
-                          <TouchableOpacity
-                            style={styles.ajusteButton}
-                            activeOpacity={0.7}
-                            disabled={isSaving}
-                            onPress={() => handleAjusteFino(lote, 0.01)}
-                          >
-                            <Feather name="plus" size={14} color="#4CAF50" />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                      <View style={styles.notasRow}>
-                        {notas.map((nota) => {
-                          const isSelected =
-                            leituraHoje?.nota === nota.descricao;
-                          const corStyle =
-                            nota.fator > 1
-                              ? styles.notaAumento
-                              : nota.fator === 1
-                                ? styles.notaManter
-                                : styles.notaReducao;
-                          const corSelectedStyle =
-                            nota.fator > 1
-                              ? styles.notaAumentoSelected
-                              : nota.fator === 1
-                                ? styles.notaManterSelected
-                                : styles.notaReducaoSelected;
-                          const textCorStyle =
-                            nota.fator > 1
-                              ? styles.notaAumentoText
-                              : nota.fator === 1
-                                ? styles.notaManterText
-                                : styles.notaReducaoText;
-                          return (
+                          <Text style={styles.loteNumero}>
+                            Lote {lote.numero}
+                          </Text>
+                          <View style={styles.cmsRow}>
                             <TouchableOpacity
-                              key={nota.descricao}
-                              style={[
-                                styles.notaButton,
-                                corStyle,
-                                isSelected && corSelectedStyle,
-                              ]}
+                              style={styles.ajusteButton}
                               activeOpacity={0.7}
                               disabled={isSaving}
-                              onPress={() => handleSelectNota(lote, nota)}
+                              onPress={() => handleAjusteFino(lote, -0.01)}
                             >
-                              <Text
-                                style={[
-                                  styles.notaButtonText,
-                                  textCorStyle,
-                                  isSelected && styles.notaButtonTextSelected,
-                                ]}
-                              >
-                                {nota.descricao}
-                              </Text>
+                              <Feather name="minus" size={14} color="#E53935" />
                             </TouchableOpacity>
-                          );
-                        })}
+                            <Text style={styles.cmsText}>
+                              {formatCms(lote.cmsAtual)}
+                            </Text>
+                            <TouchableOpacity
+                              style={styles.ajusteButton}
+                              activeOpacity={0.7}
+                              disabled={isSaving}
+                              onPress={() => handleAjusteFino(lote, 0.01)}
+                            >
+                              <Feather name="plus" size={14} color="#4CAF50" />
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                        <View style={styles.notasRow}>
+                          {notas.map((nota) => {
+                            const isSelected =
+                              leituraHoje?.nota === nota.descricao;
+                            const corStyle =
+                              nota.fator > 1
+                                ? styles.notaAumento
+                                : nota.fator === 1
+                                  ? styles.notaManter
+                                  : styles.notaReducao;
+                            const corSelectedStyle =
+                              nota.fator > 1
+                                ? styles.notaAumentoSelected
+                                : nota.fator === 1
+                                  ? styles.notaManterSelected
+                                  : styles.notaReducaoSelected;
+                            const textCorStyle =
+                              nota.fator > 1
+                                ? styles.notaAumentoText
+                                : nota.fator === 1
+                                  ? styles.notaManterText
+                                  : styles.notaReducaoText;
+                            return (
+                              <TouchableOpacity
+                                key={nota.descricao}
+                                style={[
+                                  styles.notaButton,
+                                  corStyle,
+                                  isSelected && corSelectedStyle,
+                                ]}
+                                activeOpacity={0.7}
+                                disabled={isSaving}
+                                onPress={() => handleSelectNota(lote, nota)}
+                              >
+                                <Text
+                                  style={[
+                                    styles.notaButtonText,
+                                    textCorStyle,
+                                    isSelected && styles.notaButtonTextSelected,
+                                  ]}
+                                >
+                                  {nota.descricao}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
                       </View>
-                    </View>
                     </View>
                   );
                 })}

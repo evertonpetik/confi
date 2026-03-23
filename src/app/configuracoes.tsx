@@ -6,18 +6,18 @@ import {
   TabelaAuxiliarFormModal,
 } from "@/components/TabelaAuxiliarFormModal";
 import { useResponsive } from "@/hooks/useResponsive";
+import { prefetchAllData } from "@/utils/prefetchFirestore";
 import { seedTabelasAuxiliares } from "@/utils/seedTabelasAuxiliares";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  updateDoc,
-} from "firebase/firestore";
+  addDocument,
+  deleteDocument,
+  getCollection,
+  updateDocument,
+} from "@/services/firestoreService";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -30,7 +30,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
 
 // ---- Schema definitions for each auxiliary table ----
 
@@ -139,6 +138,9 @@ export default function Configuracoes() {
   const { isTablet, maxWidthContent } = useResponsive();
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState("");
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   // Data per table: colecao -> items[]
   const [dados, setDados] = useState<Map<string, ItemAux[]>>(new Map());
@@ -163,6 +165,7 @@ export default function Configuracoes() {
   useFocusEffect(
     useCallback(() => {
       fetchAllTables();
+      loadLastSync();
     }, [])
   );
 
@@ -171,7 +174,7 @@ export default function Configuracoes() {
       setLoadingData(true);
       const newDados = new Map<string, ItemAux[]>();
       const promises = TABELAS.map(async (t) => {
-        const snap = await getDocs(collection(db, t.colecao));
+        const snap = await getCollection(t.colecao);
         const items: ItemAux[] = snap.docs.map((d) => ({
           id: d.id,
           ...d.data(),
@@ -187,6 +190,31 @@ export default function Configuracoes() {
       console.error("Erro ao buscar tabelas:", error);
     } finally {
       setLoadingData(false);
+    }
+  }
+
+  async function loadLastSync() {
+    try {
+      const ts = await AsyncStorage.getItem("@lastSync");
+      setLastSync(ts);
+    } catch { /* ignore */ }
+  }
+
+  async function handleSync() {
+    setSyncing(true);
+    setSyncProgress("Iniciando sincronizacao...");
+    try {
+      await prefetchAllData((msg, _pct) => setSyncProgress(msg));
+      const now = new Date().toLocaleString("pt-BR");
+      await AsyncStorage.setItem("@lastSync", now);
+      setLastSync(now);
+      Alert.alert("Sincronizacao", "Todos os dados foram sincronizados para uso offline.");
+    } catch (error) {
+      console.error("Erro ao sincronizar:", error);
+      Alert.alert("Erro", "Nao foi possivel sincronizar os dados.");
+    } finally {
+      setSyncing(false);
+      setSyncProgress("");
     }
   }
 
@@ -227,7 +255,7 @@ export default function Configuracoes() {
     try {
       if (formModal.item) {
         // Update
-        await updateDoc(doc(db, tabela.colecao, formModal.item.id), data);
+        await updateDocument([tabela.colecao], formModal.item.id, data);
         setDados((prev) => {
           const next = new Map(prev);
           const items = (next.get(tabela.colecao) ?? []).map((it) =>
@@ -238,7 +266,7 @@ export default function Configuracoes() {
         });
       } else {
         // Add
-        const docRef = await addDoc(collection(db, tabela.colecao), data);
+        const docRef = await addDocument([tabela.colecao], data);
         setDados((prev) => {
           const next = new Map(prev);
           const items = [...(next.get(tabela.colecao) ?? []), { id: docRef.id, ...data }];
@@ -259,7 +287,7 @@ export default function Configuracoes() {
   async function handleDeleteConfirm() {
     if (!deleteTarget) return;
     try {
-      await deleteDoc(doc(db, deleteTarget.colecao, deleteTarget.id));
+      await deleteDocument([deleteTarget.colecao], deleteTarget.id);
       setDados((prev) => {
         const next = new Map(prev);
         const items = (next.get(deleteTarget.colecao) ?? []).filter(
@@ -334,6 +362,27 @@ export default function Configuracoes() {
                   label="Criar Tabelas Auxiliares"
                   onPress={handleSeedTabelasAuxiliares}
                 />
+              )}
+            </View>
+
+            {/* Sync button */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Sincronizacao Offline</Text>
+              <Text style={styles.sectionDescription}>
+                Baixa todos os dados para uso offline. Execute quando tiver conexao com a internet.
+              </Text>
+              {lastSync && (
+                <Text style={styles.lastSyncText}>
+                  Ultima sincronizacao: {lastSync}
+                </Text>
+              )}
+              {syncing ? (
+                <View style={{ alignItems: "center", marginTop: 12, gap: 8 }}>
+                  <ActivityIndicator size="large" color="#3366FF" />
+                  <Text style={styles.syncProgressText}>{syncProgress}</Text>
+                </View>
+              ) : (
+                <Button label="Sincronizar Dados" onPress={handleSync} />
               )}
             </View>
 
@@ -594,5 +643,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 16,
     marginLeft: 12,
+  },
+  lastSyncText: {
+    fontSize: 13,
+    color: "#888",
+    fontStyle: "italic",
+  },
+  syncProgressText: {
+    fontSize: 13,
+    color: "#3366FF",
+    textAlign: "center",
   },
 });

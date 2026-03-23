@@ -1,14 +1,12 @@
 import { CargaTrato } from "@/components/CargaModal";
 import { DescargaTrato } from "@/components/DescargaModal";
 import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  where
-} from "firebase/firestore";
-import { db } from "../../firebaseConfig";
+  fsLimit,
+  fsOrderBy,
+  fsWhere,
+  getCollection,
+  queryCollection,
+} from "@/services/firestoreService";
 
 // ---- Constants ----
 
@@ -269,17 +267,17 @@ export async function fetchMapaTratoData(): Promise<MapaTratoFetchResult> {
   const hoje = getHojeStr();
 
   const [vagaoSnap, rotSnap, dietaSnap, lotesSnap, insumosSnap, racaSnap, implSnap, compSnap, gecSnap, aditSnap, tcSnap] = await Promise.all([
-    getDocs(collection(db, "vagao")),
-    getDocs(collection(db, "roteiros")),
-    getDocs(collection(db, "dietas")),
-    getDocs(collection(db, "lotes")),
-    getDocs(collection(db, "insumos")),
-    getDocs(collection(db, "raca")),
-    getDocs(collection(db, "implante")),
-    getDocs(collection(db, "compensatorio")),
-    getDocs(collection(db, "gec")),
-    getDocs(collection(db, "aditivos")),
-    getDocs(collection(db, "tamanhoCorporal")),
+    getCollection("vagao"),
+    getCollection("roteiros"),
+    getCollection("dietas"),
+    getCollection("lotes"),
+    getCollection("insumos"),
+    getCollection("raca"),
+    getCollection("implante"),
+    getCollection("compensatorio"),
+    getCollection("gec"),
+    getCollection("aditivos"),
+    getCollection("tamanhoCorporal"),
   ]);
 
   // Vagões
@@ -329,8 +327,8 @@ export async function fetchMapaTratoData(): Promise<MapaTratoFetchResult> {
   const insumosMap = new Map<string, InsumoMS>();
   for (const d of insumosSnap.docs) {
     const [comprasSnap, saidasSnap] = await Promise.all([
-      getDocs(collection(db, "insumos", d.id, "compras")),
-      getDocs(collection(db, "insumos", d.id, "saidas")),
+      getCollection("insumos", d.id, "compras"),
+      getCollection("insumos", d.id, "saidas"),
     ]);
     type Ev = { data: string; tipo: "E" | "S"; quantidade: number; precoKg: number };
     const eventos: Ev[] = [
@@ -370,8 +368,7 @@ export async function fetchMapaTratoData(): Promise<MapaTratoFetchResult> {
   const ontem = new Date();
   ontem.setDate(ontem.getDate() - 1);
   const ontemStr = `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, "0")}-${String(ontem.getDate()).padStart(2, "0")}`;
-  const histOntemQ = query(collection(db, "historicoMapaTrato"), where("data", "==", ontemStr));
-  const histOntemSnap = await getDocs(histOntemQ);
+  const histOntemSnap = await queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", ontemStr)]);
   const cmsRealizadoOntemMap = new Map<string, number>();
   for (const hDoc of histOntemSnap.docs) {
     const msPorLote = hDoc.data().msPorLote as { loteId: string; cmsRealizado?: number }[] | undefined;
@@ -390,7 +387,7 @@ export async function fetchMapaTratoData(): Promise<MapaTratoFetchResult> {
     const ld = loteDoc.data();
     if (!ld.piqueteId || ld.ativo === false) continue;
 
-    const movSnap = await getDocs(collection(db, "lotes", loteDoc.id, "movimentacoes"));
+    const movSnap = await getCollection("lotes", loteDoc.id, "movimentacoes");
     const movs = movSnap.docs.map((m) => ({
       evento: m.data().evento as string,
       quantidade: m.data().quantidade as number,
@@ -401,12 +398,10 @@ export async function fetchMapaTratoData(): Promise<MapaTratoFetchResult> {
     let cmsAtual = CMS_INICIAL;
     let leituraHojeCms = 0;
     try {
-      const leitQ = query(
-        collection(db, "lotes", loteDoc.id, "leituras"),
-        orderBy("data", "desc"),
-        limit(1)
+      const leitSnap = await queryCollection(
+        ["lotes", loteDoc.id, "leituras"],
+        [fsOrderBy("data", "desc"), fsLimit(1)]
       );
-      const leitSnap = await getDocs(leitQ);
       if (!leitSnap.empty) {
         const ultimaLeitura = leitSnap.docs[0].data();
         if (ultimaLeitura.data === hoje) {
@@ -462,8 +457,7 @@ export async function fetchMapaTratoData(): Promise<MapaTratoFetchResult> {
   const fatorMaps: FatorMaps = { racaFatorMap, implanteFatorMap, compensFatorMap, aditivoFatorMap, tcFatorMap, gecFatorMap };
 
   // Load today's historico
-  const histQ = query(collection(db, "historicoMapaTrato"), where("data", "==", hoje));
-  const histSnap = await getDocs(histQ);
+  const histSnap = await queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", hoje)]);
   const historicoCargas = new Map<string, CargaTrato[]>();
   const historicoDescargas = new Map<string, DescargaTrato[]>();
   const percentualMSPorRoteiro = new Map<string, number>();

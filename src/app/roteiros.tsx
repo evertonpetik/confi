@@ -12,13 +12,11 @@ import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  updateDoc,
-} from "firebase/firestore";
+  addDocument,
+  deleteDocument,
+  getCollection,
+  updateDocument,
+} from "@/services/firestoreService";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -31,7 +29,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
+
 
 type LoteRef = {
   id: string;
@@ -72,10 +70,10 @@ export default function Roteiros() {
   async function fetchOptions() {
     try {
       const [dietaSnap, lotesSnap, insumoSnap, aditivoSnap] = await Promise.all([
-        getDocs(collection(db, "dietas")),
-        getDocs(collection(db, "lotes")),
-        getDocs(collection(db, "insumos")),
-        getDocs(collection(db, "aditivos")),
+        getCollection("dietas"),
+        getCollection("lotes"),
+        getCollection("insumos"),
+        getCollection("aditivos"),
       ]);
 
       setDietaOptions(
@@ -119,7 +117,7 @@ export default function Roteiros() {
   async function fetchRoteiros() {
     try {
       setLoading(true);
-      const snap = await getDocs(collection(db, "roteiros"));
+      const snap = await getCollection("roteiros");
       const data: Roteiro[] = snap.docs.map((d) => ({
         id: d.id,
         numero: d.data().numero ?? 0,
@@ -173,7 +171,7 @@ export default function Roteiros() {
 
   async function handleInlineDietaSave(data: Omit<Dieta, "id">) {
     try {
-      const docRef = await addDoc(collection(db, "dietas"), data);
+      const docRef = await addDocument(["dietas"], data);
       setDietaOptions((prev) =>
         [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
           a.label.localeCompare(b.label)
@@ -188,7 +186,7 @@ export default function Roteiros() {
 
   async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras" | "saidas">) {
     try {
-      const docRef = await addDoc(collection(db, "insumos"), data);
+      const docRef = await addDocument(["insumos"], data);
       setInsumoOptions((prev) =>
         [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
           a.label.localeCompare(b.label)
@@ -204,15 +202,14 @@ export default function Roteiros() {
   async function handleSave(data: Omit<Roteiro, "id">) {
     try {
       if (editingRoteiro) {
-        const ref = doc(db, "roteiros", editingRoteiro.id);
-        await updateDoc(ref, { ...data });
+        await updateDocument(["roteiros"], editingRoteiro.id, { ...data });
         setRoteiros((prev) =>
           prev.map((r) =>
             r.id === editingRoteiro.id ? { ...r, ...data } : r
           )
         );
       } else {
-        const docRef = await addDoc(collection(db, "roteiros"), data);
+        const docRef = await addDocument(["roteiros"], data);
         setRoteiros((prev) =>
           [...prev, { id: docRef.id, ...data }].sort(
             (a, b) => a.numero - b.numero
@@ -230,7 +227,7 @@ export default function Roteiros() {
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     try {
-      await deleteDoc(doc(db, "roteiros", deleteTarget.id));
+      await deleteDocument(["roteiros"], deleteTarget.id);
       setRoteiros((prev) => prev.filter((r) => r.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (error) {

@@ -4,16 +4,14 @@ import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { Compra, Insumo, InsumoCard, Saida } from "@/components/InsumoCard";
 import { InsumoFormModal } from "@/components/InsumoFormModal";
 import { useResponsive } from "@/hooks/useResponsive";
+import {
+  addDocument,
+  deleteDocument,
+  getCollection,
+  updateDocument,
+} from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  updateDoc,
-} from "firebase/firestore";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -26,7 +24,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { db } from "../../firebaseConfig";
 
 export default function Insumos() {
   const { isTablet, maxWidthContent } = useResponsive();
@@ -48,14 +45,14 @@ export default function Insumos() {
   async function fetchInsumos() {
     try {
       setLoading(true);
-      const insumosSnap = await getDocs(collection(db, "insumos"));
+      const insumosSnap = await getCollection("insumos");
       const data: Insumo[] = [];
 
       for (const insumoDoc of insumosSnap.docs) {
         const insumoData = insumoDoc.data();
         const [comprasSnap, saidasSnap] = await Promise.all([
-          getDocs(collection(db, "insumos", insumoDoc.id, "compras")),
-          getDocs(collection(db, "insumos", insumoDoc.id, "saidas")),
+          getCollection("insumos", insumoDoc.id, "compras"),
+          getCollection("insumos", insumoDoc.id, "saidas"),
         ]);
         const compras: Compra[] = comprasSnap.docs.map((cDoc) => ({
           id: cDoc.id,
@@ -107,12 +104,11 @@ export default function Insumos() {
   async function handleSave(data: Omit<Insumo, "id" | "compras" | "saidas">) {
     try {
       if (editingInsumo) {
-        const ref = doc(db, "insumos", editingInsumo.id);
-        await updateDoc(ref, { ...data });
+        await updateDocument(["insumos"], editingInsumo.id, { ...data });
 
         // Sincronizar nome do insumo nas dietas que o referenciam
         if (data.nome !== editingInsumo.nome) {
-          const dietasSnap = await getDocs(collection(db, "dietas"));
+          const dietasSnap = await getCollection("dietas");
           for (const dietaDoc of dietasSnap.docs) {
             const dietaData = dietaDoc.data();
             const dietaInsumos: { insumoId: string; insumoNome: string; percentual: number }[] =
@@ -126,7 +122,7 @@ export default function Insumos() {
                   ? { ...di, insumoNome: data.nome }
                   : di
               );
-              await updateDoc(doc(db, "dietas", dietaDoc.id), {
+              await updateDocument(["dietas"], dietaDoc.id, {
                 insumos: updatedInsumos,
               });
             }
@@ -139,7 +135,7 @@ export default function Insumos() {
           )
         );
       } else {
-        const docRef = await addDoc(collection(db, "insumos"), data);
+        const docRef = await addDocument(["insumos"], data);
         setInsumos((prev) =>
           [...prev, { id: docRef.id, ...data, compras: [], saidas: [] }].sort((a, b) =>
             a.nome.localeCompare(b.nome)
@@ -159,8 +155,8 @@ export default function Insumos() {
     compraData: Omit<Compra, "id">
   ) {
     try {
-      const docRef = await addDoc(
-        collection(db, "insumos", insumoId, "compras"),
+      const docRef = await addDocument(
+        ["insumos", insumoId, "compras"],
         compraData
       );
       const newCompra: Compra = { id: docRef.id, ...compraData };
@@ -184,7 +180,7 @@ export default function Insumos() {
 
   async function handleDeleteCompra(insumoId: string, compraId: string) {
     try {
-      await deleteDoc(doc(db, "insumos", insumoId, "compras", compraId));
+      await deleteDocument(["insumos", insumoId, "compras"], compraId);
       setInsumos((prev) =>
         prev.map((i) =>
           i.id === insumoId
@@ -206,15 +202,11 @@ export default function Insumos() {
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     try {
-      const comprasSnap = await getDocs(
-        collection(db, "insumos", deleteTarget.id, "compras")
-      );
+      const comprasSnap = await getCollection("insumos", deleteTarget.id, "compras");
       for (const compraDoc of comprasSnap.docs) {
-        await deleteDoc(
-          doc(db, "insumos", deleteTarget.id, "compras", compraDoc.id)
-        );
+        await deleteDocument(["insumos", deleteTarget.id, "compras"], compraDoc.id);
       }
-      await deleteDoc(doc(db, "insumos", deleteTarget.id));
+      await deleteDocument(["insumos"], deleteTarget.id);
       setInsumos((prev) => prev.filter((i) => i.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (error) {
