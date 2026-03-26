@@ -1,7 +1,7 @@
 # Documentacao Tecnica - Sistema de Confinamento (Confi)
 
 > Documento de referencia para futuras consultas e manutencoes.
-> Ultima atualizacao: 19/03/2026
+> Ultima atualizacao: 26/03/2026
 
 ---
 
@@ -14,9 +14,10 @@
 5. [Logicas de Calculo](#5-logicas-de-calculo)
 6. [Telas (Screens)](#6-telas-screens)
 7. [Componentes](#7-componentes)
-8. [Utilitarios](#8-utilitarios)
-9. [Hooks](#9-hooks)
-10. [Fluxos de Negocio](#10-fluxos-de-negocio)
+8. [Servicos](#8-servicos)
+9. [Utilitarios](#9-utilitarios)
+10. [Hooks](#10-hooks)
+11. [Fluxos de Negocio](#11-fluxos-de-negocio)
 
 ---
 
@@ -28,15 +29,41 @@ Sistema de gestao de confinamento de gado bovino desenvolvido em React Native co
 
 ## 2. Stack Tecnologica
 
-| Componente     | Tecnologia                                           |
-| -------------- | ---------------------------------------------------- |
-| Framework      | React Native 0.81 + Expo SDK 54                      |
-| Linguagem      | TypeScript (strict mode)                             |
-| Navegacao      | Expo Router v6 + @react-navigation/drawer            |
-| Banco de Dados | Firebase/Firestore                                   |
-| Animacoes      | react-native-reanimated                              |
-| Arquivos       | expo-document-picker, expo-file-system, expo-sharing |
-| Path alias     | `@/*` -> `./src/*`                                   |
+| Componente      | Tecnologia                                           |
+| --------------- | ---------------------------------------------------- |
+| Framework       | React Native 0.81 + Expo SDK 54                      |
+| Linguagem       | TypeScript (strict mode)                             |
+| Navegacao       | Expo Router v6 + @react-navigation/drawer            |
+| Banco de Dados  | Firebase/Firestore (web SDK + react-native-firebase) |
+| Firebase Nativo | @react-native-firebase/app, expo-build-properties    |
+| Build           | EAS Build (eas.json)                                 |
+| Animacoes       | react-native-reanimated                              |
+| Arquivos        | expo-document-picker, expo-file-system, expo-sharing |
+| Path alias      | `@/*` -> `./src/*`                                   |
+
+### Plataforma Dual (Web + Nativo)
+
+O sistema opera em dois modos de acesso ao Firestore:
+
+- **Web** (`Platform.OS === "web"`): Usa o SDK modular `firebase/firestore` (importado de `firebaseConfig.js`)
+- **Nativo** (iOS/Android): Usa `@react-native-firebase/app` + `@react-native-firebase/firestore` com arquivos de configuracao nativos (`google-services.json` para Android, `GoogleService-Info.plist` para iOS)
+
+A camada de abstracao `firestoreService.ts` unifica ambas as implementacoes em uma API unica, permitindo que o restante do app nao precise se preocupar com a plataforma.
+
+### Configuracao Nativa (`app.json`)
+
+| Configuracao                        | Valor                                  |
+| ----------------------------------- | -------------------------------------- |
+| iOS `googleServicesFile`            | `./GoogleService-Info.plist`           |
+| iOS `ITSAppUsesNonExemptEncryption` | `false`                                |
+| Android `googleServicesFile`        | `./google-services.json`               |
+| Android `minSdkVersion`             | 24                                     |
+| Android `compileSdkVersion`         | 35                                     |
+| iOS `deploymentTarget`              | 15.1                                   |
+| iOS `useFrameworks`                 | static                                 |
+| Plugin Firebase                     | `@react-native-firebase/app`           |
+| Plugin Build                        | `expo-build-properties`                |
+| EAS Project ID                      | `1e536fff-568c-4396-9390-864a0b83fe2a` |
 
 ---
 
@@ -45,7 +72,7 @@ Sistema de gestao de confinamento de gado bovino desenvolvido em React Native co
 ```
 src/
   app/                    # Telas (file-based routing)
-    _layout.tsx           # Layout raiz (Drawer navigation)
+    _layout.tsx           # Layout raiz (Drawer navigation + prefetch)
     index.tsx             # Login
     signup.tsx            # Cadastro de usuario
     home.tsx              # Dashboard com KPIs e relatorio
@@ -60,7 +87,10 @@ src/
     configuracoes.tsx     # Tabelas auxiliares
   components/             # Componentes reutilizaveis
   hooks/                  # Custom hooks
+  services/               # Camada de acesso a dados
+    firestoreService.ts   # API unificada Firestore (web + nativo)
   utils/                  # Funcoes utilitarias e calculos
+    prefetchFirestore.ts  # Pre-carregamento de dados para offline
   assets/                 # Imagens
 ```
 
@@ -272,18 +302,6 @@ gmdBase = base^(1 / 1.097)       // GMD base em kg/dia
 ```
 GMD_final = gmdBase * fatorRaca * fatorImplante * fatorCompensatorio * fatorAditivo
 ```
-
-#### Valores tipicos dos fatores (dados do seed):
-
-| Fator         | Valores                                                     |
-| ------------- | ----------------------------------------------------------- |
-| Raca          | Nelore=0.89, Anelorado=0.93, 1/2 sangue=1, ... Holandes=1.2 |
-| Implante      | Nenhum=0.95, Simples=1, Duplo=1.05, Triplo=1.1              |
-| Compensatorio | Ausente=1, Moderado=1.1, Intenso=1.2                        |
-| Aditivo       | Nenhum=1, Monensina/Salinomicina/Lasolicida=1.1             |
-| GEC           | Combinacao de tamanhoCorporal(3-9) x categoria(4)           |
-
----
 
 ### 5.2 Calculo de Peso Medio Atual
 
@@ -637,6 +655,25 @@ Algoritmo padrao brasileiro de validacao de CNPJ:
 
 ## 6. Telas (Screens)
 
+### 6.0 Layout Raiz (`_layout.tsx`)
+
+Layout principal com Drawer navigation e sincronizacao offline.
+
+#### Sincronizacao inicial (primeira abertura):
+
+```
+1. Verifica AsyncStorage("@lastSync")
+2. Se nunca sincronizou:
+   - Exibe tela de "Primeira sincronizacao" com indicador de progresso
+   - Chama prefetchAllData() para popular cache offline do Firestore
+   - Salva data/hora da sincronizacao no AsyncStorage
+3. Se ja sincronizou: carrega normalmente
+```
+
+#### Drawer Navigation:
+
+Home, Produtores, Lotes, Leitura de Cocho, Insumos, Dietas, Roteiros, Mapa de Trato, Tratador, Configuracoes, Cadastrar Usuario, Sair.
+
 ### 6.1 Login (`index.tsx`)
 
 - Campos: email, senha
@@ -830,7 +867,60 @@ Gerencia as 11 tabelas auxiliares com CRUD generico. Tem botao para executar see
 
 ---
 
-## 8. Utilitarios
+## 8. Servicos
+
+### `firestoreService.ts` (~206 linhas)
+
+Camada de abstracao que unifica o acesso ao Firestore entre as plataformas web e nativa, permitindo que o restante do app use uma API unica independente da plataforma.
+
+**Localizacao:** `src/services/firestoreService.ts`
+
+#### Tipos exportados:
+
+| Tipo              | Descricao                                                 |
+| ----------------- | --------------------------------------------------------- |
+| `DocSnapshot`     | Documento com `id` e `data()`                             |
+| `QuerySnapshot`   | Resultado de query com `docs`, `empty`, `size`, `forEach` |
+| `DocRef`          | Referencia simples com `id`                               |
+| `QueryConstraint` | Union discriminada: `where`, `orderBy`, `limit`           |
+
+#### Funcoes exportadas:
+
+| Funcao            | Assinatura                                | Descricao                       |
+| ----------------- | ----------------------------------------- | ------------------------------- |
+| `getCollection`   | `(...colPath: string[]) => Promise<QS>`   | Busca todos os docs da colecao  |
+| `queryCollection` | `(colPath, constraints) => Promise<QS>`   | Busca com filtros where/orderBy |
+| `addDocument`     | `(colPath, data) => Promise<DocRef>`      | Adiciona novo documento         |
+| `updateDocument`  | `(colPath, docId, data) => Promise<void>` | Atualiza campos de um documento |
+| `deleteDocument`  | `(colPath, docId) => Promise<void>`       | Deleta um documento             |
+| `setDocument`     | `(colPath, docId, data, opts) => Promise` | Set com opcao de merge          |
+| `createBatch`     | `() => { set, commit }`                   | Cria batch de escrita           |
+
+#### Helpers de constraint:
+
+- `fsWhere(field, op, value)` - Filtro where
+- `fsOrderBy(field, direction?)` - Ordenacao
+- `fsLimit(count)` - Limite de resultados
+
+#### Padrao de implementacao:
+
+```
+const isWeb = Platform.OS === "web"
+
+Se Web:
+  - Usa firebase/firestore (SDK modular)
+  - Lazy loading via getWebFs()
+
+Se Nativo:
+  - Usa @react-native-firebase/firestore (SDK classico)
+  - buildNativeRef() constroi refs alternando .collection() / .doc()
+```
+
+**Enderecamento por path:** Todas as funcoes aceitam um `string[]` como caminho (ex: `["lotes", "<docId>", "movimentacoes"]`), suportando colecoes e subcolecoes de forma uniforme.
+
+---
+
+## 9. Utilitarios
 
 ### `mapaTratoCalc.ts` (~490 linhas)
 
@@ -844,6 +934,32 @@ Motor de calculo central do sistema. Contem:
 - `getHojeStr()` - Data de hoje em formato ISO
 - Todos os tipos (TypeScript) usados nos calculos
 
+### `prefetchFirestore.ts` (~67 linhas)
+
+Pre-carrega todos os dados do Firestore para habilitar operacao offline.
+
+**Funcao exportada:** `prefetchAllData(onProgress?)`
+
+#### Colecoes pre-carregadas (18 colecoes):
+
+`lotes`, `roteiros`, `dietas`, `insumos`, `produtores`, `piquetes`, `raca`, `categoria`, `compensatorio`, `implante`, `tamanhoCorporal`, `gec`, `aditivos`, `movimentacao`, `vagao`, `notaLeitura`, `historicoMapaTrato`
+
+#### Subcolecoes pre-carregadas:
+
+- `lotes/{id}/movimentacoes` e `lotes/{id}/leituras`
+- `insumos/{id}/compras` e `insumos/{id}/saidas`
+
+#### Fluxo:
+
+```
+1. Busca sequencialmente cada colecao top-level (18 colecoes)
+2. Para cada lote: busca movimentacoes e leituras em paralelo
+3. Para cada insumo: busca compras e saidas em paralelo
+4. Callback de progresso: (message, percentual) a cada etapa
+```
+
+**Integracao:** Chamada no `_layout.tsx` durante o carregamento inicial do app, com indicador de progresso. Apos completar, o SDK do Firestore mantem os dados em cache local para operacao offline.
+
 ### `validators.ts`
 
 - `validateCPF()` / `formatCPF()` - Validacao e formatacao de CPF
@@ -853,12 +969,12 @@ Motor de calculo central do sistema. Contem:
 ### `seedTabelasAuxiliares.ts`
 
 - `seedTabelasAuxiliares()` - Popula todas as 11 tabelas auxiliares com dados iniciais
-- Usa `writeBatch` para escrita atomica
+- Usa `createBatch()` do `firestoreService` para escrita atomica (compativel com web e nativo)
 - Verifica se a colecao ja tem dados antes de inserir
 
 ---
 
-## 9. Hooks
+## 10. Hooks
 
 ### `useResponsive.ts`
 
@@ -868,9 +984,9 @@ Motor de calculo central do sistema. Contem:
 
 ---
 
-## 10. Fluxos de Negocio
+## 11. Fluxos de Negocio
 
-### 10.1 Fluxo Diario Completo
+### 11.1 Fluxo Diario Completo
 
 ```
 1. LEITURA DE COCHO (manha)
@@ -902,7 +1018,7 @@ Motor de calculo central do sistema. Contem:
    - Dashboard (home) consolida os dados
 ```
 
-### 10.2 Fluxo de Cadastro
+### 11.2 Fluxo de Cadastro
 
 ```
 1. Configuracoes -> Seed de tabelas auxiliares
@@ -914,7 +1030,7 @@ Motor de calculo central do sistema. Contem:
 7. Operacao diaria -> Leitura + Mapa de Trato
 ```
 
-### 10.3 Ciclo de Vida de um Lote
+### 11.3 Ciclo de Vida de um Lote
 
 ```
 CRIACAO -> ENTRADA DE ANIMAIS -> OPERACAO DIARIA -> SAIDA (Venda/Morte/Transferencia)
@@ -924,6 +1040,24 @@ CRIACAO -> ENTRADA DE ANIMAIS -> OPERACAO DIARIA -> SAIDA (Venda/Morte/Transfere
                                 - Lote inativado automaticamente
                                 - Piquete liberado
                                 - Piquete removido dos roteiros
+```
+
+---
+
+### 11.4 Sincronizacao Offline
+
+```
+PRIMEIRA ABERTURA DO APP:
+  1. _layout.tsx verifica AsyncStorage("@lastSync")
+  2. Se vazio -> exibe tela de sincronizacao
+  3. prefetchAllData() le todas as 18 colecoes + subcolecoes
+  4. SDK do Firestore armazena em cache local
+  5. Salva data/hora em @lastSync
+
+ABERTURAS SUBSEQUENTES:
+  - @lastSync existe -> app carrega normalmente
+  - Firestore SDK serve dados do cache offline
+  - Escritas sao enfileiradas e sincronizadas quando houver conexao
 ```
 
 ---
@@ -953,3 +1087,5 @@ CRIACAO -> ENTRADA DE ANIMAIS -> OPERACAO DIARIA -> SAIDA (Venda/Morte/Transfere
 | Vagao       | Veiculo/equipamento de distribuicao de racao    |
 | Carga       | Carregamento de insumos no vagao                |
 | Descarga    | Distribuicao do alimento nos piquetes           |
+| EAS         | Expo Application Services (build e deploy)      |
+| Prefetch    | Pre-carregamento de dados para cache offline    |

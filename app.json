@@ -15,7 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.evertompetik.confi"
+      "bundleIdentifier": "com.evertompetik.confi",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +28,8 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.evertompetik.confi"
+      "package": "com.evertompetik.confi",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro",
@@ -38,7 +43,7 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 23,
+            "minSdkVersion": 24,
             "compileSdkVersion": 35,
             "targetSdkVersion": 35
           },

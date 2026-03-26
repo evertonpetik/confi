@@ -1,0 +1,11 @@
+#### Valores tipicos dos fatores (dados do seed):
+
+| Fator         | Valores                                                     |
+| ------------- | ----------------------------------------------------------- |
+| Raca          | Nelore=0.89, Anelorado=0.93, 1/2 sangue=1, ... Holandes=1.2 |
+| Implante      | Nenhum=0.95, Simples=1, Duplo=1.05, Triplo=1.1              |
+| Compensatorio | Ausente=1, Moderado=1.1, Intenso=1.2                        |
+| Aditivo       | Nenhum=1, Monensina/Salinomicina/Lasolicida=1.1             |
+| GEC           | Combinacao de tamanhoCorporal(3-9) x categoria(4)           |
+
+---
