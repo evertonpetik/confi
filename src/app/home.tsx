@@ -56,6 +56,7 @@ export default function Home() {
   const [totalEntradas, setTotalEntradas] = useState(0);
   const [loading, setLoading] = useState(true);
   const [reportRows, setReportRows] = useState<LoteReportRow[]>([]);
+  const [insumosVencidos, setInsumosVencidos] = useState<string[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -66,10 +67,53 @@ export default function Home() {
   async function fetchDashboard() {
     try {
       setLoading(true);
-      const [lotesSnap, histSnap] = await Promise.all([
+      const [lotesSnap, histSnap, insumosSnap, parametrosSnap] = await Promise.all([
         getCollection("lotes"),
         getCollection("historicoMapaTrato"),
+        getCollection("insumos"),
+        getCollection("parametros"),
       ]);
+
+      // Verificar conferências de MS vencidas
+      const tempoMSParam = parametrosSnap.docs.find(
+        (d) => d.data().descricao === "tempoMS"
+      );
+      const tempoMSDias = tempoMSParam ? Number(tempoMSParam.data().valor) : 0;
+
+      if (tempoMSDias > 0) {
+        const hojeMs = new Date().getTime();
+        const vencidos: string[] = [];
+
+        for (const insumoDoc of insumosSnap.docs) {
+          const insumoData = insumoDoc.data();
+          if (!insumoData.materiaSecaVariavel) continue;
+
+          const confSnap = await getCollection("insumos", insumoDoc.id, "conferencias");
+          if (confSnap.empty) {
+            vencidos.push(insumoData.nome ?? "Sem nome");
+            continue;
+          }
+
+          // Encontrar data mais recente
+          let maisRecente = "";
+          for (const cDoc of confSnap.docs) {
+            const cData = cDoc.data().data as string;
+            if (cData > maisRecente) maisRecente = cData;
+          }
+
+          if (maisRecente) {
+            const dataConf = new Date(maisRecente + "T00:00:00").getTime();
+            const diffDias = Math.floor((hojeMs - dataConf) / 86400000);
+            if (diffDias >= tempoMSDias) {
+              vencidos.push(insumoData.nome ?? "Sem nome");
+            }
+          }
+        }
+
+        setInsumosVencidos(vencidos);
+      } else {
+        setInsumosVencidos([]);
+      }
 
       // Build historico lookups: loteId -> { gmdReal[], msPorLote (today) }
       const hoje = (() => {
@@ -272,15 +316,27 @@ export default function Home() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.container, isTablet && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
+          <View style={[styles.container, isTablet && !isDesktop && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
+
+            {insumosVencidos.length > 0 && (
+              <View style={styles.alertBanner}>
+                <Feather name="alert-circle" size={18} color="#FFF" />
+                <Text style={styles.alertBannerText}>
+                  Conferencia de MS pendente: {insumosVencidos.join(", ")}
+                </Text>
+              </View>
+            )}
+
             <View style={styles.header}>
               <Text style={styles.title}>Dashboard</Text>
-              <DrawerToggleButton tintColor="#000000" />
+              {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
             <Text style={styles.subtitle}>
               Visao geral do seu confinamento.
             </Text>
+
+
 
             {loading ? (
               <ActivityIndicator
@@ -398,6 +454,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#666",
     marginTop: 8,
+  },
+  // ---- Alert Banner ----
+  alertBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E65100",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 16,
+    gap: 10,
+  },
+  alertBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFF",
   },
   // ---- Report Table ----
   tableSection: {

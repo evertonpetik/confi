@@ -8,15 +8,15 @@ import { Roteiro, RoteiroCard } from "@/components/RoteiroCard";
 import { RoteiroFormModal } from "@/components/RoteiroFormModal";
 import { SelectOption } from "@/components/Select";
 import { useResponsive } from "@/hooks/useResponsive";
-import { Feather } from "@expo/vector-icons";
-import { DrawerToggleButton } from "@react-navigation/drawer";
-import { useFocusEffect } from "@react-navigation/native";
 import {
   addDocument,
   deleteDocument,
   getCollection,
   updateDocument,
 } from "@/services/firestoreService";
+import { Feather } from "@expo/vector-icons";
+import { DrawerToggleButton } from "@react-navigation/drawer";
+import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -42,7 +42,7 @@ type LoteRef = {
 type FiltroStatus = "ativos" | "inativos";
 
 export default function Roteiros() {
-  const { isTablet, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
   const [roteiros, setRoteiros] = useState<Roteiro[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState<FiltroStatus>("ativos");
@@ -254,7 +254,7 @@ export default function Roteiros() {
           <View
             style={[
               styles.container,
-              isTablet && {
+              isTablet && !isDesktop && {
                 maxWidth: maxWidthContent,
                 alignSelf: "center" as const,
                 width: "100%",
@@ -263,7 +263,7 @@ export default function Roteiros() {
           >
             <View style={styles.header}>
               <Text style={styles.title}>Roteiros</Text>
-              <DrawerToggleButton tintColor="#000000" />
+              {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
             <Text style={styles.subtitle}>

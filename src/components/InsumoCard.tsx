@@ -18,6 +18,12 @@ export type Saida = {
   roteiroNumero: number;
 };
 
+export type ConferenciaMS = {
+  id: string;
+  data: string;
+  percentualMS: number;
+};
+
 export type Insumo = {
   id: string;
   nome: string;
@@ -25,6 +31,7 @@ export type Insumo = {
   materiaSecaVariavel: boolean;
   compras: Compra[];
   saidas: Saida[];
+  conferencias: ConferenciaMS[];
 };
 
 type InsumoCardProps = {
@@ -32,6 +39,7 @@ type InsumoCardProps = {
   onEdit: (insumo: Insumo) => void;
   onDelete: (insumo: Insumo) => void;
   onCompras: (insumo: Insumo) => void;
+  onConferencias?: (insumo: Insumo) => void;
 };
 
 export function calcularEstoque(compras: Compra[], saidas: Saida[] = []): number {
@@ -72,6 +80,7 @@ export function InsumoCard({
   onEdit,
   onDelete,
   onCompras,
+  onConferencias,
 }: InsumoCardProps) {
   const estoque = calcularEstoque(insumo.compras, insumo.saidas);
   const precoMedio = calcularPrecoMedio(insumo.compras, insumo.saidas);
@@ -108,6 +117,15 @@ export function InsumoCard({
         </View>
       </View>
       <View style={styles.actions}>
+        {insumo.materiaSecaVariavel && onConferencias && (
+          <TouchableOpacity
+            style={styles.actionButton}
+            activeOpacity={0.7}
+            onPress={() => onConferencias(insumo)}
+          >
+            <Feather name="clipboard" size={18} color="#E65100" />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.actionButton}
           activeOpacity={0.7}

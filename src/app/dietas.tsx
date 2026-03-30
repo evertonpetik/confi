@@ -6,14 +6,14 @@ import { Compra, Insumo } from "@/components/InsumoCard";
 import { InsumoFormModal } from "@/components/InsumoFormModal";
 import { SelectOption } from "@/components/Select";
 import { useResponsive } from "@/hooks/useResponsive";
-import { Feather } from "@expo/vector-icons";
-import { DrawerToggleButton } from "@react-navigation/drawer";
 import {
   addDocument,
   deleteDocument,
   getCollection,
   updateDocument,
 } from "@/services/firestoreService";
+import { Feather } from "@expo/vector-icons";
+import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -52,7 +52,7 @@ function calcularCustoKgMS(
 }
 
 export default function Dietas() {
-  const { isTablet, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
   const [dietas, setDietas] = useState<Dieta[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -102,6 +102,7 @@ export default function Dietas() {
         materiaSecaVariavel: insumoData.materiaSecaVariavel ?? false,
         compras,
         saidas: [],
+        conferencias: [],
       });
     }
 
@@ -160,10 +161,10 @@ export default function Dietas() {
     setDeleteTarget(dieta);
   }
 
-  async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras" | "saidas">) {
+  async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras" | "saidas" | "conferencias">) {
     try {
       const docRef = await addDocument(["insumos"], data);
-      const newInsumo: Insumo = { id: docRef.id, ...data, compras: [], saidas: [] };
+      const newInsumo: Insumo = { id: docRef.id, ...data, compras: [], saidas: [], conferencias: [] };
       setInsumos((prev) =>
         [...prev, newInsumo].sort((a, b) => a.nome.localeCompare(b.nome))
       );
@@ -235,7 +236,7 @@ export default function Dietas() {
           <View
             style={[
               styles.container,
-              isTablet && {
+              isTablet && !isDesktop && {
                 maxWidth: maxWidthContent,
                 alignSelf: "center" as const,
                 width: "100%",
@@ -244,7 +245,7 @@ export default function Dietas() {
           >
             <View style={styles.header}>
               <Text style={styles.title}>Dietas</Text>
-              <DrawerToggleButton tintColor="#000000" />
+              {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
             <Text style={styles.subtitle}>

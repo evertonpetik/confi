@@ -25,7 +25,7 @@ import {
 } from "react-native";
 
 export default function Produtores() {
-  const { isTablet, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
   const [produtores, setProdutores] = useState<Produtor[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -112,10 +112,10 @@ export default function Produtores() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.container, isTablet && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
+          <View style={[styles.container, isTablet && !isDesktop && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
             <View style={styles.header}>
               <Text style={styles.title}>Produtores</Text>
-              <DrawerToggleButton tintColor="#000000" />
+              {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
             <Text style={styles.subtitle}>

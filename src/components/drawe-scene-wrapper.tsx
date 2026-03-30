@@ -1,10 +1,11 @@
+import { useResponsive } from "@/hooks/useResponsive"
+import { useDrawerProgress } from "@react-navigation/drawer"
 import { ReactNode } from "react"
-
+import { View } from "react-native"
 import Animated, { Extrapolation, interpolate, useAnimatedStyle } from "react-native-reanimated"
 
-import { useDrawerProgress } from "@react-navigation/drawer"
-
 export function DrawerSceneWrapper({ children }: { children: ReactNode }) {
+  const { isDesktop } = useResponsive()
   const progress = useDrawerProgress()
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -38,6 +39,9 @@ export function DrawerSceneWrapper({ children }: { children: ReactNode }) {
     overflow: "hidden",
   }))
 
+  if (isDesktop) {
+    return <View style={{ flex: 1 }}>{children}</View>
+  }
 
   return <Animated.View style={[{ flex: 1 }, animatedStyle]}>{children}</Animated.View>
 }

@@ -1,7 +1,14 @@
 import { CompraFormModal } from "@/components/CompraFormModal";
+import { ConferenciaMSModal } from "@/components/ConferenciaMSModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
-import { Compra, Insumo, InsumoCard, Saida } from "@/components/InsumoCard";
+import {
+  Compra,
+  ConferenciaMS,
+  Insumo,
+  InsumoCard,
+  Saida,
+} from "@/components/InsumoCard";
 import { InsumoFormModal } from "@/components/InsumoFormModal";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
@@ -26,7 +33,7 @@ import {
 } from "react-native";
 
 export default function Insumos() {
-  const { isTablet, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,6 +44,9 @@ export default function Insumos() {
   const [compraInsumo, setCompraInsumo] = useState<Insumo | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<Insumo | null>(null);
+
+  const [conferenciaVisible, setConferenciaVisible] = useState(false);
+  const [conferenciaInsumo, setConferenciaInsumo] = useState<Insumo | null>(null);
 
   useEffect(() => {
     fetchInsumos();
@@ -50,9 +60,10 @@ export default function Insumos() {
 
       for (const insumoDoc of insumosSnap.docs) {
         const insumoData = insumoDoc.data();
-        const [comprasSnap, saidasSnap] = await Promise.all([
+        const [comprasSnap, saidasSnap, conferenciasSnap] = await Promise.all([
           getCollection("insumos", insumoDoc.id, "compras"),
           getCollection("insumos", insumoDoc.id, "saidas"),
+          getCollection("insumos", insumoDoc.id, "conferencias"),
         ]);
         const compras: Compra[] = comprasSnap.docs.map((cDoc) => ({
           id: cDoc.id,
@@ -62,6 +73,10 @@ export default function Insumos() {
           id: sDoc.id,
           ...sDoc.data(),
         })) as Saida[];
+        const conferencias: ConferenciaMS[] = conferenciasSnap.docs.map((cDoc) => ({
+          id: cDoc.id,
+          ...cDoc.data(),
+        })) as ConferenciaMS[];
 
         data.push({
           id: insumoDoc.id,
@@ -70,6 +85,7 @@ export default function Insumos() {
           materiaSecaVariavel: insumoData.materiaSecaVariavel ?? false,
           compras,
           saidas,
+          conferencias,
         });
       }
 
@@ -101,7 +117,7 @@ export default function Insumos() {
     setCompraVisible(true);
   }
 
-  async function handleSave(data: Omit<Insumo, "id" | "compras" | "saidas">) {
+  async function handleSave(data: Omit<Insumo, "id" | "compras" | "saidas" | "conferencias">) {
     try {
       if (editingInsumo) {
         await updateDocument(["insumos"], editingInsumo.id, { ...data });
@@ -137,7 +153,7 @@ export default function Insumos() {
       } else {
         const docRef = await addDocument(["insumos"], data);
         setInsumos((prev) =>
-          [...prev, { id: docRef.id, ...data, compras: [], saidas: [] }].sort((a, b) =>
+          [...prev, { id: docRef.id, ...data, compras: [], saidas: [], conferencias: [] }].sort((a, b) =>
             a.nome.localeCompare(b.nome)
           )
         );
@@ -199,6 +215,117 @@ export default function Insumos() {
     }
   }
 
+  function handleConferencias(insumo: Insumo) {
+    setConferenciaInsumo(insumo);
+    setConferenciaVisible(true);
+  }
+
+  async function handleAddConferencia(
+    insumoId: string,
+    confData: Omit<ConferenciaMS, "id">
+  ) {
+    try {
+      const docRef = await addDocument(
+        ["insumos", insumoId, "conferencias"],
+        confData
+      );
+      // Atualizar percentualMateriaSeca no Firestore
+      await updateDocument(["insumos"], insumoId, {
+        percentualMateriaSeca: confData.percentualMS,
+      });
+      const newConf: ConferenciaMS = { id: docRef.id, ...confData };
+      setInsumos((prev) =>
+        prev.map((i) =>
+          i.id === insumoId
+            ? {
+                ...i,
+                percentualMateriaSeca: confData.percentualMS,
+                conferencias: [...i.conferencias, newConf],
+              }
+            : i
+        )
+      );
+      setConferenciaInsumo((prev) =>
+        prev && prev.id === insumoId
+          ? {
+              ...prev,
+              percentualMateriaSeca: confData.percentualMS,
+              conferencias: [...prev.conferencias, newConf],
+            }
+          : prev
+      );
+    } catch (error) {
+      console.error("Erro ao adicionar conferência:", error);
+      Alert.alert("Erro", "Não foi possível adicionar a conferência.");
+    }
+  }
+
+  async function handleDeleteConferencia(
+    insumoId: string,
+    conferenciaId: string
+  ) {
+    try {
+      await deleteDocument(
+        ["insumos", insumoId, "conferencias"],
+        conferenciaId
+      );
+
+      // Encontrar insumo atual para recalcular MS
+      const insumoAtual = insumos.find((i) => i.id === insumoId);
+      const restantes = insumoAtual
+        ? insumoAtual.conferencias.filter((c) => c.id !== conferenciaId)
+        : [];
+
+      // Se restam conferências, usar a mais recente por data
+      if (restantes.length > 0) {
+        const maisRecente = restantes.reduce((a, b) =>
+          a.data.localeCompare(b.data) > 0 ? a : b
+        );
+        await updateDocument(["insumos"], insumoId, {
+          percentualMateriaSeca: maisRecente.percentualMS,
+        });
+
+        setInsumos((prev) =>
+          prev.map((i) =>
+            i.id === insumoId
+              ? {
+                  ...i,
+                  percentualMateriaSeca: maisRecente.percentualMS,
+                  conferencias: restantes,
+                }
+              : i
+          )
+        );
+        setConferenciaInsumo((prev) =>
+          prev && prev.id === insumoId
+            ? {
+                ...prev,
+                percentualMateriaSeca: maisRecente.percentualMS,
+                conferencias: restantes,
+              }
+            : prev
+        );
+      } else {
+        // Sem conferências restantes, manter o valor atual
+        setInsumos((prev) =>
+          prev.map((i) =>
+            i.id === insumoId
+              ? { ...i, conferencias: [] }
+              : i
+          )
+        );
+        setConferenciaInsumo((prev) =>
+          prev && prev.id === insumoId
+            ? { ...prev, conferencias: [] }
+            : prev
+        );
+      }
+    } catch (error) {
+      console.error("Erro ao excluir conferência:", error);
+      Alert.alert("Erro", "Não foi possível excluir a conferência.");
+    }
+  }
+
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     try {
@@ -226,10 +353,10 @@ export default function Insumos() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.container, isTablet && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
+          <View style={[styles.container, isTablet && !isDesktop && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
             <View style={styles.header}>
               <Text style={styles.title}>Insumos</Text>
-              <DrawerToggleButton tintColor="#000000" />
+              {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
             <Text style={styles.subtitle}>
@@ -264,6 +391,7 @@ export default function Insumos() {
                     onEdit={handleEdit}
                     onDelete={handleDeleteRequest}
                     onCompras={handleCompras}
+                    onConferencias={handleConferencias}
                   />
                 ))}
               </View>
@@ -290,6 +418,17 @@ export default function Insumos() {
         onClose={() => {
           setCompraVisible(false);
           setCompraInsumo(null);
+        }}
+      />
+
+      <ConferenciaMSModal
+        visible={conferenciaVisible}
+        insumo={conferenciaInsumo}
+        onAddConferencia={handleAddConferencia}
+        onDeleteConferencia={handleDeleteConferencia}
+        onClose={() => {
+          setConferenciaVisible(false);
+          setConferenciaInsumo(null);
         }}
       />
 

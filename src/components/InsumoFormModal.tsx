@@ -18,7 +18,7 @@ import {
 type InsumoFormModalProps = {
   visible: boolean;
   insumo?: Insumo | null;
-  onSave: (data: Omit<Insumo, "id" | "compras" | "saidas">) => void;
+  onSave: (data: Omit<Insumo, "id" | "compras" | "saidas" | "conferencias">) => void;
   onClose: () => void;
 };
 

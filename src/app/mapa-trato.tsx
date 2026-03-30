@@ -3,6 +3,7 @@ import { DescargaModal, DescargaTrato } from "@/components/DescargaModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { Select, SelectOption } from "@/components/Select";
 import { useResponsive } from "@/hooks/useResponsive";
+import { setDocument } from "@/services/firestoreService";
 import {
   buildCalcData,
   calcGmdNRC,
@@ -29,7 +30,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { setDocument } from "@/services/firestoreService";
 
 // ---- CSV Helpers ----
 
@@ -53,7 +53,7 @@ function parseCSVLine(line: string): string[] {
 // ---- Component ----
 
 export default function MapaTrato() {
-  const { isTablet, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -727,7 +727,7 @@ export default function MapaTrato() {
           <View
             style={[
               styles.container,
-              isTablet && {
+              isTablet && !isDesktop && {
                 maxWidth: maxWidthContent,
                 alignSelf: "center" as const,
                 width: "100%",
@@ -736,7 +736,7 @@ export default function MapaTrato() {
           >
             <View style={styles.header}>
               <Text style={styles.title}>Mapa de Trato</Text>
-              <DrawerToggleButton tintColor="#000000" />
+              {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
             <Text style={styles.subtitle}>

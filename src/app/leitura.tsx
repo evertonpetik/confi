@@ -2,11 +2,11 @@ import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
+  fsLimit,
+  fsOrderBy,
+  fsWhere,
   getCollection,
   queryCollection,
-  fsWhere,
-  fsOrderBy,
-  fsLimit,
 } from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
@@ -56,7 +56,7 @@ type AlertaCmsLote = {
 };
 
 export default function Leitura() {
-  const { isTablet, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
   const [lotes, setLotes] = useState<LoteComPiquete[]>([]);
   const [notas, setNotas] = useState<NotaLeitura[]>([]);
   const [loading, setLoading] = useState(true);
@@ -361,7 +361,7 @@ export default function Leitura() {
           <View
             style={[
               styles.container,
-              isTablet && {
+              isTablet && !isDesktop && {
                 maxWidth: maxWidthContent,
                 alignSelf: "center" as const,
                 width: "100%",
@@ -370,7 +370,7 @@ export default function Leitura() {
           >
             <View style={styles.header}>
               <Text style={styles.title}>Leitura de Cocho</Text>
-              <DrawerToggleButton tintColor="#000000" />
+              {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
             <Text style={styles.subtitle}>

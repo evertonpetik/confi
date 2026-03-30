@@ -60,7 +60,7 @@ type DescargaItem = {
 // ---- Component ----
 
 export default function Tratador() {
-  const { isTablet, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
   const [step, setStep] = useState<Step>("SELECT_VAGAO");
   const [saving, setSaving] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
@@ -702,10 +702,10 @@ export default function Tratador() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={[styles.container, isTablet && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
+            <View style={[styles.container, isTablet && !isDesktop && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
               <View style={styles.header}>
                 <Text style={styles.title}>Tratador</Text>
-                <DrawerToggleButton tintColor="#000000" />
+                {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
               </View>
               {loadingData ? (
                 <ActivityIndicator size="large" color="#3366FF" style={{ marginTop: 48 }} />
@@ -748,10 +748,10 @@ export default function Tratador() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={[styles.container, isTablet && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
+            <View style={[styles.container, isTablet && !isDesktop && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
               <View style={styles.header}>
                 <Text style={styles.title}>Tratador</Text>
-                <DrawerToggleButton tintColor="#000000" />
+                {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
               </View>
               <Text style={styles.subtitle}>
                 Vagao: {vagoes.find((v) => v.id === selectedVagaoId)?.descricao ?? ""}

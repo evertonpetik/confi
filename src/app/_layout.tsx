@@ -14,7 +14,7 @@ configureReanimatedLogger({
 })
 
 export default function Layout() {
-  const { isTablet } = useResponsive()
+  const { isTablet, isDesktop } = useResponsive()
   const [checking, setChecking] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState("")
@@ -71,8 +71,8 @@ export default function Layout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <Drawer
+        defaultStatus={isDesktop ? "open" : "closed"}
         screenOptions={{
-
           headerShown: false,
           drawerActiveBackgroundColor: " transparent ",
           drawerInactiveBackgroundColor: " transparent ",
@@ -80,16 +80,21 @@ export default function Layout() {
           drawerInactiveTintColor: "#FFFFFF",
           drawerHideStatusBarOnOpen: true,
           overlayColor: "transparent",
+          drawerType: isDesktop ? "permanent" : "front",
           drawerStyle: {
             backgroundColor: "#1D1F25",
             paddingTop: 32,
-            width: isTablet ? 280 : "50%",
+            width: isDesktop ? 280 : isTablet ? 280 : "50%",
+            borderRightWidth: isDesktop ? 0 : undefined,
+            position: isDesktop ? "relative" : undefined,
+            height: "100%",
           },
           drawerLabelStyle: {
             marginLeft: 0,
           },
           sceneStyle: {
             backgroundColor: "#1D1F25",
+            minHeight: "100%",
           },
         }}>
         <Drawer.Screen
@@ -190,6 +195,9 @@ export default function Layout() {
             drawerIcon: ({ color }) => (
               <Feather name="user" size={20} color={color} />
             ),
+            drawerType: "front",
+            swipeEnabled: false,
+            drawerStyle: { display: "none" },
           }} />
         <Drawer.Screen
           name="index"
@@ -199,6 +207,9 @@ export default function Layout() {
             drawerIcon: ({ color }) => (
               <Feather name="log-out" size={20} color={color} />
             ),
+            drawerType: "front",
+            swipeEnabled: false,
+            drawerStyle: { display: "none" },
           }} />
       </Drawer>
     </GestureHandlerRootView>

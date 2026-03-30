@@ -6,18 +6,18 @@ import {
   TabelaAuxiliarFormModal,
 } from "@/components/TabelaAuxiliarFormModal";
 import { useResponsive } from "@/hooks/useResponsive";
-import { prefetchAllData } from "@/utils/prefetchFirestore";
-import { seedTabelasAuxiliares } from "@/utils/seedTabelasAuxiliares";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Feather } from "@expo/vector-icons";
-import { DrawerToggleButton } from "@react-navigation/drawer";
-import { useFocusEffect } from "@react-navigation/native";
 import {
   addDocument,
   deleteDocument,
   getCollection,
   updateDocument,
 } from "@/services/firestoreService";
+import { prefetchAllData } from "@/utils/prefetchFirestore";
+import { seedTabelasAuxiliares } from "@/utils/seedTabelasAuxiliares";
+import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { DrawerToggleButton } from "@react-navigation/drawer";
+import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -130,12 +130,20 @@ const TABELAS: TabelaConfig[] = [
       { key: "fator", label: "Fator", tipo: "numero" },
     ],
   },
+  {
+    nome: "Parametros",
+    colecao: "parametros",
+    campos: [
+      { key: "descricao", label: "Parametro", tipo: "texto" },
+      { key: "valor", label: "Valor", tipo: "numero" },
+    ],
+  },
 ];
 
 type ItemAux = { id: string } & Record<string, string | number>;
 
 export default function Configuracoes() {
-  const { isTablet, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -328,7 +336,7 @@ export default function Configuracoes() {
           <View
             style={[
               styles.container,
-              isTablet && {
+              isTablet && !isDesktop && {
                 maxWidth: maxWidthContent,
                 alignSelf: "center" as const,
                 width: "100%",
@@ -337,7 +345,7 @@ export default function Configuracoes() {
           >
             <View style={styles.header}>
               <Text style={styles.title}>Configuracoes</Text>
-              <DrawerToggleButton tintColor="#000000" />
+              {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
             <Text style={styles.subtitle}>
