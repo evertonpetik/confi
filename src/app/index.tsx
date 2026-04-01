@@ -1,49 +1,108 @@
-import { Link, router } from "expo-router"
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native"
-
-import { Button } from "@/components/Button"
-import { Input } from "@/components/Input"
-import { useResponsive } from "@/hooks/useResponsive"
+import { Button } from "@/components/Button";
+import { Input } from "@/components/Input";
+import { useAuth } from "@/contexts/AuthContext";
+import { useResponsive } from "@/hooks/useResponsive";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View
+} from "react-native";
 
 export default function Index() {
-  const { isTablet, maxWidthAuth } = useResponsive()
+  const { isTablet, maxWidthAuth } = useResponsive();
+  const { signIn } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  function handleSignIn() {
-    router.push("/home")
+  async function handleSignIn() {
+    if (!email.trim() || !password.trim()) {
+      setError("Preencha e-mail e senha.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      await signIn(email.trim(), password);
+    } catch (err: any) {
+      const code = err?.code ?? "";
+      if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
+        setError("E-mail ou senha incorretos.");
+      } else if (code === "auth/too-many-requests") {
+        setError("Muitas tentativas. Tente novamente mais tarde.");
+      } else {
+        setError("Erro ao fazer login. Tente novamente.");
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.select({ ios: "padding", android: "height" })}>
+      behavior={Platform.select({ ios: "padding", android: "height" })}
+    >
       <ScrollView
         contentContainerStyle={[{ flexGrow: 1 }, isTablet && styles.scrollWide]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.container, isTablet && { maxWidth: maxWidthAuth, alignSelf: "center" as const, width: "100%" }]}>
+        <View
+          style={[
+            styles.container,
+            isTablet && {
+              maxWidth: maxWidthAuth,
+              alignSelf: "center" as const,
+              width: "100%",
+            },
+          ]}
+        >
           <Image
             source={require("@/assets/img1.png")}
             resizeMode="contain"
             style={[styles.illustration, isTablet && styles.illustrationWide]}
           />
           <Text style={styles.title}>Entrar</Text>
-          <Text style={styles.subtitle}>Acesse sua conta com e-mail e senha.</Text>
+          <Text style={styles.subtitle}>
+            Acesse sua conta com e-mail e senha.
+          </Text>
           <View style={styles.form}>
-            <Input placeholder="e-mail" keyboardType="email-address" />
-            <Input placeholder="senha" secureTextEntry />
-            <Button label="Entrar" onPress={handleSignIn} />
-            <Text style={styles.footerText}>
-              Não tem conta? {" "}
-              <Link href="/signup" style={styles.footerLink}>
-                Cadastre-se aqui.
-              </Link>
-            </Text>
+            <Input
+              placeholder="e-mail"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
+            />
+            <Input
+              placeholder="senha"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+            {error !== "" && <Text style={styles.errorText}>{error}</Text>}
+            {loading ? (
+              <ActivityIndicator
+                size="large"
+                color="#3366FF"
+                style={{ marginTop: 8 }}
+              />
+            ) : (
+              <Button label="Entrar" onPress={handleSignIn} />
+            )}
           </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
@@ -69,7 +128,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontWeight: 900,
+    fontWeight: "900",
   },
   subtitle: {
     fontSize: 16,
@@ -80,13 +139,9 @@ const styles = StyleSheet.create({
     marginTop: 24,
     gap: 12,
   },
-  footerText: {
+  errorText: {
+    color: "#E53935",
+    fontSize: 14,
     textAlign: "center",
-    marginTop: 24,
-    color: "#585860",
   },
-  footerLink: {
-    color: "#032ad7",
-    fontWeight: 700,
-  }
-})
+});

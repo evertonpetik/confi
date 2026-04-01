@@ -2,11 +2,32 @@ import { Platform } from "react-native";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { db } = require("../../firebaseConfig") as { db: any };
 
+// ---- Fazenda path prefix ----
+
+let _currentFazendaId: string | null = null;
+
+export function setCurrentFazendaId(id: string | null) {
+  _currentFazendaId = id;
+}
+
+export function getCurrentFazendaId(): string | null {
+  return _currentFazendaId;
+}
+
+const ROOT_COLLECTIONS = new Set(["usuarios", "fazendas"]);
+
+function resolvePath(colPath: string[]): string[] {
+  if (!_currentFazendaId) return colPath;
+  if (ROOT_COLLECTIONS.has(colPath[0])) return colPath;
+  return ["fazendas", _currentFazendaId, ...colPath];
+}
+
 // ---- Tipos unificados ----
 
 export type DocSnapshot = {
   id: string;
   data: () => any;
+  exists?: boolean;
 };
 
 export type QuerySnapshot = {
@@ -95,6 +116,13 @@ async function webSetDoc(colPath: string[], docId: string, data: any, options?: 
   }
 }
 
+async function webGetDoc(colPath: string[], docId: string): Promise<DocSnapshot> {
+  const fs = getWebFs();
+  const docRef = fs.doc(db, ...colPath, docId);
+  const snap = await fs.getDoc(docRef);
+  return snap;
+}
+
 function webCreateBatch() {
   const fs = getWebFs();
   const batch = fs.writeBatch(db);
@@ -161,6 +189,11 @@ async function nativeSetDoc(colPath: string[], docId: string, data: any, options
   }
 }
 
+async function nativeGetDoc(colPath: string[], docId: string): Promise<DocSnapshot> {
+  const ref = buildNativeRef(colPath);
+  return await ref.doc(docId).get();
+}
+
 function nativeCreateBatch() {
   const batch = db.batch();
   return {
@@ -178,29 +211,73 @@ function nativeCreateBatch() {
 const isWeb = Platform.OS === "web";
 
 export async function getCollection(...colPath: string[]): Promise<QuerySnapshot> {
-  return isWeb ? webGetDocs(colPath) : nativeGetDocs(colPath);
+  const resolved = resolvePath(colPath);
+  return isWeb ? webGetDocs(resolved) : nativeGetDocs(resolved);
 }
 
 export async function queryCollection(colPath: string[], constraints: QueryConstraint[]): Promise<QuerySnapshot> {
-  return isWeb ? webQueryDocs(colPath, constraints) : nativeQueryDocs(colPath, constraints);
+  const resolved = resolvePath(colPath);
+  return isWeb ? webQueryDocs(resolved, constraints) : nativeQueryDocs(resolved, constraints);
 }
 
 export async function addDocument(colPath: string[], data: any): Promise<DocRef> {
-  return isWeb ? webAddDoc(colPath, data) : nativeAddDoc(colPath, data);
+  const resolved = resolvePath(colPath);
+  return isWeb ? webAddDoc(resolved, data) : nativeAddDoc(resolved, data);
 }
 
 export async function updateDocument(colPath: string[], docId: string, data: any): Promise<void> {
-  return isWeb ? webUpdateDoc(colPath, docId, data) : nativeUpdateDoc(colPath, docId, data);
+  const resolved = resolvePath(colPath);
+  return isWeb ? webUpdateDoc(resolved, docId, data) : nativeUpdateDoc(resolved, docId, data);
 }
 
 export async function deleteDocument(colPath: string[], docId: string): Promise<void> {
-  return isWeb ? webDeleteDoc(colPath, docId) : nativeDeleteDoc(colPath, docId);
+  const resolved = resolvePath(colPath);
+  return isWeb ? webDeleteDoc(resolved, docId) : nativeDeleteDoc(resolved, docId);
 }
 
 export async function setDocument(colPath: string[], docId: string, data: any, options?: { merge: boolean }): Promise<void> {
-  return isWeb ? webSetDoc(colPath, docId, data, options) : nativeSetDoc(colPath, docId, data, options);
+  const resolved = resolvePath(colPath);
+  return isWeb ? webSetDoc(resolved, docId, data, options) : nativeSetDoc(resolved, docId, data, options);
+}
+
+export async function getDocument(colPath: string[], docId: string): Promise<DocSnapshot> {
+  const resolved = resolvePath(colPath);
+  return isWeb ? webGetDoc(resolved, docId) : nativeGetDoc(resolved, docId);
 }
 
 export function createBatch() {
-  return isWeb ? webCreateBatch() : nativeCreateBatch();
+  const inner = isWeb ? webCreateBatch() : nativeCreateBatch();
+  return {
+    set: (colPath: string[], data: any) => {
+      const resolved = resolvePath(colPath);
+      inner.set(resolved, data);
+    },
+    commit: () => inner.commit(),
+  };
+}
+
+// ---- Funcoes RAW (sem prefixo de fazenda) ----
+
+export async function getRawCollection(...colPath: string[]): Promise<QuerySnapshot> {
+  return isWeb ? webGetDocs(colPath) : nativeGetDocs(colPath);
+}
+
+export async function getRawDocument(colPath: string[], docId: string): Promise<DocSnapshot> {
+  return isWeb ? webGetDoc(colPath, docId) : nativeGetDoc(colPath, docId);
+}
+
+export async function setRawDocument(colPath: string[], docId: string, data: any, options?: { merge: boolean }): Promise<void> {
+  return isWeb ? webSetDoc(colPath, docId, data, options) : nativeSetDoc(colPath, docId, data, options);
+}
+
+export async function addRawDocument(colPath: string[], data: any): Promise<DocRef> {
+  return isWeb ? webAddDoc(colPath, data) : nativeAddDoc(colPath, data);
+}
+
+export async function updateRawDocument(colPath: string[], docId: string, data: any): Promise<void> {
+  return isWeb ? webUpdateDoc(colPath, docId, data) : nativeUpdateDoc(colPath, docId, data);
+}
+
+export async function deleteRawDocument(colPath: string[], docId: string): Promise<void> {
+  return isWeb ? webDeleteDoc(colPath, docId) : nativeDeleteDoc(colPath, docId);
 }

@@ -1,4 +1,4 @@
-import { getCollection, createBatch } from "@/services/firestoreService"
+import { createBatch, getCollection } from "@/services/firestoreService"
 
 type TabelaAuxiliar = {
   nome: string
@@ -181,6 +181,13 @@ const tabelasAuxiliares: TabelaAuxiliar[] = [
       { descricao: "3", fator: 1 },
       { descricao: "4", fator: 0.97 },
       { descricao: "5", fator: 0.9 },
+    ],
+  },
+  {
+    nome: "Parametros",
+    colecao: "parametros",
+    dados: [
+      { descricao: "tempoMS", valor: 3 },
     ],
   },
 ]

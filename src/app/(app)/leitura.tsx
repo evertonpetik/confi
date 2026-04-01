@@ -8,6 +8,7 @@ import {
   getCollection,
   queryCollection,
 } from "@/services/firestoreService";
+import { getHojeStr } from "@/utils/mapaTratoCalc";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useCallback, useEffect, useState } from "react";
@@ -68,14 +69,20 @@ export default function Leitura() {
     new Map()
   );
 
-  const hoje = (() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  })();
+  const [dataSelecionada, setDataSelecionada] = useState(() => new Date());
+  const hoje = getHojeStr(dataSelecionada);
+
+  function mudarData(delta: number) {
+    setDataSelecionada((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + delta);
+      return d;
+    });
+  }
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [hoje]);
 
   async function fetchData() {
     try {
@@ -101,7 +108,7 @@ export default function Leitura() {
       const leiturasHojeMap = new Map<string, LeituraHoje>();
 
       // CMS realizado do dia anterior por lote
-      const ontem = new Date();
+      const ontem = new Date(dataSelecionada);
       ontem.setDate(ontem.getDate() - 1);
       const ontemStr = `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, "0")}-${String(ontem.getDate()).padStart(2, "0")}`;
       const histOntemSnap = await queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", ontemStr)]);
@@ -380,9 +387,20 @@ export default function Leitura() {
 
             <View style={styles.dateRow}>
               <Text style={styles.dateLabel}>Data:</Text>
+              <TouchableOpacity onPress={() => mudarData(-1)} style={styles.dateArrow}>
+                <Feather name="chevron-left" size={20} color="#3366FF" />
+              </TouchableOpacity>
               <Text style={styles.dateValue}>
-                {new Date().toLocaleDateString("pt-BR")}
+                {dataSelecionada.toLocaleDateString("pt-BR")}
               </Text>
+              <TouchableOpacity onPress={() => mudarData(1)} style={styles.dateArrow}>
+                <Feather name="chevron-right" size={20} color="#3366FF" />
+              </TouchableOpacity>
+              {hoje !== getHojeStr() && (
+                <TouchableOpacity onPress={() => setDataSelecionada(new Date())} style={styles.dateHojeBtn}>
+                  <Text style={styles.dateHojeBtnText}>Hoje</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {loading ? (
@@ -573,6 +591,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#1a1a1a",
+  },
+  dateArrow: {
+    padding: 4,
+  },
+  dateHojeBtn: {
+    backgroundColor: "#3366FF",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginLeft: 4,
+  },
+  dateHojeBtnText: {
+    color: "#FFF",
+    fontSize: 12,
+    fontWeight: "700",
   },
   emptyText: {
     textAlign: "center",

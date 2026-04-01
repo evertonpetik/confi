@@ -258,13 +258,13 @@ export function buildCalcData(
 
 // ---- Fetch All Data ----
 
-export function getHojeStr(): string {
-  const d = new Date();
+export function getHojeStr(date?: Date): string {
+  const d = date ?? new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export async function fetchMapaTratoData(): Promise<MapaTratoFetchResult> {
-  const hoje = getHojeStr();
+export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFetchResult> {
+  const hoje = dataStr ?? getHojeStr();
 
   const [vagaoSnap, rotSnap, dietaSnap, lotesSnap, insumosSnap, racaSnap, implSnap, compSnap, gecSnap, aditSnap, tcSnap] = await Promise.all([
     getCollection("vagao"),

@@ -25,6 +25,7 @@ const TOP_LEVEL_COLLECTIONS = [
   "vagao",
   "notaLeitura",
   "historicoMapaTrato",
+  "parametros",
 ];
 
 export async function prefetchAllData(onProgress?: ProgressCallback): Promise<void> {
@@ -52,13 +53,14 @@ export async function prefetchAllData(onProgress?: ProgressCallback): Promise<vo
     ]);
   }
 
-  // 3. Fetch insumos subcollections (compras, saidas)
-  reportProgress("Buscando compras e saidas dos insumos...");
+  // 3. Fetch insumos subcollections (compras, saidas, conferencias)
+  reportProgress("Buscando compras, saidas e conferencias dos insumos...");
   const insumosSnap = await getCollection("insumos");
   for (const insumoDoc of insumosSnap.docs) {
     await Promise.all([
       getCollection("insumos", insumoDoc.id, "compras"),
       getCollection("insumos", insumoDoc.id, "saidas"),
+      getCollection("insumos", insumoDoc.id, "conferencias"),
     ]);
   }
 

@@ -76,19 +76,27 @@ export default function MapaTrato() {
   const [historicoDescargas, setHistoricoDescargas] = useState<Map<string, DescargaTrato[]>>(new Map());
   const [percentualMSPorRoteiro, setPercentualMSPorRoteiro] = useState<Map<string, number>>(new Map());
 
-  const hoje = getHojeStr();
+  const [dataSelecionada, setDataSelecionada] = useState(() => new Date());
+  const hoje = getHojeStr(dataSelecionada);
 
+  function mudarData(delta: number) {
+    setDataSelecionada((prev) => {
+      const d = new Date(prev);
+      d.setDate(d.getDate() + delta);
+      return d;
+    });
+  }
 
   useFocusEffect(
     useCallback(() => {
       fetchData();
-    }, [])
+    }, [hoje])
   );
 
   async function fetchData() {
     try {
       setLoading(true);
-      const data = await fetchMapaTratoData();
+      const data = await fetchMapaTratoData(hoje);
 
       setVagoes(data.vagoes);
       setVagaoOptions(
@@ -745,9 +753,20 @@ export default function MapaTrato() {
 
             <View style={styles.dateRow}>
               <Text style={styles.dateLabel}>Data:</Text>
+              <TouchableOpacity onPress={() => mudarData(-1)} style={styles.dateArrow}>
+                <Feather name="chevron-left" size={20} color="#3366FF" />
+              </TouchableOpacity>
               <Text style={styles.dateValue}>
-                {new Date().toLocaleDateString("pt-BR")}
+                {dataSelecionada.toLocaleDateString("pt-BR")}
               </Text>
+              <TouchableOpacity onPress={() => mudarData(1)} style={styles.dateArrow}>
+                <Feather name="chevron-right" size={20} color="#3366FF" />
+              </TouchableOpacity>
+              {hoje !== getHojeStr() && (
+                <TouchableOpacity onPress={() => setDataSelecionada(new Date())} style={styles.dateHojeBtn}>
+                  <Text style={styles.dateHojeBtnText}>Hoje</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Select Vagão */}
@@ -961,6 +980,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#1a1a1a",
+  },
+  dateArrow: {
+    padding: 4,
+  },
+  dateHojeBtn: {
+    backgroundColor: "#3366FF",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginLeft: 4,
+  },
+  dateHojeBtnText: {
+    color: "#FFF",
+    fontSize: 12,
+    fontWeight: "700",
   },
   sectionLabel: {
     fontSize: 14,

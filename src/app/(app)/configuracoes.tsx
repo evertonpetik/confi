@@ -5,6 +5,7 @@ import {
   CampoSchema,
   TabelaAuxiliarFormModal,
 } from "@/components/TabelaAuxiliarFormModal";
+import { useAuth } from "@/contexts/AuthContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -40,72 +41,7 @@ type TabelaConfig = {
 };
 
 const TABELAS: TabelaConfig[] = [
-  {
-    nome: "Tamanho Corporal",
-    colecao: "tamanhoCorporal",
-    campos: [
-      { key: "descricao", label: "Descricao", tipo: "texto" },
-      { key: "fator", label: "Fator", tipo: "numero" },
-    ],
-  },
-  {
-    nome: "Implante",
-    colecao: "implante",
-    campos: [
-      { key: "descricao", label: "Descricao", tipo: "texto" },
-      { key: "fator", label: "Fator", tipo: "numero" },
-    ],
-  },
-  {
-    nome: "Movimentacao",
-    colecao: "movimentacao",
-    campos: [
-      { key: "descricao", label: "Descricao", tipo: "texto" },
-      { key: "tipo", label: "Tipo (Entrada/Saida)", tipo: "texto" },
-    ],
-  },
-  {
-    nome: "Raca",
-    colecao: "raca",
-    campos: [
-      { key: "descricao", label: "Descricao", tipo: "texto" },
-      { key: "fator", label: "Fator", tipo: "numero" },
-    ],
-  },
-  {
-    nome: "Compensatorio",
-    colecao: "compensatorio",
-    campos: [
-      { key: "descricao", label: "Descricao", tipo: "texto" },
-      { key: "fator", label: "Fator", tipo: "numero" },
-    ],
-  },
-  {
-    nome: "Categoria",
-    colecao: "categoria",
-    campos: [
-      { key: "descricao", label: "Descricao", tipo: "texto" },
-      { key: "fator", label: "Fator", tipo: "numero" },
-    ],
-  },
-  {
-    nome: "GEC",
-    colecao: "gec",
-    campos: [
-      { key: "descricao", label: "Descricao", tipo: "texto" },
-      { key: "tamanhoCorporal", label: "Tamanho Corporal", tipo: "numero" },
-      { key: "categoria", label: "Categoria", tipo: "texto" },
-      { key: "fator", label: "Fator", tipo: "numero" },
-    ],
-  },
-  {
-    nome: "Aditivos",
-    colecao: "aditivos",
-    campos: [
-      { key: "descricao", label: "Descricao", tipo: "texto" },
-      { key: "fator", label: "Fator", tipo: "numero" },
-    ],
-  },
+
   {
     nome: "Piquetes",
     colecao: "piquetes",
@@ -144,6 +80,7 @@ type ItemAux = { id: string } & Record<string, string | number>;
 
 export default function Configuracoes() {
   const { isTablet, isDesktop, maxWidthContent } = useResponsive();
+  const { selectedFazendaId } = useAuth();
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -203,7 +140,7 @@ export default function Configuracoes() {
 
   async function loadLastSync() {
     try {
-      const ts = await AsyncStorage.getItem("@lastSync");
+      const ts = await AsyncStorage.getItem(`@lastSync:${selectedFazendaId}`);
       setLastSync(ts);
     } catch { /* ignore */ }
   }
@@ -214,7 +151,7 @@ export default function Configuracoes() {
     try {
       await prefetchAllData((msg, _pct) => setSyncProgress(msg));
       const now = new Date().toLocaleString("pt-BR");
-      await AsyncStorage.setItem("@lastSync", now);
+      await AsyncStorage.setItem(`@lastSync:${selectedFazendaId}`, now);
       setLastSync(now);
       Alert.alert("Sincronizacao", "Todos os dados foram sincronizados para uso offline.");
     } catch (error) {
@@ -352,26 +289,7 @@ export default function Configuracoes() {
               Gerencie as tabelas auxiliares do sistema.
             </Text>
 
-            {/* Seed button */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Banco de Dados</Text>
-              <Text style={styles.sectionDescription}>
-                Popula o banco de dados com as tabelas auxiliares. Tabelas ja
-                existentes serao ignoradas.
-              </Text>
-              {loading ? (
-                <ActivityIndicator
-                  size="large"
-                  color="#3366FF"
-                  style={{ marginTop: 16 }}
-                />
-              ) : (
-                <Button
-                  label="Criar Tabelas Auxiliares"
-                  onPress={handleSeedTabelasAuxiliares}
-                />
-              )}
-            </View>
+
 
             {/* Sync button */}
             <View style={styles.section}>
