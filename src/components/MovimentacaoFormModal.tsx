@@ -1,3 +1,4 @@
+import { DatePickerInput } from "@/components/DatePickerInput";
 import { Input } from "@/components/Input";
 import {
   calcularPesoMedio,
@@ -32,34 +33,28 @@ type MovimentacaoFormModalProps = {
 type MovForm = {
   evento: "Entrada" | "Saida";
   movimentacao: string;
-  data: string;
+  data: Date;
   quantidade: string;
   pesoMedio: string;
   observacao: string;
 };
 
-const emptyMovForm: MovForm = {
-  evento: "Entrada",
-  movimentacao: "",
-  data: "",
-  quantidade: "",
-  pesoMedio: "",
-  observacao: "",
-};
-
-function formatDateInput(text: string): string {
-  const digits = text.replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+function getEmptyMovForm(): MovForm {
+  return {
+    evento: "Entrada",
+    movimentacao: "",
+    data: new Date(),
+    quantidade: "",
+    pesoMedio: "",
+    observacao: "",
+  };
 }
 
-function parseDateToISO(dateStr: string): string {
-  const parts = dateStr.split("/");
-  if (parts.length !== 3) return "";
-  const [dd, mm, yyyy] = parts;
-  if (!dd || !mm || !yyyy || yyyy.length !== 4) return "";
-  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+function dateToISO(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export function MovimentacaoFormModal({
@@ -70,7 +65,7 @@ export function MovimentacaoFormModal({
   onDeleteMovimentacao,
   onClose,
 }: MovimentacaoFormModalProps) {
-  const [movForm, setMovForm] = useState<MovForm>(emptyMovForm);
+  const [movForm, setMovForm] = useState<MovForm>(getEmptyMovForm);
 
   if (!lote) return null;
 
@@ -84,16 +79,10 @@ export function MovimentacaoFormModal({
   function handleAdd() {
     if (
       !movForm.movimentacao ||
-      !movForm.data ||
       !movForm.quantidade ||
       !movForm.pesoMedio
     ) {
       Alert.alert("Atenção", "Preencha todos os campos da movimentação.");
-      return;
-    }
-    const isoDate = parseDateToISO(movForm.data);
-    if (!isoDate) {
-      Alert.alert("Atenção", "Data inválida. Use o formato DD/MM/AAAA.");
       return;
     }
     const qtd = parseInt(movForm.quantidade, 10);
@@ -109,12 +98,12 @@ export function MovimentacaoFormModal({
     onAddMovimentacao(lote.id, {
       evento: movForm.evento,
       movimentacao: movForm.movimentacao,
-      data: isoDate,
+      data: dateToISO(movForm.data),
       quantidade: qtd,
       pesoMedio: peso,
       observacao: movForm.observacao,
     });
-    setMovForm(emptyMovForm);
+    setMovForm(getEmptyMovForm());
   }
 
   return (
@@ -292,14 +281,11 @@ export function MovimentacaoFormModal({
                 />
 
                 <Text style={styles.label}>Data</Text>
-                <Input
-                  placeholder="DD/MM/AAAA"
+                <DatePickerInput
                   value={movForm.data}
-                  onChangeText={(v) =>
-                    setMovForm((p) => ({ ...p, data: formatDateInput(v) }))
+                  onChange={(date) =>
+                    setMovForm((p) => ({ ...p, data: date || new Date() }))
                   }
-                  keyboardType="numeric"
-                  maxLength={10}
                 />
 
                 <Text style={styles.label}>Quantidade de Animais</Text>

@@ -1,4 +1,4 @@
-import { useWindowDimensions } from "react-native";
+import { Platform, useWindowDimensions } from "react-native";
 
 const BREAKPOINT_TABLET = 768;
 const BREAKPOINT_DESKTOP = 1024;
@@ -10,8 +10,11 @@ const MAX_WIDTH_MODAL = 560;
 export function useResponsive() {
   const { width } = useWindowDimensions();
 
+  // No mobile nativo (Android/iOS), nunca tratar como "desktop"
+  // para evitar que o drawer fique permanente
+  const isNativeMobile = Platform.OS === "android" || Platform.OS === "ios";
   const isTablet = width >= BREAKPOINT_TABLET;
-  const isDesktop = width >= BREAKPOINT_DESKTOP;
+  const isDesktop = isNativeMobile ? false : width >= BREAKPOINT_DESKTOP;
 
   return {
     width,

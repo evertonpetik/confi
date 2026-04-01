@@ -1,3 +1,4 @@
+import { DatePickerInput } from "@/components/DatePickerInput";
 import { Input } from "@/components/Input";
 import { ConferenciaMS, Insumo } from "@/components/InsumoCard";
 import { Feather } from "@expo/vector-icons";
@@ -26,28 +27,19 @@ type ConferenciaMSModalProps = {
 };
 
 type ConferenciaForm = {
-  data: string;
+  data: Date;
   percentualMS: string;
 };
 
-const emptyForm: ConferenciaForm = {
-  data: "",
-  percentualMS: "",
-};
-
-function formatDateInput(text: string): string {
-  const digits = text.replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+function getEmptyForm(): ConferenciaForm {
+  return { data: new Date(), percentualMS: "" };
 }
 
-function parseDateToISO(dateStr: string): string {
-  const parts = dateStr.split("/");
-  if (parts.length !== 3) return "";
-  const [dd, mm, yyyy] = parts;
-  if (!dd || !mm || !yyyy || yyyy.length !== 4) return "";
-  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+function dateToISO(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export function ConferenciaMSModal({
@@ -57,7 +49,7 @@ export function ConferenciaMSModal({
   onDeleteConferencia,
   onClose,
 }: ConferenciaMSModalProps) {
-  const [form, setForm] = useState<ConferenciaForm>(emptyForm);
+  const [form, setForm] = useState<ConferenciaForm>(getEmptyForm);
 
   if (!insumo) return null;
 
@@ -66,13 +58,8 @@ export function ConferenciaMSModal({
   );
 
   function handleAdd() {
-    if (!form.data || !form.percentualMS) {
+    if (!form.percentualMS) {
       Alert.alert("Atenção", "Preencha todos os campos.");
-      return;
-    }
-    const isoDate = parseDateToISO(form.data);
-    if (!isoDate) {
-      Alert.alert("Atenção", "Data inválida. Use o formato DD/MM/AAAA.");
       return;
     }
     const pms = parseFloat(form.percentualMS.replace(",", "."));
@@ -84,10 +71,10 @@ export function ConferenciaMSModal({
       return;
     }
     onAddConferencia(insumo.id, {
-      data: isoDate,
+      data: dateToISO(form.data),
       percentualMS: pms,
     });
-    setForm(emptyForm);
+    setForm(getEmptyForm());
   }
 
   return (
@@ -172,14 +159,11 @@ export function ConferenciaMSModal({
 
               <View style={styles.form}>
                 <Text style={styles.label}>Data</Text>
-                <Input
-                  placeholder="DD/MM/AAAA"
+                <DatePickerInput
                   value={form.data}
-                  onChangeText={(v) =>
-                    setForm((p) => ({ ...p, data: formatDateInput(v) }))
+                  onChange={(date) =>
+                    setForm((p) => ({ ...p, data: date || new Date() }))
                   }
-                  keyboardType="numeric"
-                  maxLength={10}
                 />
 
                 <Text style={styles.label}>Percentual de MS (%)</Text>

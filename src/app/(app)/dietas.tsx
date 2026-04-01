@@ -14,7 +14,8 @@ import {
 } from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -66,9 +67,11 @@ export default function Dietas() {
   const [deleteTarget, setDeleteTarget] = useState<Dieta | null>(null);
   const [inlineInsumoVisible, setInlineInsumoVisible] = useState(false);
 
-  useEffect(() => {
-    fetchAllData();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchAllData();
+    }, [])
+  );
 
   async function fetchAllData() {
     try {

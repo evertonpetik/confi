@@ -11,7 +11,8 @@ import {
 import { getHojeStr } from "@/utils/mapaTratoCalc";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -80,9 +81,11 @@ export default function Leitura() {
     });
   }
 
-  useEffect(() => {
-    fetchData();
-  }, [hoje]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [hoje])
+  );
 
   async function fetchData() {
     try {

@@ -235,7 +235,7 @@ export default function AppLayout() {
         drawerActiveTintColor: "#727D9B",
         drawerInactiveTintColor: "#FFFFFF",
         drawerHideStatusBarOnOpen: true,
-        overlayColor: "transparent",
+        overlayColor: isDesktop ? "transparent" : "rgba(0,0,0,0.5)",
         drawerType: isDesktop ? "permanent" : "front",
         drawerStyle: {
           backgroundColor: "#1D1F25",

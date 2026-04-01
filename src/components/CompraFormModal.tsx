@@ -1,3 +1,4 @@
+import { DatePickerInput } from "@/components/DatePickerInput";
 import { Input } from "@/components/Input";
 import {
   calcularEstoque,
@@ -28,30 +29,20 @@ type CompraFormModalProps = {
 };
 
 type CompraForm = {
-  data: string;
+  data: Date;
   quantidade: string;
   precoKg: string;
 };
 
-const emptyForm: CompraForm = {
-  data: "",
-  quantidade: "",
-  precoKg: "",
-};
-
-function formatDateInput(text: string): string {
-  const digits = text.replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+function getEmptyForm(): CompraForm {
+  return { data: new Date(), quantidade: "", precoKg: "" };
 }
 
-function parseDateToISO(dateStr: string): string {
-  const parts = dateStr.split("/");
-  if (parts.length !== 3) return "";
-  const [dd, mm, yyyy] = parts;
-  if (!dd || !mm || !yyyy || yyyy.length !== 4) return "";
-  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+function dateToISO(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export function CompraFormModal({
@@ -61,7 +52,7 @@ export function CompraFormModal({
   onDeleteCompra,
   onClose,
 }: CompraFormModalProps) {
-  const [form, setForm] = useState<CompraForm>(emptyForm);
+  const [form, setForm] = useState<CompraForm>(getEmptyForm);
 
   if (!insumo) return null;
 
@@ -69,13 +60,8 @@ export function CompraFormModal({
   const precoMedio = calcularPrecoMedio(insumo.compras, insumo.saidas);
 
   function handleAdd() {
-    if (!form.data || !form.quantidade || !form.precoKg) {
+    if (!form.quantidade || !form.precoKg) {
       Alert.alert("Atenção", "Preencha todos os campos.");
-      return;
-    }
-    const isoDate = parseDateToISO(form.data);
-    if (!isoDate) {
-      Alert.alert("Atenção", "Data inválida. Use o formato DD/MM/AAAA.");
       return;
     }
     const qtd = parseFloat(form.quantidade.replace(",", "."));
@@ -89,11 +75,11 @@ export function CompraFormModal({
       return;
     }
     onAddCompra(insumo.id, {
-      data: isoDate,
+      data: dateToISO(form.data),
       quantidade: qtd,
       precoKg: preco,
     });
-    setForm(emptyForm);
+    setForm(getEmptyForm());
   }
 
   return (
@@ -179,14 +165,11 @@ export function CompraFormModal({
 
               <View style={styles.form}>
                 <Text style={styles.label}>Data</Text>
-                <Input
-                  placeholder="DD/MM/AAAA"
+                <DatePickerInput
                   value={form.data}
-                  onChangeText={(v) =>
-                    setForm((p) => ({ ...p, data: formatDateInput(v) }))
+                  onChange={(date) =>
+                    setForm((p) => ({ ...p, data: date || new Date() }))
                   }
-                  keyboardType="numeric"
-                  maxLength={10}
                 />
 
                 <Text style={styles.label}>Quantidade (kg)</Text>

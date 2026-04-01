@@ -282,7 +282,7 @@ export function LoteFormModal({
                 {/* GMD Estimado */}
                 <Text style={styles.label}>GMD Estimado (kg) *</Text>
                 <Input
-                  placeholder="Ex: 0.8"
+                  placeholder="Ex: 1,8"
                   value={form.gmdEstimado}
                   onChangeText={(v) =>
                     setForm((p) => ({ ...p, gmdEstimado: v }))

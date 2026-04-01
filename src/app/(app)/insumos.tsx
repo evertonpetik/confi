@@ -19,7 +19,8 @@ import {
 } from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -48,9 +49,11 @@ export default function Insumos() {
   const [conferenciaVisible, setConferenciaVisible] = useState(false);
   const [conferenciaInsumo, setConferenciaInsumo] = useState<Insumo | null>(null);
 
-  useEffect(() => {
-    fetchInsumos();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchInsumos();
+    }, [])
+  );
 
   async function fetchInsumos() {
     try {
@@ -238,20 +241,20 @@ export default function Insumos() {
         prev.map((i) =>
           i.id === insumoId
             ? {
-                ...i,
-                percentualMateriaSeca: confData.percentualMS,
-                conferencias: [...i.conferencias, newConf],
-              }
+              ...i,
+              percentualMateriaSeca: confData.percentualMS,
+              conferencias: [...i.conferencias, newConf],
+            }
             : i
         )
       );
       setConferenciaInsumo((prev) =>
         prev && prev.id === insumoId
           ? {
-              ...prev,
-              percentualMateriaSeca: confData.percentualMS,
-              conferencias: [...prev.conferencias, newConf],
-            }
+            ...prev,
+            percentualMateriaSeca: confData.percentualMS,
+            conferencias: [...prev.conferencias, newConf],
+          }
           : prev
       );
     } catch (error) {
@@ -289,20 +292,20 @@ export default function Insumos() {
           prev.map((i) =>
             i.id === insumoId
               ? {
-                  ...i,
-                  percentualMateriaSeca: maisRecente.percentualMS,
-                  conferencias: restantes,
-                }
+                ...i,
+                percentualMateriaSeca: maisRecente.percentualMS,
+                conferencias: restantes,
+              }
               : i
           )
         );
         setConferenciaInsumo((prev) =>
           prev && prev.id === insumoId
             ? {
-                ...prev,
-                percentualMateriaSeca: maisRecente.percentualMS,
-                conferencias: restantes,
-              }
+              ...prev,
+              percentualMateriaSeca: maisRecente.percentualMS,
+              conferencias: restantes,
+            }
             : prev
         );
       } else {

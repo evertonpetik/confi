@@ -11,7 +11,8 @@ import {
 } from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { DrawerToggleButton } from "@react-navigation/drawer";
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -34,9 +35,11 @@ export default function Produtores() {
 
   const [deleteTarget, setDeleteTarget] = useState<Produtor | null>(null);
 
-  useEffect(() => {
-    fetchProdutores();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchProdutores();
+    }, [])
+  );
 
   async function fetchProdutores() {
     try {
