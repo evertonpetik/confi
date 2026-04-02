@@ -8,8 +8,10 @@ import {
   DrawerContentScrollView,
   DrawerItemList,
 } from "@react-navigation/drawer";
+import { DrawerActions } from "@react-navigation/native";
+import { useNavigation } from "expo-router";
 import { Drawer } from "expo-router/drawer";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   StyleSheet,
@@ -129,11 +131,24 @@ const drawerStyles = StyleSheet.create({
 export default function AppLayout() {
   const { isTablet, isDesktop } = useResponsive();
   const { userProfile, selectedFazendaId, selectedFazendaNome } = useAuth();
+  const navigation = useNavigation();
   const [checking, setChecking] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+  const didForceClose = useRef(false);
 
   const isAdmin = userProfile?.tipo === "admin";
+
+  // Força o drawer a fechar no mount em dispositivos móveis
+  useEffect(() => {
+    if (!isDesktop && !checking && !syncing && !didForceClose.current) {
+      didForceClose.current = true;
+      const timer = setTimeout(() => {
+        navigation.dispatch(DrawerActions.closeDrawer());
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isDesktop, checking, syncing]);
 
   useEffect(() => {
     if (selectedFazendaId) {
@@ -234,7 +249,6 @@ export default function AppLayout() {
         drawerInactiveBackgroundColor: " transparent ",
         drawerActiveTintColor: "#727D9B",
         drawerInactiveTintColor: "#FFFFFF",
-        drawerHideStatusBarOnOpen: true,
         overlayColor: isDesktop ? "transparent" : "rgba(0,0,0,0.5)",
         drawerType: isDesktop ? "permanent" : "front",
         drawerStyle: {
