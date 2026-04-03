@@ -257,14 +257,13 @@ export default function AppLayout() {
           width: isDesktop ? 280 : isTablet ? 280 : "50%",
           borderRightWidth: isDesktop ? 0 : undefined,
           position: isDesktop ? "relative" : undefined,
-          height: "100%",
         },
         drawerLabelStyle: {
           marginLeft: 0,
         },
         sceneStyle: {
           backgroundColor: "#F5F5F5",
-          minHeight: "100%",
+          flex: 1,
         },
       }}
     >
