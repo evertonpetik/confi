@@ -245,8 +245,8 @@ export default function AppLayout() {
       defaultStatus={isDesktop ? "open" : "closed"}
       screenOptions={{
         headerShown: false,
-        drawerActiveBackgroundColor: " transparent ",
-        drawerInactiveBackgroundColor: " transparent ",
+        drawerActiveBackgroundColor: "transparent",
+        drawerInactiveBackgroundColor: "transparent",
         drawerActiveTintColor: "#727D9B",
         drawerInactiveTintColor: "#FFFFFF",
         overlayColor: isDesktop ? "transparent" : "rgba(0,0,0,0.5)",
@@ -263,7 +263,7 @@ export default function AppLayout() {
           marginLeft: 0,
         },
         sceneStyle: {
-          backgroundColor: "#1D1F25",
+          backgroundColor: "#F5F5F5",
           minHeight: "100%",
         },
       }}
