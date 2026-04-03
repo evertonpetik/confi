@@ -6,7 +6,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   DrawerContentComponentProps,
   DrawerContentScrollView,
-  DrawerItemList,
 } from "@react-navigation/drawer";
 import { DrawerActions } from "@react-navigation/native";
 import { useNavigation } from "expo-router";
@@ -49,8 +48,38 @@ function CustomDrawerContent(props: DrawerContentComponentProps) {
       </View>
       <View style={drawerStyles.divider} />
 
-      {/* Drawer items */}
-      <DrawerItemList {...props} />
+      {/* Drawer items - TouchableOpacity para compatibilidade com Android */}
+      {props.state.routes.map((route, index) => {
+        const { options } = props.descriptors[route.key];
+        const isFocused = props.state.index === index;
+
+        const itemStyle = options.drawerItemStyle as { display?: string } | undefined;
+        if (itemStyle?.display === "none") return null;
+
+        const label =
+          typeof options.drawerLabel === "string"
+            ? options.drawerLabel
+            : (options.title ?? route.name);
+        const icon = options.drawerIcon;
+        const color = isFocused ? "#727D9B" : "#FFFFFF";
+
+        return (
+          <TouchableOpacity
+            key={route.key}
+            activeOpacity={0.7}
+            onPress={() => {
+              props.navigation.navigate(route.name);
+              props.navigation.closeDrawer();
+            }}
+            style={drawerStyles.drawerItem}
+          >
+            {icon?.({ color, size: 20, focused: isFocused })}
+            <Text style={[drawerStyles.drawerItemLabel, { color }]}>
+              {label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
 
       {/* Footer actions */}
       <View style={drawerStyles.footer}>
@@ -125,6 +154,17 @@ const drawerStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#727D9B",
+  },
+  drawerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  drawerItemLabel: {
+    fontSize: 14,
+    fontWeight: "500",
   },
 });
 
