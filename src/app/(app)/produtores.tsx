@@ -1,5 +1,6 @@
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
+import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Produtor, ProdutorCard } from "@/components/ProdutorCard";
 import { ProdutorFormModal } from "@/components/ProdutorFormModal";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -10,7 +11,6 @@ import {
   updateDocument
 } from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
-import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {

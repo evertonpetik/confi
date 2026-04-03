@@ -2,6 +2,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Dieta } from "@/components/DietaCard";
 import { DietaFormModal } from "@/components/DietaFormModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
+import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { FaturamentoModal, LancamentoFinanceiro } from "@/components/FaturamentoModal";
 import { Insumo } from "@/components/InsumoCard";
 import { InsumoFormModal } from "@/components/InsumoFormModal";
@@ -19,7 +20,6 @@ import {
   updateDocument,
 } from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
-import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {

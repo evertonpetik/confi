@@ -1,194 +1,173 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { DrawerProvider, useDrawer } from "@/contexts/DrawerContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { prefetchAllData } from "@/utils/prefetchFirestore";
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import {
-  DrawerContentComponentProps,
-  DrawerContentScrollView,
-} from "@react-navigation/drawer";
-import { DrawerActions } from "@react-navigation/native";
-import { useNavigation } from "expo-router";
-import { Drawer } from "expo-router/drawer";
-import { useEffect, useRef, useState } from "react";
+import { Slot, usePathname, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
-import {
-  configureReanimatedLogger,
-  ReanimatedLogLevel,
-} from "react-native-reanimated";
 
-configureReanimatedLogger({
-  level: ReanimatedLogLevel.warn,
-  strict: false,
-});
+const MENU_ITEMS = [
+  { route: "home", label: "Home", icon: "home" },
+  { route: "produtores", label: "Produtores", icon: "users" },
+  { route: "lotes", label: "Lotes", icon: "trello" },
+  { route: "leitura", label: "Leitura de Cocho", icon: "trending-up" },
+  { route: "insumos", label: "Insumos", icon: "feather" },
+  { route: "dietas", label: "Dietas", icon: "clipboard" },
+  { route: "roteiros", label: "Roteiros", icon: "truck" },
+  { route: "mapa-trato", label: "Mapa de Trato", icon: "map" },
+  { route: "tratador", label: "Tratador", icon: "play-circle" },
+  { route: "configuracoes", label: "Configuracoes", icon: "settings" },
+  { route: "signup", label: "Usuarios", icon: "user-plus" },
+] as const;
 
-function CustomDrawerContent(props: DrawerContentComponentProps) {
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { userProfile, selectedFazendaNome, signOut, clearFazenda } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const isAdmin = userProfile?.tipo === "admin";
 
   return (
-    <DrawerContentScrollView {...props} contentContainerStyle={{ flex: 1 }}>
+    <ScrollView contentContainerStyle={{ flex: 1 }} bounces={false}>
       {/* Fazenda header */}
-      <View style={drawerStyles.header}>
+      <View style={styles.header}>
         <Feather name="map-pin" size={16} color="#727D9B" />
-        <Text style={drawerStyles.fazendaNome} numberOfLines={1}>
+        <Text style={styles.fazendaNome} numberOfLines={1}>
           {selectedFazendaNome ?? ""}
         </Text>
       </View>
-      <View style={drawerStyles.userRow}>
+      <View style={styles.userRow}>
         <Feather name="user" size={14} color="#727D9B" />
-        <Text style={drawerStyles.userName} numberOfLines={1}>
+        <Text style={styles.userName} numberOfLines={1}>
           {userProfile?.nome ?? ""} ({userProfile?.tipo ?? ""})
         </Text>
       </View>
-      <View style={drawerStyles.divider} />
+      <View style={styles.divider} />
 
-      {/* Drawer items - TouchableOpacity para compatibilidade com Android */}
-      {props.state.routes.map((route, index) => {
-        const { options } = props.descriptors[route.key];
-        const isFocused = props.state.index === index;
+      {/* Menu items */}
+      {MENU_ITEMS.map((item) => {
+        if (item.route === "signup" && !isAdmin) return null;
 
-        const itemStyle = options.drawerItemStyle as { display?: string } | undefined;
-        if (itemStyle?.display === "none") return null;
-
-        const label =
-          typeof options.drawerLabel === "string"
-            ? options.drawerLabel
-            : (options.title ?? route.name);
-        const icon = options.drawerIcon;
-        const color = isFocused ? "#727D9B" : "#FFFFFF";
+        const isActive = pathname.includes(item.route);
+        const color = isActive ? "#727D9B" : "#FFFFFF";
 
         return (
           <TouchableOpacity
-            key={route.key}
+            key={item.route}
             activeOpacity={0.7}
             onPress={() => {
-              props.navigation.navigate(route.name);
-              props.navigation.closeDrawer();
+              router.replace(`/(app)/${item.route}` as any);
+              onNavigate?.();
             }}
-            style={drawerStyles.drawerItem}
+            style={styles.drawerItem}
           >
-            {icon?.({ color, size: 20, focused: isFocused })}
-            <Text style={[drawerStyles.drawerItemLabel, { color }]}>
-              {label}
+            <Feather name={item.icon} size={20} color={color} />
+            <Text style={[styles.drawerItemLabel, { color }]}>
+              {item.label}
             </Text>
           </TouchableOpacity>
         );
       })}
 
-      {/* Footer actions */}
-      <View style={drawerStyles.footer}>
-        <View style={drawerStyles.divider} />
+      {/* Footer */}
+      <View style={styles.footer}>
+        <View style={styles.divider} />
         <TouchableOpacity
-          style={drawerStyles.footerButton}
+          style={styles.footerButton}
           activeOpacity={0.7}
           onPress={clearFazenda}
         >
           <Feather name="refresh-cw" size={18} color="#727D9B" />
-          <Text style={drawerStyles.footerText}>Trocar Fazenda</Text>
+          <Text style={styles.footerText}>Trocar Fazenda</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={drawerStyles.footerButton}
+          style={styles.footerButton}
           activeOpacity={0.7}
           onPress={signOut}
         >
           <Feather name="log-out" size={18} color="#E53935" />
-          <Text style={[drawerStyles.footerText, { color: "#E53935" }]}>
-            Sair
-          </Text>
+          <Text style={[styles.footerText, { color: "#E53935" }]}>Sair</Text>
         </TouchableOpacity>
       </View>
-    </DrawerContentScrollView>
+    </ScrollView>
   );
 }
 
-const drawerStyles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingBottom: 4,
-  },
-  fazendaNome: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    flex: 1,
-  },
-  userRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingBottom: 8,
-  },
-  userName: {
-    fontSize: 12,
-    color: "#727D9B",
-    flex: 1,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#2A2D35",
-    marginHorizontal: 16,
-    marginVertical: 8,
-  },
-  footer: {
-    marginTop: "auto",
-    paddingBottom: 16,
-  },
-  footerButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  footerText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#727D9B",
-  },
-  drawerItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  drawerItemLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-});
+function MobileDrawer() {
+  const { isOpen, close, progress } = useDrawer();
+  const { isTablet } = useResponsive();
+  const { width: screenWidth } = useWindowDimensions();
+
+  const drawerWidth = isTablet ? 280 : screenWidth * 0.5;
+
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-drawerWidth, 0],
+  });
+
+  const overlayOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
+  return (
+    <>
+      {/* Overlay */}
+      <Animated.View
+        pointerEvents={isOpen ? "auto" : "none"}
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: "rgba(0,0,0,0.5)",
+            opacity: overlayOpacity,
+            zIndex: 99,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          style={{ flex: 1 }}
+          activeOpacity={1}
+          onPress={close}
+        />
+      </Animated.View>
+
+      {/* Drawer panel */}
+      <Animated.View
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: drawerWidth,
+          backgroundColor: "#1D1F25",
+          paddingTop: 32,
+          transform: [{ translateX }],
+          zIndex: 100,
+          elevation: 16,
+        }}
+      >
+        <SidebarContent onNavigate={close} />
+      </Animated.View>
+    </>
+  );
+}
 
 export default function AppLayout() {
-  const { isTablet, isDesktop } = useResponsive();
-  const { userProfile, selectedFazendaId, selectedFazendaNome } = useAuth();
-  const navigation = useNavigation();
+  const { isDesktop } = useResponsive();
+  const { selectedFazendaId } = useAuth();
   const [checking, setChecking] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
-  const didForceClose = useRef(false);
-
-  const isAdmin = userProfile?.tipo === "admin";
-
-  // Força o drawer a fechar no mount em dispositivos móveis
-  useEffect(() => {
-    if (!isDesktop && !checking && !syncing && !didForceClose.current) {
-      didForceClose.current = true;
-      const timer = setTimeout(() => {
-        navigation.dispatch(DrawerActions.closeDrawer());
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [isDesktop, checking, syncing]);
 
   useEffect(() => {
     if (selectedFazendaId) {
@@ -280,144 +259,85 @@ export default function AppLayout() {
   }
 
   return (
-    <Drawer
-      drawerContent={(props) => <CustomDrawerContent {...props} />}
-      defaultStatus={isDesktop ? "open" : "closed"}
-      screenOptions={{
-        headerShown: false,
-        drawerActiveBackgroundColor: "transparent",
-        drawerInactiveBackgroundColor: "transparent",
-        drawerActiveTintColor: "#727D9B",
-        drawerInactiveTintColor: "#FFFFFF",
-        overlayColor: isDesktop ? "transparent" : "rgba(0,0,0,0.5)",
-        drawerType: isDesktop ? "permanent" : "slide",
-        drawerStyle: {
-          backgroundColor: "#1D1F25",
-          paddingTop: 32,
-          width: isDesktop ? 280 : isTablet ? 280 : "50%",
-          borderRightWidth: isDesktop ? 0 : undefined,
-          position: isDesktop ? "relative" : undefined,
-        },
-        drawerLabelStyle: {
-          marginLeft: 0,
-        },
-        sceneStyle: {
-          backgroundColor: "#F5F5F5",
-          flex: 1,
-        },
-      }}
-    >
-      <Drawer.Screen
-        name="home"
-        options={{
-          title: selectedFazendaNome ?? "Home",
-          drawerLabel: "Home",
-          drawerIcon: ({ color }) => (
-            <Feather name="home" size={20} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="produtores"
-        options={{
-          title: "Produtores",
-          drawerLabel: "Produtores",
-          drawerIcon: ({ color }) => (
-            <Feather name="users" size={20} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="lotes"
-        options={{
-          title: "Lotes",
-          drawerLabel: "Lotes",
-          drawerIcon: ({ color }) => (
-            <Feather name="trello" size={20} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="leitura"
-        options={{
-          title: "Leitura de Cocho",
-          drawerLabel: "Leitura de Cocho",
-          drawerIcon: ({ color }) => (
-            <Feather name="trending-up" size={20} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="insumos"
-        options={{
-          title: "Insumos",
-          drawerLabel: "Insumos",
-          drawerIcon: ({ color }) => (
-            <Feather name="feather" size={20} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="dietas"
-        options={{
-          title: "Dietas",
-          drawerLabel: "Dietas",
-          drawerIcon: ({ color }) => (
-            <Feather name="clipboard" size={20} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="roteiros"
-        options={{
-          title: "Roteiros",
-          drawerLabel: "Roteiros",
-          drawerIcon: ({ color }) => (
-            <Feather name="truck" size={20} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="mapa-trato"
-        options={{
-          title: "Mapa de Trato",
-          drawerLabel: "Mapa de Trato",
-          drawerIcon: ({ color }) => (
-            <Feather name="map" size={20} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="tratador"
-        options={{
-          title: "Tratador",
-          drawerLabel: "Tratador",
-          drawerIcon: ({ color }) => (
-            <Feather name="play-circle" size={20} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="configuracoes"
-        options={{
-          title: "Configuracoes",
-          drawerLabel: "Configuracoes",
-          drawerIcon: ({ color }) => (
-            <Feather name="settings" size={20} color={color} />
-          ),
-        }}
-      />
-      <Drawer.Screen
-        name="signup"
-        options={{
-          title: "Usuarios",
-          drawerLabel: "Usuarios",
-          drawerIcon: ({ color }) => (
-            <Feather name="user-plus" size={20} color={color} />
-          ),
-          drawerItemStyle: isAdmin ? undefined : { display: "none" },
-        }}
-      />
-    </Drawer>
+    <DrawerProvider>
+      <View style={{ flex: 1, flexDirection: "row" }}>
+        {isDesktop && (
+          <View
+            style={{
+              width: 280,
+              backgroundColor: "#1D1F25",
+              paddingTop: 32,
+            }}
+          >
+            <SidebarContent />
+          </View>
+        )}
+        <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+          <Slot />
+        </View>
+        {!isDesktop && <MobileDrawer />}
+      </View>
+    </DrawerProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 4,
+  },
+  fazendaNome: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    flex: 1,
+  },
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+  },
+  userName: {
+    fontSize: 12,
+    color: "#727D9B",
+    flex: 1,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#2A2D35",
+    marginHorizontal: 16,
+    marginVertical: 8,
+  },
+  drawerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  drawerItemLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  footer: {
+    marginTop: "auto",
+    paddingBottom: 16,
+  },
+  footerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  footerText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#727D9B",
+  },
+});

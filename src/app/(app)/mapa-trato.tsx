@@ -1,6 +1,7 @@
 import { CargaModal, CargaTrato } from "@/components/CargaModal";
 import { DescargaModal, DescargaTrato } from "@/components/DescargaModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
+import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Select, SelectOption } from "@/components/Select";
 import { useResponsive } from "@/hooks/useResponsive";
 import { setDocument } from "@/services/firestoreService";
@@ -13,7 +14,6 @@ import {
   type Vagao,
 } from "@/utils/mapaTratoCalc";
 import { Feather } from "@expo/vector-icons";
-import { DrawerToggleButton } from "@react-navigation/drawer";
 import { useFocusEffect } from "@react-navigation/native";
 import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
