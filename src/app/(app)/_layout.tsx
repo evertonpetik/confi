@@ -17,7 +17,7 @@ import {
   View,
 } from "react-native";
 
-const MENU_ITEMS = [
+const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typeof Feather>["name"] }[] = [
   { route: "home", label: "Home", icon: "home" },
   { route: "produtores", label: "Produtores", icon: "users" },
   { route: "lotes", label: "Lotes", icon: "trello" },
@@ -29,7 +29,7 @@ const MENU_ITEMS = [
   { route: "tratador", label: "Tratador", icon: "play-circle" },
   { route: "configuracoes", label: "Configuracoes", icon: "settings" },
   { route: "signup", label: "Usuarios", icon: "user-plus" },
-] as const;
+];
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { userProfile, selectedFazendaNome, signOut, clearFazenda } = useAuth();
