@@ -290,7 +290,7 @@ export default function AppLayout() {
         drawerActiveTintColor: "#727D9B",
         drawerInactiveTintColor: "#FFFFFF",
         overlayColor: isDesktop ? "transparent" : "rgba(0,0,0,0.5)",
-        drawerType: isDesktop ? "permanent" : "front",
+        drawerType: isDesktop ? "permanent" : "slide",
         drawerStyle: {
           backgroundColor: "#1D1F25",
           paddingTop: 32,
