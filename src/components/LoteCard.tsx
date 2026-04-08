@@ -81,7 +81,7 @@ function calcularPesoMedioInicial(movimentacoes: Movimentacao[]): number {
   return pesoTotal / totalAnimais;
 }
 
-export { calcularPesoMedio, calcularQuantidadeAtual };
+export { calcularPesoMedio, calcularPesoMedioInicial, calcularQuantidadeAtual };
 
 export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoes, onFaturamento }: LoteCardProps) {
   const qtdAtual = calcularQuantidadeAtual(lote.movimentacoes);
