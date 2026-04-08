@@ -22,6 +22,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { BarChart, LineChart } from "react-native-gifted-charts";
 
 // ---- Types ----
@@ -429,6 +430,7 @@ export default function AnaliseLote() {
                 hideRules
                 yAxisOffset={0}
                 isAnimated
+                LinearGradient={LinearGradient}
               />
             </ScrollView>
           ) : (
@@ -464,6 +466,7 @@ export default function AnaliseLote() {
                 }}
                 hideRules
                 isAnimated
+                LinearGradient={LinearGradient}
               />
             </ScrollView>
           ) : (
