@@ -27,6 +27,7 @@ export type Lote = {
   dietaNome: string;
   piqueteId: string;
   piqueteNome: string;
+  pesoAbate?: number;
   movimentacoes: Movimentacao[];
 };
 

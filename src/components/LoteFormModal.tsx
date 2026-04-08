@@ -43,6 +43,7 @@ type LoteForm = {
   produtor: string;
   produtorId: string;
   gmdEstimado: string;
+  pesoAbate: string;
   ativo: boolean;
   dietaId: string;
   dietaNome: string;
@@ -59,6 +60,7 @@ const emptyForm: LoteForm = {
   produtor: "",
   produtorId: "",
   gmdEstimado: "",
+  pesoAbate: "",
   ativo: true,
   dietaId: "",
   dietaNome: "",
@@ -98,6 +100,7 @@ export function LoteFormModal({
           produtor: lote.produtor ?? "",
           produtorId: lote.produtorId ?? "",
           gmdEstimado: lote.gmdEstimado?.toString() ?? "",
+          pesoAbate: lote.pesoAbate?.toString() ?? "",
           ativo: lote.ativo ?? true,
           dietaId: lote.dietaId ?? "",
           dietaNome: lote.dietaNome ?? "",
@@ -147,6 +150,11 @@ export function LoteFormModal({
       Alert.alert("Atenção", "GMD Estimado deve ser um número válido.");
       return;
     }
+    const pesoAbate = form.pesoAbate ? parseFloat(form.pesoAbate.replace(",", ".")) : undefined;
+    if (form.pesoAbate && (isNaN(pesoAbate!) || pesoAbate! <= 0)) {
+      Alert.alert("Atenção", "Peso Previsto Abate deve ser um número válido.");
+      return;
+    }
     onSave({
       numero: lote?.numero ?? nextNumero,
       raca: form.raca,
@@ -157,6 +165,7 @@ export function LoteFormModal({
       produtor: form.produtor,
       produtorId: form.produtorId,
       gmdEstimado: gmd,
+      pesoAbate: pesoAbate || undefined,
       ativo: form.ativo,
       dietaId: form.dietaId,
       dietaNome: form.dietaNome,
@@ -286,6 +295,17 @@ export function LoteFormModal({
                   value={form.gmdEstimado}
                   onChangeText={(v) =>
                     setForm((p) => ({ ...p, gmdEstimado: v }))
+                  }
+                  keyboardType="decimal-pad"
+                />
+
+                {/* Peso Previsto Abate */}
+                <Text style={styles.label}>Peso Previsto Abate (kg)</Text>
+                <Input
+                  placeholder="Ex: 900"
+                  value={form.pesoAbate}
+                  onChangeText={(v) =>
+                    setForm((p) => ({ ...p, pesoAbate: v }))
                   }
                   keyboardType="decimal-pad"
                 />

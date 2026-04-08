@@ -188,6 +188,7 @@ const tabelasAuxiliares: TabelaAuxiliar[] = [
     colecao: "parametros",
     dados: [
       { descricao: "tempoMS", valor: 3 },
+      { descricao: "custo_operacional", valor: 2 },
     ],
   },
 ]
