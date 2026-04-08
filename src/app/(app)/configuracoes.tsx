@@ -74,6 +74,14 @@ const TABELAS: TabelaConfig[] = [
       { key: "valor", label: "Valor", tipo: "numero" },
     ],
   },
+  {
+    nome: "Configuracoes IA",
+    colecao: "configuracoesIA",
+    campos: [
+      { key: "descricao", label: "Parametro", tipo: "texto" },
+      { key: "valor", label: "Valor", tipo: "texto" },
+    ],
+  },
 ];
 
 type ItemAux = { id: string } & Record<string, string | number>;

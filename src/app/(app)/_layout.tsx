@@ -27,6 +27,7 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
   { route: "roteiros", label: "Roteiros", icon: "truck" },
   { route: "mapa-trato", label: "Mapa de Trato", icon: "map" },
   { route: "tratador", label: "Tratador", icon: "play-circle" },
+  { route: "estimativa-peso", label: "Estimativa Peso", icon: "camera" },
   { route: "configuracoes", label: "Configuracoes", icon: "settings" },
   { route: "signup", label: "Usuarios", icon: "user-plus" },
 ];

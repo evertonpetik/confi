@@ -54,7 +54,14 @@
         }
       ],
       "@react-native-firebase/auth",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "O app precisa da camera para estimar o peso dos animais.",
+          "photosPermission": "O app precisa acessar suas fotos para estimar o peso dos animais."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
