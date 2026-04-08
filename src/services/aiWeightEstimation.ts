@@ -54,13 +54,20 @@ export async function estimarPesoPorImagem(
 ): Promise<EstimativaPesoResult> {
   const mediaType = mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const isWeb = typeof window !== "undefined" && typeof document !== "undefined";
+  const url = isWeb ? "/api/anthropic" : "https://api.anthropic.com/v1/messages";
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-api-key": apiKey,
+  };
+  if (!isWeb) {
+    headers["anthropic-version"] = "2023-06-01";
+  }
+
+  const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
+    headers,
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
