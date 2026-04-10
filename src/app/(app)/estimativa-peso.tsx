@@ -14,6 +14,10 @@ import {
   type EstimativaPesoResult,
 } from "@/services/aiWeightEstimation";
 import {
+  isModelAvailable,
+  estimarPesoOffline,
+} from "@/services/localWeightEstimation";
+import {
   addDocument,
   getCollection,
 } from "@/services/firestoreService";
@@ -21,7 +25,7 @@ import { Feather } from "@expo/vector-icons";
 import NetInfo from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -54,6 +58,15 @@ export default function EstimativaPeso() {
   const [result, setResult] = useState<EstimativaPesoResult | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [modoOffline, setModoOffline] = useState(false);
+  const [modeloDisponivel, setModeloDisponivel] = useState(false);
+
+  useEffect(() => {
+    const available = isModelAvailable();
+    setModeloDisponivel(available);
+    if (available) setModoOffline(true);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -156,6 +169,30 @@ export default function EstimativaPeso() {
   }
 
   async function handleAnalyze() {
+    if (modoOffline && modeloDisponivel) {
+      // Offline mode - TFLite model
+      if (!imageUri) {
+        Alert.alert("Erro", "Nenhuma imagem selecionada.");
+        return;
+      }
+
+      setStep("ANALYZING");
+      setError(null);
+
+      try {
+        const resultado = await estimarPesoOffline(imageUri);
+        setResult(resultado);
+        setStep("RESULTS");
+      } catch (err: any) {
+        console.error("Erro na estimativa offline:", err);
+        setError(err.message ?? "Erro ao analisar a imagem com modelo local.");
+        Alert.alert("Erro", err.message ?? "Nao foi possivel analisar a imagem.");
+        setStep("CAMERA");
+      }
+      return;
+    }
+
+    // Online mode - Claude Vision API
     if (!imageBase64) {
       Alert.alert("Erro", "Nenhuma imagem selecionada.");
       return;
@@ -233,7 +270,7 @@ export default function EstimativaPeso() {
         confiancaMin: result.confiancaMin,
         confiancaMax: result.confiancaMax,
         escoreCondicaoCorporal: result.escoreCondicaoCorporal,
-        metodo: "ia_visual",
+        metodo: modoOffline ? "modelo_local" : "ia_visual",
         observacao: result.observacao,
         loteId: selectedLote?.id ?? null,
         loteNumero: selectedLote?.numero ?? null,
@@ -357,6 +394,53 @@ export default function EstimativaPeso() {
           estimativa.
         </Text>
 
+        {/* Mode toggle */}
+        <View style={styles.modeToggleContainer}>
+          <TouchableOpacity
+            style={[
+              styles.modeToggleButton,
+              !modoOffline && styles.modeToggleButtonActive,
+            ]}
+            activeOpacity={0.7}
+            onPress={() => setModoOffline(false)}
+          >
+            <Feather name="cloud" size={14} color={!modoOffline ? "#FFF" : "#666"} />
+            <Text
+              style={[
+                styles.modeToggleText,
+                !modoOffline && styles.modeToggleTextActive,
+              ]}
+            >
+              Online (IA)
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.modeToggleButton,
+              modoOffline && styles.modeToggleButtonActive,
+              !modeloDisponivel && styles.buttonDisabled,
+            ]}
+            activeOpacity={0.7}
+            onPress={() => modeloDisponivel && setModoOffline(true)}
+            disabled={!modeloDisponivel}
+          >
+            <Feather name="smartphone" size={14} color={modoOffline ? "#FFF" : "#666"} />
+            <Text
+              style={[
+                styles.modeToggleText,
+                modoOffline && styles.modeToggleTextActive,
+              ]}
+            >
+              Offline
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {!modeloDisponivel && (
+          <Text style={styles.modeHint}>
+            Modelo offline nao disponivel. Coloque o arquivo .tflite em assets/models/.
+          </Text>
+        )}
+
         {/* Camera guidance */}
         <View style={styles.guideCard}>
           <Feather name="info" size={18} color="#3366FF" />
@@ -446,8 +530,9 @@ export default function EstimativaPeso() {
         <ActivityIndicator size="large" color="#3366FF" />
         <Text style={styles.analyzingTitle}>Analisando imagem...</Text>
         <Text style={styles.analyzingSubtitle}>
-          A inteligencia artificial esta avaliando o animal na foto.
-          Isso pode levar alguns segundos.
+          {modoOffline
+            ? "O modelo local esta avaliando o animal na foto."
+            : "A inteligencia artificial esta avaliando o animal na foto. Isso pode levar alguns segundos."}
         </Text>
       </View>
     );
@@ -487,6 +572,11 @@ export default function EstimativaPeso() {
             <View style={styles.eccBadge}>
               <Text style={styles.eccBadgeText}>
                 ECC: {result.escoreCondicaoCorporal}/9
+              </Text>
+            </View>
+            <View style={[styles.eccBadge, { backgroundColor: modoOffline ? "#2E7D32" : "#FF9800", marginLeft: 8 }]}>
+              <Text style={styles.eccBadgeText}>
+                {modoOffline ? "Modelo Local" : "Claude Vision"}
               </Text>
             </View>
           </View>
@@ -884,5 +974,38 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 16,
     backgroundColor: "#F0F0F0",
+  },
+  modeToggleContainer: {
+    flexDirection: "row",
+    backgroundColor: "#F0F0F0",
+    borderRadius: 12,
+    padding: 4,
+    marginTop: 16,
+  },
+  modeToggleButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 6,
+  },
+  modeToggleButtonActive: {
+    backgroundColor: "#3366FF",
+  },
+  modeToggleText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  modeToggleTextActive: {
+    color: "#FFF",
+  },
+  modeHint: {
+    fontSize: 12,
+    color: "#999",
+    textAlign: "center",
+    marginTop: 8,
   },
 });
