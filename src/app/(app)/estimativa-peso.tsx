@@ -14,10 +14,6 @@ import {
   type EstimativaPesoResult,
 } from "@/services/aiWeightEstimation";
 import {
-  isModelAvailable,
-  estimarPesoOffline,
-} from "@/services/localWeightEstimation";
-import {
   addDocument,
   getCollection,
 } from "@/services/firestoreService";
@@ -63,9 +59,12 @@ export default function EstimativaPeso() {
   const [modeloDisponivel, setModeloDisponivel] = useState(false);
 
   useEffect(() => {
-    const available = isModelAvailable();
-    setModeloDisponivel(available);
-    if (available) setModoOffline(true);
+    if (Platform.OS === "web") return;
+    import("@/services/localWeightEstimation").then(({ isModelAvailable }) => {
+      const available = isModelAvailable();
+      setModeloDisponivel(available);
+      if (available) setModoOffline(true);
+    }).catch(() => {});
   }, []);
 
   useFocusEffect(
@@ -180,6 +179,7 @@ export default function EstimativaPeso() {
       setError(null);
 
       try {
+        const { estimarPesoOffline } = await import("@/services/localWeightEstimation");
         const resultado = await estimarPesoOffline(imageUri);
         setResult(resultado);
         setStep("RESULTS");

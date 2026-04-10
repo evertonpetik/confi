@@ -14,12 +14,13 @@ let _modelAvailable: boolean | null = null;
  */
 export function isModelAvailable(): boolean {
   if (Platform.OS === "web") return false;
-  // Will be true once a .tflite file is bundled in assets/models/
   return _modelAvailable === true;
 }
 
 /**
  * Load the TFLite model. Call once at app start or before first inference.
+ * All native-only requires are inside this function so the web bundler
+ * never tries to resolve .tflite or react-native-fast-tflite.
  */
 export async function loadModel(): Promise<boolean> {
   if (Platform.OS === "web") {
@@ -33,9 +34,8 @@ export async function loadModel(): Promise<boolean> {
   _modelLoading = true;
   try {
     const { loadTensorflowModel } = require("react-native-fast-tflite");
-    _model = await loadTensorflowModel(
-      require("../../assets/models/cattle_weight_model.tflite")
-    );
+    const modelAsset = require("../../assets/models/cattle_weight_model.tflite");
+    _model = await loadTensorflowModel(modelAsset);
     _modelAvailable = true;
     return true;
   } catch (error) {
