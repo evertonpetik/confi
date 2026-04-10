@@ -394,51 +394,55 @@ export default function EstimativaPeso() {
           estimativa.
         </Text>
 
-        {/* Mode toggle */}
-        <View style={styles.modeToggleContainer}>
-          <TouchableOpacity
-            style={[
-              styles.modeToggleButton,
-              !modoOffline && styles.modeToggleButtonActive,
-            ]}
-            activeOpacity={0.7}
-            onPress={() => setModoOffline(false)}
-          >
-            <Feather name="cloud" size={14} color={!modoOffline ? "#FFF" : "#666"} />
-            <Text
-              style={[
-                styles.modeToggleText,
-                !modoOffline && styles.modeToggleTextActive,
-              ]}
-            >
-              Online (IA)
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.modeToggleButton,
-              modoOffline && styles.modeToggleButtonActive,
-              !modeloDisponivel && styles.buttonDisabled,
-            ]}
-            activeOpacity={0.7}
-            onPress={() => modeloDisponivel && setModoOffline(true)}
-            disabled={!modeloDisponivel}
-          >
-            <Feather name="smartphone" size={14} color={modoOffline ? "#FFF" : "#666"} />
-            <Text
-              style={[
-                styles.modeToggleText,
-                modoOffline && styles.modeToggleTextActive,
-              ]}
-            >
-              Offline
-            </Text>
-          </TouchableOpacity>
-        </View>
-        {!modeloDisponivel && (
-          <Text style={styles.modeHint}>
-            Modelo offline nao disponivel. Coloque o arquivo .tflite em assets/models/.
-          </Text>
+        {/* Mode toggle - only on native (TFLite not available on web) */}
+        {Platform.OS !== "web" && (
+          <>
+            <View style={styles.modeToggleContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.modeToggleButton,
+                  !modoOffline && styles.modeToggleButtonActive,
+                ]}
+                activeOpacity={0.7}
+                onPress={() => setModoOffline(false)}
+              >
+                <Feather name="cloud" size={14} color={!modoOffline ? "#FFF" : "#666"} />
+                <Text
+                  style={[
+                    styles.modeToggleText,
+                    !modoOffline && styles.modeToggleTextActive,
+                  ]}
+                >
+                  Online (IA)
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modeToggleButton,
+                  modoOffline && styles.modeToggleButtonActive,
+                  !modeloDisponivel && styles.buttonDisabled,
+                ]}
+                activeOpacity={0.7}
+                onPress={() => modeloDisponivel && setModoOffline(true)}
+                disabled={!modeloDisponivel}
+              >
+                <Feather name="smartphone" size={14} color={modoOffline ? "#FFF" : "#666"} />
+                <Text
+                  style={[
+                    styles.modeToggleText,
+                    modoOffline && styles.modeToggleTextActive,
+                  ]}
+                >
+                  Offline
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {!modeloDisponivel && (
+              <Text style={styles.modeHint}>
+                Modelo offline nao disponivel. Coloque o arquivo .tflite em assets/models/.
+              </Text>
+            )}
+          </>
         )}
 
         {/* Camera guidance */}
