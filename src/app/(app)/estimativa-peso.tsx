@@ -60,11 +60,12 @@ export default function EstimativaPeso() {
 
   useEffect(() => {
     if (Platform.OS === "web") return;
-    import("@/services/localWeightEstimation").then(({ isModelAvailable }) => {
+    import("@/services/localWeightEstimation").then(async ({ loadModel, isModelAvailable }) => {
+      await loadModel();
       const available = isModelAvailable();
       setModeloDisponivel(available);
       if (available) setModoOffline(true);
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
   useFocusEffect(
