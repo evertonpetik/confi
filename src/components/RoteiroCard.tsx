@@ -104,6 +104,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#1a1a1a",
+    flexShrink: 1,
   },
   badge: {
     paddingHorizontal: 8,
@@ -133,6 +134,7 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     marginTop: 8,
     gap: 16,
   },

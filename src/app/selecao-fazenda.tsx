@@ -1,7 +1,7 @@
+import { Button } from "@/components/Button";
+import { Input } from "@/components/Input";
 import { useAuth } from "@/contexts/AuthContext";
 import { useResponsive } from "@/hooks/useResponsive";
-import { Input } from "@/components/Input";
-import { Button } from "@/components/Button";
 import { addRawDocument, setCurrentFazendaId } from "@/services/firestoreService";
 import { seedTabelasAuxiliares } from "@/utils/seedTabelasAuxiliares";
 import { Feather } from "@expo/vector-icons";
@@ -17,7 +17,7 @@ import {
 } from "react-native";
 
 export default function SelecaoFazenda() {
-  const { isTablet, maxWidthAuth } = useResponsive();
+  const { isTablet, maxWidthAuth, containerPadding, titleFontSize } = useResponsive();
   const { fazendas, selectFazenda, signOut, userProfile, loading: authLoading } = useAuth();
   const [ready, setReady] = useState(false);
   const [novaFazendaNome, setNovaFazendaNome] = useState("");
@@ -85,6 +85,7 @@ export default function SelecaoFazenda() {
         <View
           style={[
             styles.container,
+            { padding: containerPadding },
             isTablet && {
               maxWidth: maxWidthAuth,
               alignSelf: "center" as const,
@@ -95,7 +96,7 @@ export default function SelecaoFazenda() {
           <Text style={styles.greeting}>
             Ola, {userProfile?.nome ?? ""}
           </Text>
-          <Text style={styles.title}>Criar Fazenda</Text>
+          <Text style={[styles.title, { fontSize: titleFontSize }]}>Criar Fazenda</Text>
           <Text style={styles.subtitle}>
             Nenhuma fazenda cadastrada. Crie a primeira para comecar.
           </Text>
@@ -179,7 +180,7 @@ export default function SelecaoFazenda() {
         <Text style={styles.greeting}>
           Ola, {userProfile?.nome ?? ""}
         </Text>
-        <Text style={styles.title}>Selecione a Fazenda</Text>
+        <Text style={[styles.title, { fontSize: titleFontSize }]}>Selecione a Fazenda</Text>
         <Text style={styles.subtitle}>
           Escolha em qual fazenda deseja trabalhar.
         </Text>

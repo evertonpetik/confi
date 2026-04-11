@@ -41,7 +41,7 @@ type Usuario = {
 };
 
 export default function Signup() {
-  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const { userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -283,6 +283,7 @@ export default function Signup() {
           <View
             style={[
               styles.container,
+              { padding: containerPadding },
               isTablet &&
               !isDesktop && {
                 maxWidth: maxWidthContent,
@@ -291,8 +292,8 @@ export default function Signup() {
               },
             ]}
           >
-            <View style={styles.header}>
-              <Text style={styles.title}>Gestao</Text>
+            <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
+              <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Gestao</Text>
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
             <Text style={styles.subtitle}>

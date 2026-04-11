@@ -60,7 +60,7 @@ type DescargaItem = {
 // ---- Component ----
 
 export default function Tratador() {
-  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop, isSmallPhone } = useResponsive();
   const [step, setStep] = useState<Step>("SELECT_VAGAO");
   const [saving, setSaving] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
@@ -702,9 +702,9 @@ export default function Tratador() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={[styles.container, isTablet && !isDesktop && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
-              <View style={styles.header}>
-                <Text style={styles.title}>Tratador</Text>
+            <View style={[styles.container, { padding: containerPadding }, isTablet && !isDesktop && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
+              <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
+                <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Tratador</Text>
                 {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
               </View>
               {loadingData ? (
@@ -748,9 +748,9 @@ export default function Tratador() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={[styles.container, isTablet && !isDesktop && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
-              <View style={styles.header}>
-                <Text style={styles.title}>Tratador</Text>
+            <View style={[styles.container, { padding: containerPadding }, isTablet && !isDesktop && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
+              <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
+                <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Tratador</Text>
                 {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
               </View>
               <Text style={styles.subtitle}>
@@ -823,7 +823,7 @@ export default function Tratador() {
             </View>
 
             {/* Content */}
-            <View style={styles.playerContent}>
+            <View style={[styles.playerContent, isSmallPhone && { paddingHorizontal: 16 }]}>
               {renderDots(currentItemIndex, totalItems)}
 
               <Text style={styles.playerItemCount}>
@@ -839,7 +839,7 @@ export default function Tratador() {
               <View style={styles.inputContainer}>
                 <TextInput
                   ref={inputRef}
-                  style={styles.playerInput}
+                  style={[styles.playerInput, isSmallPhone && { width: 180 }]}
                   value={String(info.realizado)}
                   onChangeText={updateCargaRealizado}
                   keyboardType="numeric"
@@ -931,7 +931,7 @@ export default function Tratador() {
             </View>
 
             {/* Content */}
-            <View style={styles.playerContent}>
+            <View style={[styles.playerContent, isSmallPhone && { paddingHorizontal: 16 }]}>
               {renderDots(currentItemIndex, totalItems)}
 
               <Text style={styles.playerItemCount}>
@@ -947,7 +947,7 @@ export default function Tratador() {
               <View style={styles.inputContainer}>
                 <TextInput
                   ref={inputRef}
-                  style={styles.playerInput}
+                  style={[styles.playerInput, isSmallPhone && { width: 180 }]}
                   value={String(info.realizado)}
                   onChangeText={updateDescargaRealizado}
                   keyboardType="numeric"

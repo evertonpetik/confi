@@ -58,7 +58,7 @@ type AlertaCmsLote = {
 };
 
 export default function Leitura() {
-  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent, isSmallPhone, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [lotes, setLotes] = useState<LoteComPiquete[]>([]);
   const [notas, setNotas] = useState<NotaLeitura[]>([]);
   const [loading, setLoading] = useState(true);
@@ -371,6 +371,7 @@ export default function Leitura() {
           <View
             style={[
               styles.container,
+              { padding: containerPadding },
               isTablet && !isDesktop && {
                 maxWidth: maxWidthContent,
                 alignSelf: "center" as const,
@@ -378,8 +379,8 @@ export default function Leitura() {
               },
             ]}
           >
-            <View style={styles.header}>
-              <Text style={styles.title}>Leitura de Cocho</Text>
+            <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
+              <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Leitura de Cocho</Text>
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
@@ -423,9 +424,9 @@ export default function Leitura() {
                   <View style={styles.legendInfo}>
                     <Text style={styles.legendText}>Piquete / Lote</Text>
                   </View>
-                  <View style={styles.legendNotas}>
+                  <View style={[styles.legendNotas, isSmallPhone && { gap: 4 }]}>
                     {notas.map((n) => (
-                      <View key={n.descricao} style={styles.legendNotaItem}>
+                      <View key={n.descricao} style={[styles.legendNotaItem, isSmallPhone && { width: 32 }]}>
                         <Text style={styles.legendNotaText}>
                           {n.descricao}
                         </Text>
@@ -497,7 +498,7 @@ export default function Leitura() {
                             </TouchableOpacity>
                           </View>
                         </View>
-                        <View style={styles.notasRow}>
+                        <View style={[styles.notasRow, isSmallPhone && { gap: 4 }]}>
                           {notas.map((nota) => {
                             const isSelected =
                               leituraHoje?.nota === nota.descricao;
@@ -524,6 +525,7 @@ export default function Leitura() {
                                 key={nota.descricao}
                                 style={[
                                   styles.notaButton,
+                                  isSmallPhone && { width: 32, height: 32, borderRadius: 16 },
                                   corStyle,
                                   isSelected && corSelectedStyle,
                                 ]}

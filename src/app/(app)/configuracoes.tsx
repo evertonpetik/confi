@@ -87,7 +87,7 @@ const TABELAS: TabelaConfig[] = [
 type ItemAux = { id: string } & Record<string, string | number>;
 
 export default function Configuracoes() {
-  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const { selectedFazendaId } = useAuth();
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
@@ -281,6 +281,7 @@ export default function Configuracoes() {
           <View
             style={[
               styles.container,
+              { padding: containerPadding },
               isTablet && !isDesktop && {
                 maxWidth: maxWidthContent,
                 alignSelf: "center" as const,
@@ -288,8 +289,8 @@ export default function Configuracoes() {
               },
             ]}
           >
-            <View style={styles.header}>
-              <Text style={styles.title}>Configuracoes</Text>
+            <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
+              <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Configuracoes</Text>
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 

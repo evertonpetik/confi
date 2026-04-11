@@ -53,7 +53,7 @@ function parseCSVLine(line: string): string[] {
 // ---- Component ----
 
 export default function MapaTrato() {
-  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop, isSmallPhone } = useResponsive();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -735,6 +735,7 @@ export default function MapaTrato() {
           <View
             style={[
               styles.container,
+              { padding: containerPadding },
               isTablet && !isDesktop && {
                 maxWidth: maxWidthContent,
                 alignSelf: "center" as const,
@@ -742,8 +743,8 @@ export default function MapaTrato() {
               },
             ]}
           >
-            <View style={styles.header}>
-              <Text style={styles.title}>Mapa de Trato</Text>
+            <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
+              <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Mapa de Trato</Text>
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
@@ -801,7 +802,7 @@ export default function MapaTrato() {
                     onPress={handleExportCSV}
                   >
                     <Feather name="file-text" size={18} color="#FFF" />
-                    <Text style={styles.exportButtonLabel}>Exportar CSV</Text>
+                    <Text style={styles.exportButtonLabel} numberOfLines={1} adjustsFontSizeToFit>Exportar CSV</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.importButton}
@@ -809,7 +810,7 @@ export default function MapaTrato() {
                     onPress={handleImportCSV}
                   >
                     <Feather name="upload" size={18} color="#FFF" />
-                    <Text style={styles.exportButtonLabel}>Importar Realizados</Text>
+                    <Text style={styles.exportButtonLabel} numberOfLines={1} adjustsFontSizeToFit>Importar Realizados</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -1020,6 +1021,7 @@ const styles = StyleSheet.create({
   },
   cardHeader: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 8,
     marginBottom: 4,
@@ -1053,6 +1055,7 @@ const styles = StyleSheet.create({
   },
   cardStatsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     marginTop: 12,
     gap: 16,
   },

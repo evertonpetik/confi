@@ -72,6 +72,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#1a1a1a",
+    flexShrink: 1,
   },
   fazenda: {
     fontSize: 14,

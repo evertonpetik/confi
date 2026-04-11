@@ -428,6 +428,7 @@ const styles = StyleSheet.create({
   },
   cmsInfoRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginTop: 2,
   },

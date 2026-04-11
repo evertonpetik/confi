@@ -110,7 +110,7 @@ function MobileDrawer() {
   const { isTablet } = useResponsive();
   const { width: screenWidth } = useWindowDimensions();
 
-  const drawerWidth = isTablet ? 280 : screenWidth * 0.5;
+  const drawerWidth = isTablet ? 280 : Math.max(screenWidth * 0.65, 220);
 
   const translateX = progress.interpolate({
     inputRange: [0, 1],

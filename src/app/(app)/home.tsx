@@ -48,7 +48,7 @@ type LoteReportRow = {
 // ---- Component ----
 
 export default function Home() {
-  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop, cardValueFontSize } = useResponsive();
   const [lotesAtivos, setLotesAtivos] = useState(0);
   const [totalAnimais, setTotalAnimais] = useState(0);
   const [totalMortes, setTotalMortes] = useState(0);
@@ -316,7 +316,7 @@ export default function Home() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={[styles.container, isTablet && !isDesktop && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
+          <View style={[styles.container, { padding: containerPadding }, isTablet && !isDesktop && { maxWidth: maxWidthContent, alignSelf: "center" as const, width: "100%" }]}>
 
             {insumosVencidos.length > 0 && (
               <View style={styles.alertBanner}>
@@ -327,8 +327,8 @@ export default function Home() {
               </View>
             )}
 
-            <View style={styles.header}>
-              <Text style={styles.title}>Dashboard</Text>
+            <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
+              <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Dashboard</Text>
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
@@ -388,40 +388,40 @@ export default function Home() {
                     <View style={styles.cardIcon}>
                       <Feather name="layers" size={24} color="#3366FF" />
                     </View>
-                    <Text style={styles.cardValue}>{lotesAtivos}</Text>
-                    <Text style={styles.cardLabel}>Lotes Ativos</Text>
+                    <Text style={[styles.cardValue, { fontSize: cardValueFontSize }]} adjustsFontSizeToFit numberOfLines={1}>{lotesAtivos}</Text>
+                    <Text style={styles.cardLabel} numberOfLines={2}>Lotes Ativos</Text>
                   </View>
 
                   <View style={[styles.card, styles.cardGreen, { flexBasis: cardBasis }]}>
                     <View style={styles.cardIcon}>
                       <Feather name="bar-chart-2" size={24} color="#2E7D32" />
                     </View>
-                    <Text style={styles.cardValue}>{totalAnimais}</Text>
-                    <Text style={styles.cardLabel}>Total de Animais</Text>
+                    <Text style={[styles.cardValue, { fontSize: cardValueFontSize }]} adjustsFontSizeToFit numberOfLines={1}>{totalAnimais}</Text>
+                    <Text style={styles.cardLabel} numberOfLines={2}>Total de Animais</Text>
                   </View>
 
                   <View style={[styles.card, styles.cardTeal, { flexBasis: cardBasis }]}>
                     <View style={styles.cardIcon}>
                       <Feather name="log-in" size={24} color="#00796B" />
                     </View>
-                    <Text style={styles.cardValue}>{totalEntradas}</Text>
-                    <Text style={styles.cardLabel}>Entradas</Text>
+                    <Text style={[styles.cardValue, { fontSize: cardValueFontSize }]} adjustsFontSizeToFit numberOfLines={1}>{totalEntradas}</Text>
+                    <Text style={styles.cardLabel} numberOfLines={2}>Entradas</Text>
                   </View>
 
                   <View style={[styles.card, styles.cardOrange, { flexBasis: cardBasis }]}>
                     <View style={styles.cardIcon}>
                       <Feather name="dollar-sign" size={24} color="#E65100" />
                     </View>
-                    <Text style={styles.cardValue}>{totalVendas}</Text>
-                    <Text style={styles.cardLabel}>Vendas</Text>
+                    <Text style={[styles.cardValue, { fontSize: cardValueFontSize }]} adjustsFontSizeToFit numberOfLines={1}>{totalVendas}</Text>
+                    <Text style={styles.cardLabel} numberOfLines={2}>Vendas</Text>
                   </View>
 
                   <View style={[styles.card, styles.cardRed, { flexBasis: cardBasis }]}>
                     <View style={styles.cardIcon}>
                       <Feather name="alert-triangle" size={24} color="#C62828" />
                     </View>
-                    <Text style={styles.cardValue}>{totalMortes}</Text>
-                    <Text style={styles.cardLabel}>Mortes</Text>
+                    <Text style={[styles.cardValue, { fontSize: cardValueFontSize }]} adjustsFontSizeToFit numberOfLines={1}>{totalMortes}</Text>
+                    <Text style={styles.cardLabel} numberOfLines={2}>Mortes</Text>
                   </View>
                 </View>
               </>
@@ -531,7 +531,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     alignItems: "center",
-    minWidth: 140,
+    minWidth: 120,
   },
   cardBlue: {
     backgroundColor: "#EEF2FF",

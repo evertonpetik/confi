@@ -38,7 +38,7 @@ import {
 type Step = "SELECT_LOTE" | "CAMERA" | "ANALYZING" | "RESULTS";
 
 export default function EstimativaPeso() {
-  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
 
   const [step, setStep] = useState<Step>("SELECT_LOTE");
   const [lotes, setLotes] = useState<Lote[]>([]);
@@ -676,6 +676,7 @@ export default function EstimativaPeso() {
           <View
             style={[
               styles.container,
+              { padding: containerPadding },
               isTablet &&
               !isDesktop && {
                 maxWidth: maxWidthContent,
@@ -684,8 +685,8 @@ export default function EstimativaPeso() {
               },
             ]}
           >
-            <View style={styles.header}>
-              <Text style={styles.title}>Estimativa de Peso</Text>
+            <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
+              <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Estimativa de Peso</Text>
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
             <Text style={styles.subtitle}>

@@ -42,7 +42,7 @@ type LoteRef = {
 type FiltroStatus = "ativos" | "inativos";
 
 export default function Roteiros() {
-  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [roteiros, setRoteiros] = useState<Roteiro[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState<FiltroStatus>("ativos");
@@ -254,6 +254,7 @@ export default function Roteiros() {
           <View
             style={[
               styles.container,
+              { padding: containerPadding },
               isTablet && !isDesktop && {
                 maxWidth: maxWidthContent,
                 alignSelf: "center" as const,
@@ -261,8 +262,8 @@ export default function Roteiros() {
               },
             ]}
           >
-            <View style={styles.header}>
-              <Text style={styles.title}>Roteiros</Text>
+            <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
+              <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Roteiros</Text>
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 

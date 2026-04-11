@@ -15,7 +15,7 @@ import {
 } from "react-native";
 
 export default function Index() {
-  const { isTablet, maxWidthAuth } = useResponsive();
+  const { isTablet, isSmallPhone, maxWidthAuth, containerPadding, titleFontSize } = useResponsive();
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -58,6 +58,7 @@ export default function Index() {
         <View
           style={[
             styles.container,
+            { padding: containerPadding },
             isTablet && {
               maxWidth: maxWidthAuth,
               alignSelf: "center" as const,
@@ -68,9 +69,9 @@ export default function Index() {
           <Image
             source={require("@/assets/img1.png")}
             resizeMode="contain"
-            style={[styles.illustration, isTablet && styles.illustrationWide]}
+            style={[styles.illustration, isTablet && styles.illustrationWide, isSmallPhone && { height: 220, marginTop: 24, marginLeft: -containerPadding }]}
           />
-          <Text style={styles.title}>Entrar</Text>
+          <Text style={[styles.title, { fontSize: titleFontSize }]}>Entrar</Text>
           <Text style={styles.subtitle}>
             Acesse sua conta com e-mail e senha.
           </Text>

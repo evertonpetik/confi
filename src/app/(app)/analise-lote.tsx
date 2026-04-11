@@ -12,6 +12,7 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { getCollection } from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,7 +23,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { BarChart, LineChart } from "react-native-gifted-charts";
 
 // ---- Types ----
@@ -39,7 +39,7 @@ type DailyData = {
 // ---- Component ----
 
 export default function AnaliseLote() {
-  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop, cardValueFontSize } = useResponsive();
 
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [loadingLotes, setLoadingLotes] = useState(true);
@@ -315,7 +315,7 @@ export default function AnaliseLote() {
           {/* Custo Diária */}
           <View style={[styles.kpiCard, { flex: 1 }]}>
             <Text style={styles.kpiTitle}>Custo Diaria</Text>
-            <Text style={styles.kpiMainValue}>
+            <Text style={[styles.kpiMainValue, { fontSize: cardValueFontSize }]} adjustsFontSizeToFit numberOfLines={1}>
               R$ {custoDiaMedia.toFixed(2)}
             </Text>
             <Text style={styles.kpiSubLabel}>R$/dia media</Text>
@@ -338,7 +338,7 @@ export default function AnaliseLote() {
           {/* Peso por Animal */}
           <View style={[styles.kpiCard, { flex: 1 }]}>
             <Text style={styles.kpiTitle}>Peso por Animal Kg</Text>
-            <Text style={styles.kpiMainValue}>
+            <Text style={[styles.kpiMainValue, { fontSize: cardValueFontSize }]} adjustsFontSizeToFit numberOfLines={1}>
               {pesoProjetado > 0 ? pesoProjetado.toFixed(2) : "-"}
             </Text>
             <Text style={styles.kpiSubLabel}>Kg Hoje Projetado</Text>
@@ -369,7 +369,7 @@ export default function AnaliseLote() {
           {/* Dias de Confinamento */}
           <View style={[styles.kpiCard, { flex: 1 }]}>
             <Text style={styles.kpiTitle}>Dias de confinamento</Text>
-            <Text style={[styles.kpiMainValue, { color: "#3366FF" }]}>
+            <Text style={[styles.kpiMainValue, { fontSize: cardValueFontSize, color: "#3366FF" }]} adjustsFontSizeToFit numberOfLines={1}>
               {diasConfinamento}
             </Text>
             <Text style={styles.kpiSubLabel}>dias</Text>
@@ -497,7 +497,7 @@ export default function AnaliseLote() {
         {/* Consumo Dieta MO/Cab */}
         <View style={styles.indicatorCard}>
           <Text style={styles.indicatorLabel}>Consumo Dieta MO/Cab/Kg</Text>
-          <Text style={styles.indicatorValue}>
+          <Text style={styles.indicatorValue} adjustsFontSizeToFit numberOfLines={1}>
             {consMOCab > 0 ? consMOCab.toFixed(2) : "-"}
           </Text>
         </View>
@@ -507,7 +507,7 @@ export default function AnaliseLote() {
           <Text style={styles.indicatorLabel}>
             GMD Previsto Calc. Consumo
           </Text>
-          <Text style={styles.indicatorValue}>
+          <Text style={styles.indicatorValue} adjustsFontSizeToFit numberOfLines={1}>
             {gmdRealUltimo > 0 ? gmdRealUltimo.toFixed(2) : "-"}
           </Text>
         </View>
@@ -515,7 +515,7 @@ export default function AnaliseLote() {
         {/* Animais */}
         <View style={styles.indicatorCard}>
           <Text style={styles.indicatorLabel}>Animais</Text>
-          <Text style={[styles.indicatorValue, { fontSize: 36 }]}>
+          <Text style={[styles.indicatorValue, { fontSize: 36 }]} adjustsFontSizeToFit numberOfLines={1}>
             {qtdAnimais}
           </Text>
         </View>
@@ -540,14 +540,14 @@ export default function AnaliseLote() {
               </Text>
             </View>
           ) : (
-            <Text style={styles.indicatorValue}>-</Text>
+            <Text style={styles.indicatorValue} adjustsFontSizeToFit numberOfLines={1}>-</Text>
           )}
         </View>
 
         {/* Roteiro */}
         <View style={styles.indicatorCard}>
           <Text style={styles.indicatorLabel}>Roteiro</Text>
-          <Text style={styles.indicatorValue}>
+          <Text style={styles.indicatorValue} adjustsFontSizeToFit numberOfLines={1}>
             {roteiroInfo || "-"}
           </Text>
         </View>
@@ -569,6 +569,7 @@ export default function AnaliseLote() {
           <View
             style={[
               styles.container,
+              { padding: containerPadding },
               isTablet &&
               !isDesktop && {
                 maxWidth: maxWidthContent,
@@ -577,8 +578,8 @@ export default function AnaliseLote() {
               },
             ]}
           >
-            <View style={styles.header}>
-              <Text style={styles.title}>Analise por Lote</Text>
+            <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
+              <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Analise por Lote</Text>
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
             <Text style={styles.subtitle}>

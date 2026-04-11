@@ -53,7 +53,7 @@ function calcularCustoKgMS(
 }
 
 export default function Dietas() {
-  const { isTablet, isDesktop, maxWidthContent } = useResponsive();
+  const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [dietas, setDietas] = useState<Dieta[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -239,6 +239,7 @@ export default function Dietas() {
           <View
             style={[
               styles.container,
+              { padding: containerPadding },
               isTablet && !isDesktop && {
                 maxWidth: maxWidthContent,
                 alignSelf: "center" as const,
@@ -246,8 +247,8 @@ export default function Dietas() {
               },
             ]}
           >
-            <View style={styles.header}>
-              <Text style={styles.title}>Dietas</Text>
+            <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
+              <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Dietas</Text>
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
 
