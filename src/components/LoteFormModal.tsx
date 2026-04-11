@@ -26,12 +26,10 @@ type LoteFormModalProps = {
   implanteOptions: SelectOption[];
   tamanhoCorporalOptions: SelectOption[];
   produtorOptions: SelectOption[];
-  dietaOptions: SelectOption[];
   piqueteOptions: SelectOption[];
   onSave: (data: Omit<Lote, "id" | "movimentacoes">) => void;
   onClose: () => void;
   onAddProdutor?: () => void;
-  onAddDieta?: () => void;
 };
 
 type LoteForm = {
@@ -45,8 +43,6 @@ type LoteForm = {
   gmdEstimado: string;
   pesoAbate: string;
   ativo: boolean;
-  dietaId: string;
-  dietaNome: string;
   piqueteId: string;
   piqueteNome: string;
 };
@@ -62,8 +58,6 @@ const emptyForm: LoteForm = {
   gmdEstimado: "",
   pesoAbate: "",
   ativo: true,
-  dietaId: "",
-  dietaNome: "",
   piqueteId: "",
   piqueteNome: "",
 };
@@ -78,12 +72,10 @@ export function LoteFormModal({
   implanteOptions,
   tamanhoCorporalOptions,
   produtorOptions,
-  dietaOptions,
   piqueteOptions,
   onSave,
   onClose,
   onAddProdutor,
-  onAddDieta,
 }: LoteFormModalProps) {
   const [form, setForm] = useState<LoteForm>(emptyForm);
   const isEditing = !!lote;
@@ -102,8 +94,6 @@ export function LoteFormModal({
           gmdEstimado: lote.gmdEstimado?.toString() ?? "",
           pesoAbate: lote.pesoAbate?.toString() ?? "",
           ativo: lote.ativo ?? true,
-          dietaId: lote.dietaId ?? "",
-          dietaNome: lote.dietaNome ?? "",
           piqueteId: lote.piqueteId ?? "",
           piqueteNome: lote.piqueteNome ?? "",
         });
@@ -119,15 +109,6 @@ export function LoteFormModal({
       ...prev,
       produtorId: value,
       produtor: selected?.label ?? "",
-    }));
-  }
-
-  function handleDietaSelect(value: string) {
-    const selected = dietaOptions.find((d) => d.value === value);
-    setForm((prev) => ({
-      ...prev,
-      dietaId: value,
-      dietaNome: selected?.label ?? "",
     }));
   }
 
@@ -167,8 +148,6 @@ export function LoteFormModal({
       gmdEstimado: gmd,
       pesoAbate: pesoAbate || undefined,
       ativo: form.ativo,
-      dietaId: form.dietaId,
-      dietaNome: form.dietaNome,
       piqueteId: form.piqueteId,
       piqueteNome: form.piqueteNome,
     });
@@ -267,16 +246,6 @@ export function LoteFormModal({
                   options={produtorOptions}
                   onSelect={handleProdutorSelect}
                   onAdd={onAddProdutor}
-                />
-
-                {/* Dieta */}
-                <Text style={styles.label}>Dieta</Text>
-                <Select
-                  placeholder="Selecione a dieta"
-                  value={form.dietaId}
-                  options={dietaOptions}
-                  onSelect={handleDietaSelect}
-                  onAdd={onAddDieta}
                 />
 
                 {/* Piquete */}

@@ -67,12 +67,26 @@ export default function Home() {
   async function fetchDashboard() {
     try {
       setLoading(true);
-      const [lotesSnap, histSnap, insumosSnap, parametrosSnap] = await Promise.all([
+      const [lotesSnap, histSnap, insumosSnap, parametrosSnap, roteirosSnap] = await Promise.all([
         getCollection("lotes"),
         getCollection("historicoMapaTrato"),
         getCollection("insumos"),
         getCollection("parametros"),
+        getCollection("roteiros"),
       ]);
+
+      // Build piqueteId -> dietaNome map from roteiros
+      const piqueteDietaMap = new Map<string, string>();
+      for (const rDoc of roteirosSnap.docs) {
+        const rData = rDoc.data();
+        const dietaNome = (rData.dietaNome as string) ?? "";
+        const piquetes = (rData.piquetes ?? []) as { piqueteId: string; piqueteNome: string }[];
+        for (const p of piquetes) {
+          if (p.piqueteId && dietaNome) {
+            piqueteDietaMap.set(p.piqueteId, dietaNome);
+          }
+        }
+      }
 
       // Verificar conferências de MS vencidas
       const tempoMSParam = parametrosSnap.docs.find(
@@ -241,7 +255,7 @@ export default function Home() {
         rows.push({
           piquete: ld.piqueteNome ?? "-",
           loteNumero: ld.numero ?? 0,
-          dieta: ld.dietaNome ?? "-",
+          dieta: (ld.piqueteId ? piqueteDietaMap.get(ld.piqueteId) : undefined) ?? "-",
           quantidade: qtdAtual,
           produtor: ld.produtor ?? "-",
           categoria: ld.categoria ?? "-",

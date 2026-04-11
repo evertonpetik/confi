@@ -38,7 +38,6 @@ type LoteComPiquete = {
   numero: number;
   piqueteId: string;
   piqueteNome: string;
-  dietaNome: string;
   cmsAtual: number;
   ultimaLeituraData: string;
 };
@@ -191,7 +190,6 @@ export default function Leitura() {
           numero: data.numero ?? 0,
           piqueteId: data.piqueteId ?? "",
           piqueteNome: data.piqueteNome ?? "",
-          dietaNome: data.dietaNome ?? "",
           cmsAtual,
           ultimaLeituraData,
         });

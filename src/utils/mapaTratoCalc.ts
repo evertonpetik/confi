@@ -53,7 +53,6 @@ export type LoteData = {
   compensatorio: string;
   implante: string;
   tamanhoCorporal: string;
-  dietaId: string;
 };
 
 export type InsumoMS = { id: string; percentualMateriaSeca: number; precoMedio: number };
@@ -431,7 +430,6 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
       compensatorio: ld.compensatorio ?? "",
       implante: ld.implante ?? "",
       tamanhoCorporal: ld.tamanhoCorporal ?? "",
-      dietaId: ld.dietaId ?? "",
     });
   }
 

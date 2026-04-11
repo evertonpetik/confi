@@ -1,11 +1,7 @@
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { Dieta } from "@/components/DietaCard";
-import { DietaFormModal } from "@/components/DietaFormModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { FaturamentoModal, LancamentoFinanceiro } from "@/components/FaturamentoModal";
-import { Insumo } from "@/components/InsumoCard";
-import { InsumoFormModal } from "@/components/InsumoFormModal";
 import { Lote, LoteCard, Movimentacao } from "@/components/LoteCard";
 import { LoteFormModal } from "@/components/LoteFormModal";
 import { MovimentacaoFormModal } from "@/components/MovimentacaoFormModal";
@@ -62,15 +58,10 @@ export default function Lotes() {
   const [tamanhoCorporalOptions, setTamanhoCorporalOptions] = useState<SelectOption[]>([]);
   const [produtorOptions, setProdutorOptions] = useState<SelectOption[]>([]);
   const [movimentacaoOptions, setMovimentacaoOptions] = useState<{ descricao: string; tipo: string }[]>([]);
-  const [dietaOptions, setDietaOptions] = useState<SelectOption[]>([]);
   const [allPiqueteOptions, setAllPiqueteOptions] = useState<SelectOption[]>([]);
 
   // Modais inline para cadastro rápido
   const [inlineProdutorVisible, setInlineProdutorVisible] = useState(false);
-  const [inlineDietaVisible, setInlineDietaVisible] = useState(false);
-  const [inlineInsumoVisible, setInlineInsumoVisible] = useState(false);
-  const [insumoOptions, setInsumoOptions] = useState<SelectOption[]>([]);
-  const [aditivoOptions, setAditivoOptions] = useState<SelectOption[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -82,7 +73,7 @@ export default function Lotes() {
 
   async function fetchOptions() {
     try {
-      const [racaSnap, catSnap, compSnap, impSnap, tamSnap, prodSnap, movSnap, dietaSnap, piqueteSnap, insumoSnap, aditivoSnap] =
+      const [racaSnap, catSnap, compSnap, impSnap, tamSnap, prodSnap, movSnap, piqueteSnap] =
         await Promise.all([
           getCollection("raca"),
           getCollection("categoria"),
@@ -91,10 +82,7 @@ export default function Lotes() {
           getCollection("tamanhoCorporal"),
           getCollection("produtores"),
           getCollection("movimentacao"),
-          getCollection("dietas"),
           getCollection("piquetes"),
-          getCollection("insumos"),
-          getCollection("aditivos"),
         ]);
 
       setRacaOptions(
@@ -139,15 +127,6 @@ export default function Lotes() {
           tipo: d.data().tipo as string,
         })).sort((a, b) => a.descricao.localeCompare(b.descricao))
       );
-      setDietaOptions(
-        dietaSnap.docs
-          .filter((d) => d.data().ativo !== false)
-          .map((d) => ({
-            label: d.data().nome,
-            value: d.id,
-          }))
-          .sort((a, b) => a.label.localeCompare(b.label))
-      );
       setAllPiqueteOptions(
         piqueteSnap.docs
           .map((d) => ({
@@ -159,19 +138,6 @@ export default function Lotes() {
             const numB = parseInt(b.label.replace(/\D/g, "")) || 0;
             return numA - numB;
           })
-      );
-      setInsumoOptions(
-        insumoSnap.docs
-          .map((d) => ({ label: d.data().nome as string, value: d.id }))
-          .sort((a, b) => a.label.localeCompare(b.label))
-      );
-      setAditivoOptions(
-        aditivoSnap.docs
-          .map((d) => ({
-            label: d.data().descricao as string,
-            value: d.data().descricao as string,
-          }))
-          .sort((a, b) => a.label.localeCompare(b.label))
       );
     } catch (error) {
       console.error("Erro ao buscar opções:", error);
@@ -204,8 +170,6 @@ export default function Lotes() {
           produtorId: loteData.produtorId ?? "",
           gmdEstimado: loteData.gmdEstimado ?? 0,
           ativo: loteData.ativo ?? true,
-          dietaId: loteData.dietaId ?? "",
-          dietaNome: loteData.dietaNome ?? "",
           piqueteId: loteData.piqueteId ?? "",
           piqueteNome: loteData.piqueteNome ?? "",
           movimentacoes,
@@ -321,36 +285,6 @@ export default function Lotes() {
     }
   }
 
-  async function handleInlineDietaSave(data: Omit<Dieta, "id">) {
-    try {
-      const docRef = await addDocument(["dietas"], data);
-      setDietaOptions((prev) =>
-        [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
-          a.label.localeCompare(b.label)
-        )
-      );
-      setInlineDietaVisible(false);
-    } catch (error) {
-      console.error("Erro ao salvar dieta:", error);
-      Alert.alert("Erro", "Não foi possível salvar a dieta.");
-    }
-  }
-
-  async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras" | "saidas">) {
-    try {
-      const docRef = await addDocument(["insumos"], data);
-      setInsumoOptions((prev) =>
-        [...prev, { label: data.nome, value: docRef.id }].sort((a, b) =>
-          a.label.localeCompare(b.label)
-        )
-      );
-      setInlineInsumoVisible(false);
-    } catch (error) {
-      console.error("Erro ao salvar insumo:", error);
-      Alert.alert("Erro", "Não foi possível salvar o insumo.");
-    }
-  }
-
   async function handleSave(data: Omit<Lote, "id" | "movimentacoes">) {
     try {
       const isInativando =
@@ -379,6 +313,32 @@ export default function Lotes() {
               await updateDocument(["roteiros"], rDoc.id, {
                 piquetes: filtered,
               });
+            }
+          }
+        }
+
+        // Se piquete mudou em lote ativo, atualizar roteiros
+        const piqueteMudou = !isInativando
+          && editingLote.piqueteId
+          && editingLote.piqueteId !== data.piqueteId;
+
+        if (piqueteMudou) {
+          const rotSnap = await getCollection("roteiros");
+          for (const rDoc of rotSnap.docs) {
+            const piquetes = (rDoc.data().piquetes ?? []) as {
+              piqueteId: string;
+              piqueteNome: string;
+            }[];
+            const changed = piquetes.some(
+              (p) => p.piqueteId === editingLote.piqueteId
+            );
+            if (changed) {
+              const updated = piquetes.map((p) =>
+                p.piqueteId === editingLote.piqueteId
+                  ? { piqueteId: data.piqueteId, piqueteNome: data.piqueteNome }
+                  : p
+              );
+              await updateDocument(["roteiros"], rDoc.id, { piquetes: updated });
             }
           }
         }
@@ -510,6 +470,25 @@ export default function Lotes() {
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     try {
+      // Remover piquete dos roteiros antes de excluir
+      if (deleteTarget.piqueteId) {
+        const rotSnap = await getCollection("roteiros");
+        for (const rDoc of rotSnap.docs) {
+          const piquetes = (rDoc.data().piquetes ?? []) as {
+            piqueteId: string;
+            piqueteNome: string;
+          }[];
+          const filtered = piquetes.filter(
+            (p) => p.piqueteId !== deleteTarget.piqueteId
+          );
+          if (filtered.length !== piquetes.length) {
+            await updateDocument(["roteiros"], rDoc.id, {
+              piquetes: filtered,
+            });
+          }
+        }
+      }
+
       const movSnap = await getCollection(
         "lotes", deleteTarget.id, "movimentacoes"
       );
@@ -639,7 +618,7 @@ export default function Lotes() {
       </KeyboardAvoidingView>
 
       <LoteFormModal
-        visible={modalVisible && !inlineProdutorVisible && !inlineDietaVisible}
+        visible={modalVisible && !inlineProdutorVisible}
         lote={editingLote}
         nextNumero={getNextNumero()}
         racaOptions={racaOptions}
@@ -648,7 +627,6 @@ export default function Lotes() {
         implanteOptions={implanteOptions}
         tamanhoCorporalOptions={tamanhoCorporalOptions}
         produtorOptions={produtorOptions}
-        dietaOptions={dietaOptions}
         piqueteOptions={availablePiqueteOptions}
         onSave={handleSave}
         onClose={() => {
@@ -656,28 +634,12 @@ export default function Lotes() {
           setEditingLote(null);
         }}
         onAddProdutor={() => setInlineProdutorVisible(true)}
-        onAddDieta={() => setInlineDietaVisible(true)}
       />
 
       <ProdutorFormModal
         visible={inlineProdutorVisible}
         onSave={handleInlineProdutorSave}
         onClose={() => setInlineProdutorVisible(false)}
-      />
-
-      <DietaFormModal
-        visible={inlineDietaVisible && !inlineInsumoVisible}
-        insumoOptions={insumoOptions}
-        aditivoOptions={aditivoOptions}
-        onSave={handleInlineDietaSave}
-        onClose={() => setInlineDietaVisible(false)}
-        onAddInsumo={() => setInlineInsumoVisible(true)}
-      />
-
-      <InsumoFormModal
-        visible={inlineInsumoVisible}
-        onSave={handleInlineInsumoSave}
-        onClose={() => setInlineInsumoVisible(false)}
       />
 
       <MovimentacaoFormModal

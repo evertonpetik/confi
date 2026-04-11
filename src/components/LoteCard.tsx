@@ -23,8 +23,6 @@ export type Lote = {
   produtorId: string;
   gmdEstimado: number;
   ativo: boolean;
-  dietaId: string;
-  dietaNome: string;
   piqueteId: string;
   piqueteNome: string;
   pesoAbate?: number;
@@ -126,9 +124,6 @@ export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoe
         )}
         {!!lote.produtor && (
           <Text style={styles.detalhe}>{lote.produtor}</Text>
-        )}
-        {!!lote.dietaNome && (
-          <Text style={styles.detalhe}>Dieta: {lote.dietaNome}</Text>
         )}
         {!!lote.piqueteNome && (
           <Text style={styles.detalhe}>Piquete: {lote.piqueteNome}</Text>

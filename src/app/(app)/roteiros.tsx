@@ -33,7 +33,6 @@ import {
 
 type LoteRef = {
   id: string;
-  dietaId: string;
   piqueteId: string;
   piqueteNome: string;
   ativo: boolean;
@@ -89,7 +88,6 @@ export default function Roteiros() {
       setLotesRef(
         lotesSnap.docs.map((d) => ({
           id: d.id,
-          dietaId: d.data().dietaId ?? "",
           piqueteId: d.data().piqueteId ?? "",
           piqueteNome: d.data().piqueteNome ?? "",
           ativo: d.data().ativo ?? true,
@@ -141,9 +139,9 @@ export default function Roteiros() {
     return Math.max(...roteiros.map((r) => r.numero)) + 1;
   }
 
-  function getPiquetesForDieta(dietaId: string) {
+  function getPiquetesForDieta(_dietaId: string) {
     return lotesRef
-      .filter((l) => l.piqueteId && l.dietaId === dietaId && l.ativo)
+      .filter((l) => l.piqueteId && l.ativo)
       .map((l) => ({
         label: l.piqueteNome,
         value: l.piqueteId,
