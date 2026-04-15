@@ -16,52 +16,6 @@ import {
   View,
 } from "react-native";
 
-const RECAPTCHA_SITE_KEY = "6LfCEvApAAAAAJbhCI3zDxIkJ8W1G8MKxNf5o0OB";
-
-function loadRecaptchaScript(): Promise<void> {
-  if (Platform.OS !== "web") return Promise.resolve();
-  if ((window as any).grecaptcha?.execute) return Promise.resolve();
-
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src*="recaptcha"]`)) {
-      const check = setInterval(() => {
-        if ((window as any).grecaptcha?.execute) {
-          clearInterval(check);
-          resolve();
-        }
-      }, 100);
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = `https://www.google.com/recaptcha/api.js?render=${RECAPTCHA_SITE_KEY}`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      const check = setInterval(() => {
-        if ((window as any).grecaptcha?.execute) {
-          clearInterval(check);
-          resolve();
-        }
-      }, 100);
-    };
-    script.onerror = () => reject(new Error("Falha ao carregar reCAPTCHA"));
-    document.head.appendChild(script);
-  });
-}
-
-async function getRecaptchaToken(): Promise<string> {
-  if (Platform.OS !== "web") return "";
-  await loadRecaptchaScript();
-  return new Promise((resolve, reject) => {
-    (window as any).grecaptcha.ready(() => {
-      (window as any).grecaptcha
-        .execute(RECAPTCHA_SITE_KEY, { action: "homepage" })
-        .then(resolve)
-        .catch(reject);
-    });
-  });
-}
-
 export default function ConsultaGTA() {
   const {
     isTablet,
@@ -90,8 +44,7 @@ export default function ConsultaGTA() {
     setErro("");
 
     try {
-      const recaptchaToken = await getRecaptchaToken();
-      const data = await consultarGTA(trimmed, recaptchaToken);
+      const data = await consultarGTA(trimmed);
       setGta(data);
     } catch (error: any) {
       const msg = error?.message || "Erro desconhecido";

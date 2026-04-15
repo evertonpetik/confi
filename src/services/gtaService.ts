@@ -6,8 +6,6 @@ const API_BASE =
     : "https://confi-gilt.vercel.app/api/gta";
 
 export type GTAData = {
-  codigo: number;
-  mensagem?: string;
   // campos retornados pela API do IAGRO
   numero?: string;
   serie?: string;
@@ -47,55 +45,49 @@ export type GTAAnimal = {
   [key: string]: any;
 };
 
-export async function consultarGTA(
-  barcode: string,
-  recaptchaToken: string,
-): Promise<GTAData> {
+export async function consultarGTA(barcode: string): Promise<GTAData> {
   const response = await fetch(API_BASE, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ barcode, recaptchaToken }),
+    body: JSON.stringify({ barcode }),
   });
 
   if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Erro na consulta (${response.status}): ${errorBody}`);
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(
+      errorBody.error || `Erro na consulta (${response.status})`,
+    );
   }
 
   const json = await response.json();
 
-  // A API do IAGRO retorna { data, status: { codigo, mensagem }, ... }
-  if (json.status?.codigo === 200) {
-    return parseGTAResponse(json.data);
+  if (json.error) {
+    throw new Error(json.error);
   }
 
-  if (json.status?.codigo === 203) {
-    throw new Error("Consulta não autorizada. Tente novamente.");
-  }
-
-  if (json.status?.mensagem) {
-    throw new Error(json.status.mensagem);
-  }
-
-  throw new Error("Resposta inesperada da API.");
+  return parseGTAResponse(json.data);
 }
 
 function parseGTAResponse(data: any): GTAData {
   if (!data) throw new Error("Nenhum documento encontrado.");
 
-  // A estrutura pode variar - mapear campos conhecidos
-  const animais: GTAAnimal[] = (data.animaisIdentificados || data.animais || []).map(
-    (a: any) => ({
-      ...a,
-      idadeAnos: a.idade ? Math.floor(a.idade / 12) : undefined,
-    }),
-  );
+  const animais: GTAAnimal[] = (
+    data.animaisIdentificados ||
+    data.animais ||
+    []
+  ).map((a: any) => ({
+    ...a,
+    idadeAnos: a.idade ? Math.floor(a.idade / 12) : undefined,
+  }));
 
   return {
     ...data,
     animais,
     totalAnimais:
       data.totalAnimais ??
-      animais.reduce((sum: number, a: GTAAnimal) => sum + (a.quantidade || 0), 0),
+      animais.reduce(
+        (sum: number, a: GTAAnimal) => sum + (a.quantidade || 0),
+        0,
+      ),
   };
 }
