@@ -5,44 +5,58 @@ const API_BASE =
     ? "/api/gta"
     : "https://confi-gilt.vercel.app/api/gta";
 
-export type GTAData = {
-  // campos retornados pela API do IAGRO
-  numero?: string;
-  serie?: string;
-  dataEmissao?: string;
-  dataValidade?: string;
-  finalidade?: string;
-  situacao?: string;
-  eSaniagro?: boolean;
-  documentoId?: number;
-  // origem
-  origemInscricao?: string;
-  origemNome?: string;
-  origemFazenda?: string;
-  origemMunicipio?: string;
-  origemUF?: string;
-  // destino
-  destinoInscricao?: string;
-  destinoNome?: string;
-  destinoFazenda?: string;
-  destinoMunicipio?: string;
-  destinoUF?: string;
-  // animais
-  especie?: string;
-  animais?: GTAAnimal[];
-  totalAnimais?: number;
-  // campo genérico para dados brutos
-  [key: string]: any;
+export type GTAAnimal = {
+  descricao: string;
+  especie: string | null;
+  sexo: string | null;
+  faixaEtaria: string | null;
+  qtdEnviada: number;
+  qtdRecebida: number;
 };
 
-export type GTAAnimal = {
-  raca?: string;
-  sexo?: string;
-  categoria?: string;
-  quantidade?: number;
-  idade?: number;
-  idadeAnos?: number;
-  [key: string]: any;
+export type GTAData = {
+  identificacao: {
+    situacao: string | null;
+    protocolo: string | null;
+    numero: string | null;
+    serie: string | null;
+    uf: string | null;
+    codigoBarras: string | null;
+  };
+  especie: {
+    grupo: string | null;
+    especie: string | null;
+    finalidade: string | null;
+  };
+  emissao: {
+    localidade: string | null;
+    municipio: string | null;
+    emitente: string | null;
+    dataEmissao: string | null;
+    dataRecebimento: string | null;
+    dataValidade: string | null;
+    observacao: string | null;
+  };
+  origem: {
+    tipo: string | null;
+    codigo: string | null;
+    nome: string | null;
+    cpfCnpj: string | null;
+    nomeProdutor: string | null;
+    uf: string | null;
+    municipio: string | null;
+  };
+  destino: {
+    tipo: string | null;
+    codigo: string | null;
+    nome: string | null;
+    cpfCnpj: string | null;
+    nomeProdutor: string | null;
+    uf: string | null;
+    municipio: string | null;
+  };
+  animais: GTAAnimal[];
+  totalAnimais: number;
 };
 
 export async function consultarGTA(barcode: string): Promise<GTAData> {
@@ -65,29 +79,9 @@ export async function consultarGTA(barcode: string): Promise<GTAData> {
     throw new Error(json.error);
   }
 
-  return parseGTAResponse(json.data);
-}
+  if (!json.data) {
+    throw new Error("Nenhum documento encontrado.");
+  }
 
-function parseGTAResponse(data: any): GTAData {
-  if (!data) throw new Error("Nenhum documento encontrado.");
-
-  const animais: GTAAnimal[] = (
-    data.animaisIdentificados ||
-    data.animais ||
-    []
-  ).map((a: any) => ({
-    ...a,
-    idadeAnos: a.idade ? Math.floor(a.idade / 12) : undefined,
-  }));
-
-  return {
-    ...data,
-    animais,
-    totalAnimais:
-      data.totalAnimais ??
-      animais.reduce(
-        (sum: number, a: GTAAnimal) => sum + (a.quantidade || 0),
-        0,
-      ),
-  };
+  return json.data as GTAData;
 }

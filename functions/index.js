@@ -1,17 +1,201 @@
 const { onRequest } = require("firebase-functions/v2/https");
-const puppeteer = require("puppeteer-extra");
-const StealthPlugin = require("puppeteer-extra-plugin-stealth");
-const chromium = require("@sparticuz/chromium");
 
-puppeteer.use(StealthPlugin());
+const CAPSOLVER_API_KEY = process.env.CAPSOLVER_API_KEY;
 
-const IAGRO_GTA_URL = "https://www.servicos.iagro.ms.gov.br/gta";
+const MAPA_PAGE_URL =
+  "https://pga.agricultura.gov.br/sispga/webclient/consultaPublica.jsp";
+const MAPA_IFRAME_URL =
+  "https://pga.agricultura.gov.br/sispga/webclient/consultaIFrame.jsp";
+const MAPA_RECAPTCHA_SITE_KEY = "6LdJvfoUAAAAAP9V1pnZB59RXpP9-FzIp_a5d-td";
+
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
+
+/**
+ * Get session cookies from MAPA.
+ */
+async function getMapaSession() {
+  const res = await fetch(MAPA_PAGE_URL + "?_=" + Date.now(), {
+    headers: {
+      "User-Agent": USER_AGENT,
+      Accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
+  });
+
+  const cookies = [];
+
+  // Node 20+ has getSetCookie()
+  if (typeof res.headers.getSetCookie === "function") {
+    res.headers.getSetCookie().forEach((c) => {
+      const nameValue = c.split(";")[0].trim();
+      if (nameValue) cookies.push(nameValue);
+    });
+  }
+
+  // Fallback: raw header
+  if (cookies.length === 0) {
+    const raw = res.headers.get("set-cookie");
+    if (raw) {
+      raw.split(/,\s*(?=[A-Za-z_]+=)/).forEach((c) => {
+        const nameValue = c.split(";")[0].trim();
+        if (nameValue) cookies.push(nameValue);
+      });
+    }
+  }
+
+  console.log("MAPA session cookies:", cookies.length);
+  return cookies.join("; ");
+}
+
+/**
+ * Solve reCAPTCHA v2 using Capsolver API.
+ */
+async function solveRecaptcha(apiKey) {
+  const createRes = await fetch("https://api.capsolver.com/createTask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      clientKey: apiKey,
+      task: {
+        type: "ReCaptchaV2TaskProxyLess",
+        websiteURL: MAPA_PAGE_URL,
+        websiteKey: MAPA_RECAPTCHA_SITE_KEY,
+      },
+    }),
+  });
+  const createData = await createRes.json();
+  if (createData.errorId !== 0) {
+    throw new Error(`Capsolver: ${createData.errorDescription}`);
+  }
+
+  const taskId = createData.taskId;
+  console.log("Capsolver task created:", taskId);
+
+  // Poll for result (max ~120 seconds, checking every 5s)
+  for (let i = 0; i < 24; i++) {
+    await new Promise((r) => setTimeout(r, 5000));
+
+    const resultRes = await fetch("https://api.capsolver.com/getTaskResult", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientKey: apiKey, taskId }),
+    });
+    const resultData = await resultRes.json();
+
+    if (resultData.status === "ready") {
+      console.log("Capsolver solved successfully");
+      return resultData.solution.gRecaptchaResponse;
+    }
+    if (resultData.errorId !== 0) {
+      throw new Error(`Capsolver: ${resultData.errorDescription}`);
+    }
+  }
+  throw new Error("Timeout resolvendo reCAPTCHA");
+}
+
+/**
+ * Parse MAPA GTA HTML response into structured JSON.
+ */
+function parseGtaHtml(html) {
+  function extractField(name, occurrence = 0) {
+    const regex = new RegExp(
+      `name=["']${name}["'][^>]*value=["']([^"']*)["']`,
+      "gi"
+    );
+    let match;
+    let idx = 0;
+    while ((match = regex.exec(html)) !== null) {
+      if (idx === occurrence) return match[1].trim();
+      idx++;
+    }
+    return null;
+  }
+
+  // Extract animal stratification rows
+  const animais = [];
+  const stratRegex =
+    /name=["']dsEstratificacao["'][^>]*value=["']([^"']*)["'][^]*?name=["']qtEnviada["'][^>]*value=["'](\d+)["'][^]*?name=["']qtRecebida["'][^>]*value=["'](\d+)["']/gi;
+  let stratMatch;
+  while ((stratMatch = stratRegex.exec(html)) !== null) {
+    const desc = stratMatch[1].trim();
+    const parts = desc.split(",").map((s) => s.trim());
+    animais.push({
+      descricao: desc,
+      especie: parts[0] || null,
+      sexo: parts[1] || null,
+      faixaEtaria: parts[2] || null,
+      qtdEnviada: parseInt(stratMatch[2], 10),
+      qtdRecebida: parseInt(stratMatch[3], 10),
+    });
+  }
+
+  if (html.includes("Você precisa informar o Captcha")) {
+    throw new Error("Captcha não aceito pelo MAPA");
+  }
+
+  const numero = extractField("id2numgta");
+  if (!numero) {
+    if (html.includes("não encontrad") || html.includes("Nenhum")) {
+      throw new Error("GTA não encontrada para o código de barras informado");
+    }
+    throw new Error("Resposta inesperada do MAPA");
+  }
+
+  return {
+    identificacao: {
+      situacao: extractField("protocolo", 0),
+      protocolo: extractField("protocolo", 1),
+      numero,
+      serie: extractField("id2serie"),
+      uf: extractField("id2adduf"),
+      codigoBarras: extractField("id2codbarra"),
+    },
+    especie: {
+      grupo: extractField("grupoEspecie"),
+      especie: extractField("especie"),
+      finalidade: extractField("finalidade"),
+    },
+    emissao: {
+      localidade: extractField("localidade"),
+      municipio: extractField("municipio"),
+      emitente: extractField("emitente"),
+      dataEmissao: extractField("dataEmissao"),
+      dataRecebimento: extractField("dataRecebimento"),
+      dataValidade: extractField("dataValidade"),
+      observacao: extractField("observacao"),
+    },
+    origem: {
+      tipo: extractField("tipoOrigem"),
+      codigo: extractField("codigoOrigem"),
+      nome: extractField("nomeEstabelecimento"),
+      cpfCnpj: extractField("cpfCnpjOrigem"),
+      nomeProdutor: extractField("nomeCpfCnpjOrigem"),
+      uf: extractField("ufOrigem"),
+      municipio: extractField("municipioOrigem"),
+    },
+    destino: {
+      tipo: extractField("tipoDestino"),
+      codigo: extractField("codigoDestino"),
+      nome: extractField("nomeEstabelemcimentoDestino"),
+      cpfCnpj: extractField("cpfCnpjDestino"),
+      nomeProdutor: extractField("nomeCpfCnpjDestino"),
+      uf: extractField("ufDestino"),
+      municipio: extractField("municipioDestino"),
+    },
+    animais,
+    totalAnimais: animais.reduce((sum, a) => sum + a.qtdEnviada, 0),
+  };
+}
 
 exports.consultarGTA = onRequest(
   {
     region: "southamerica-east1",
-    timeoutSeconds: 60,
-    memory: "1GiB",
+    timeoutSeconds: 180,
+    memory: "256MiB",
     cors: true,
   },
   async (req, res) => {
@@ -21,157 +205,48 @@ exports.consultarGTA = onRequest(
     }
 
     const { barcode } = req.body;
-    if (!barcode || typeof barcode !== "string") {
-      res.status(400).json({ error: "barcode e obrigatorio" });
+    if (!barcode || typeof barcode !== "string" || barcode.length < 30) {
+      res.status(400).json({ error: "Codigo de barras invalido" });
       return;
     }
 
-    let browser;
     try {
-      browser = await puppeteer.launch({
-        args: [...chromium.args, "--disable-blink-features=AutomationControlled"],
-        defaultViewport: { width: 1366, height: 768 },
-        executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
+      // Step 1 & 2: Get session cookies and solve reCAPTCHA in parallel
+      const [cookies, recaptchaToken] = await Promise.all([
+        getMapaSession(),
+        solveRecaptcha(CAPSOLVER_API_KEY),
+      ]);
+
+      // Step 3: Submit barcode + reCAPTCHA to MAPA
+      const queryRes = await fetch(MAPA_IFRAME_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": USER_AGENT,
+          Referer: MAPA_PAGE_URL,
+          Cookie: cookies,
+        },
+        body: new URLSearchParams({
+          codigoBarras: barcode,
+          "g-recaptcha-response": recaptchaToken,
+        }).toString(),
       });
 
-      const page = await browser.newPage();
-
-      // Set a realistic user agent
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-      );
-
-      // Interceptar respostas da API para capturar os dados da GTA
-      let gtaData = null;
-      let apiError = null;
-
-      page.on("response", async (response) => {
-        const url = response.url();
-        if (url.includes("AutenticidadeGta/Digital")) {
-          try {
-            const json = await response.json();
-            if (json.status?.codigo === 200) {
-              gtaData = json.data;
-            } else {
-              apiError = json.status?.mensagem || "Erro na API IAGRO";
-            }
-          } catch {
-            // response might not be JSON
-          }
-        }
-      });
-
-      await page.goto(IAGRO_GTA_URL, {
-        waitUntil: "networkidle2",
-        timeout: 30000,
-      });
-
-      // Esperar o campo de barcode aparecer
-      const barcodeInput = await page.waitForSelector(
-        'input[formcontrolname="barcode"], input[name="barcode"], input[type="text"]',
-        { timeout: 15000 },
-      );
-
-      if (!barcodeInput) {
-        throw new Error("Campo de codigo de barras nao encontrado");
+      if (!queryRes.ok) {
+        throw new Error(`MAPA HTTP ${queryRes.status}`);
       }
 
-      // Clicar em "digitar codigo" se houver esse botao
-      try {
-        const digitarBtn = await page.$('button:has-text("Digitar")');
-        if (digitarBtn) await digitarBtn.click();
-        await new Promise((r) => setTimeout(r, 500));
-      } catch {
-        // pode nao existir - OK
-      }
+      const html = await queryRes.text();
 
-      // Preencher o codigo de barras
-      await barcodeInput.click({ clickCount: 3 });
-      await barcodeInput.type(barcode, { delay: 10 });
+      // Step 4: Parse HTML into structured JSON
+      const data = parseGtaHtml(html);
 
-      // Esperar o reCAPTCHA v3 executar e clicar em pesquisar
-      const searchBtn = await page.waitForSelector(
-        'button.btn-primary, button[type="submit"]',
-        { timeout: 10000 },
-      );
-
-      if (searchBtn) {
-        await searchBtn.click();
-      }
-
-      // Aguardar resultado (interceptado via response listener)
-      await page
-        .waitForResponse(
-          (response) => response.url().includes("AutenticidadeGta"),
-          { timeout: 20000 },
-        )
-        .catch(() => null);
-
-      // Dar tempo extra para processamento
-      await new Promise((r) => setTimeout(r, 2000));
-
-      if (apiError) {
-        res.status(400).json({ error: apiError });
-        return;
-      }
-
-      if (!gtaData) {
-        // Fallback: tentar extrair dados da pagina renderizada
-        const pageData = await extractFromPage(page);
-        if (pageData) {
-          res.json({ data: pageData, source: "scraping" });
-          return;
-        }
-        throw new Error("Nenhum dado retornado. Verifique o codigo de barras.");
-      }
-
-      res.json({ data: gtaData, source: "api" });
+      res.json({ data, source: "mapa" });
     } catch (error) {
       console.error("Erro na consulta GTA:", error);
-      res.status(500).json({
-        error: error.message || "Erro interno na consulta GTA",
-      });
-    } finally {
-      if (browser) await browser.close();
+      res
+        .status(500)
+        .json({ error: error.message || "Erro interno na consulta GTA" });
     }
-  },
-);
-
-async function extractFromPage(page) {
-  try {
-    return await page.evaluate(() => {
-      const getText = (selector) => {
-        const el = document.querySelector(selector);
-        return el ? el.textContent.trim() : null;
-      };
-
-      // Tentar extrair dados visíveis da página
-      const cards = document.querySelectorAll(".card, .alert");
-      if (!cards.length) return null;
-
-      const result = {};
-      const allText = document.body.innerText;
-
-      // Extrair campos comuns
-      const patterns = [
-        { key: "numero", regex: /N[uú]mero[:\s]*(\S+)/i },
-        { key: "serie", regex: /S[eé]rie[:\s]*(\S+)/i },
-        { key: "dataEmissao", regex: /Emiss[aã]o[:\s]*(\d{2}\/\d{2}\/\d{4})/i },
-        { key: "dataValidade", regex: /Validade[:\s]*(\d{2}\/\d{2}\/\d{4})/i },
-        { key: "finalidade", regex: /Finalidade[:\s]*([^\n]+)/i },
-        { key: "situacao", regex: /Situa[cç][aã]o[:\s]*([^\n]+)/i },
-        { key: "totalAnimais", regex: /Total.*?Animais[:\s]*(\d+)/i },
-      ];
-
-      patterns.forEach(({ key, regex }) => {
-        const match = allText.match(regex);
-        if (match) result[key] = match[1].trim();
-      });
-
-      return Object.keys(result).length > 0 ? result : null;
-    });
-  } catch {
-    return null;
   }
-}
+);

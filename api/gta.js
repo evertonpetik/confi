@@ -1,7 +1,7 @@
 export const config = { runtime: "edge" };
 
 const FIREBASE_FUNCTION_URL =
-  "https://southamerica-east1-confi-5c988.cloudfunctions.net/consultarGTA";
+  "https://consultargta-vof422eeva-rj.a.run.app";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",

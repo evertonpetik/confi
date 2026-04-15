@@ -170,13 +170,17 @@ function GTAResult({
     <View style={styles.resultContainer}>
       {/* Dados da GTA */}
       <SectionCard title="Dados da GTA" icon="file-text">
-        <InfoRow label="Numero" value={gta.numero} />
-        <InfoRow label="Serie" value={gta.serie} />
-        <InfoRow label="Emissao" value={gta.dataEmissao} />
-        <InfoRow label="Validade" value={gta.dataValidade} />
-        <InfoRow label="Finalidade" value={gta.finalidade} />
-        <InfoRow label="Situacao" value={gta.situacao} />
-        <InfoRow label="Especie" value={gta.especie} />
+        <InfoRow label="Situacao" value={gta.identificacao.situacao} />
+        <InfoRow label="Protocolo" value={gta.identificacao.protocolo} />
+        <InfoRow label="Numero" value={gta.identificacao.numero} />
+        <InfoRow label="Serie" value={gta.identificacao.serie} />
+        <InfoRow label="UF" value={gta.identificacao.uf} />
+        <InfoRow label="Especie" value={gta.especie.especie} />
+        <InfoRow label="Grupo" value={gta.especie.grupo} />
+        <InfoRow label="Finalidade" value={gta.especie.finalidade} />
+        <InfoRow label="Emissao" value={gta.emissao.dataEmissao} />
+        <InfoRow label="Validade" value={gta.emissao.dataValidade} />
+        <InfoRow label="Emitente" value={gta.emissao.emitente} />
         <InfoRow
           label="Total de Animais"
           value={gta.totalAnimais?.toString()}
@@ -186,14 +190,15 @@ function GTAResult({
 
       {/* Origem */}
       <SectionCard title="Origem" icon="log-out">
-        <InfoRow label="Inscricao" value={gta.origemInscricao} />
-        <InfoRow label="Produtor" value={gta.origemNome} />
-        <InfoRow label="Fazenda" value={gta.origemFazenda} />
+        <InfoRow label="Codigo" value={gta.origem.codigo} />
+        <InfoRow label="Produtor" value={gta.origem.nomeProdutor} />
+        <InfoRow label="CPF/CNPJ" value={gta.origem.cpfCnpj} />
+        <InfoRow label="Fazenda" value={gta.origem.nome} />
         <InfoRow
           label="Municipio/UF"
           value={
-            gta.origemMunicipio
-              ? `${gta.origemMunicipio}/${gta.origemUF}`
+            gta.origem.municipio
+              ? `${gta.origem.municipio}/${gta.origem.uf}`
               : undefined
           }
         />
@@ -201,14 +206,15 @@ function GTAResult({
 
       {/* Destino */}
       <SectionCard title="Destino" icon="log-in">
-        <InfoRow label="Inscricao" value={gta.destinoInscricao} />
-        <InfoRow label="Nome" value={gta.destinoNome} />
-        <InfoRow label="Fazenda" value={gta.destinoFazenda} />
+        <InfoRow label="Codigo" value={gta.destino.codigo} />
+        <InfoRow label="Produtor" value={gta.destino.nomeProdutor} />
+        <InfoRow label="CPF/CNPJ" value={gta.destino.cpfCnpj} />
+        <InfoRow label="Fazenda" value={gta.destino.nome} />
         <InfoRow
           label="Municipio/UF"
           value={
-            gta.destinoMunicipio
-              ? `${gta.destinoMunicipio}/${gta.destinoUF}`
+            gta.destino.municipio
+              ? `${gta.destino.municipio}/${gta.destino.uf}`
               : undefined
           }
         />
@@ -218,10 +224,7 @@ function GTAResult({
       {gta.animais && gta.animais.length > 0 && (
         <SectionCard title="Animais" icon="list">
           <View style={styles.tableHeader}>
-            <Text style={[styles.tableHeaderCell, { flex: 2 }]}>Raca</Text>
-            <Text style={[styles.tableHeaderCell, { flex: 1.5 }]}>
-              Categoria
-            </Text>
+            <Text style={[styles.tableHeaderCell, { flex: 2.5 }]}>Descricao</Text>
             <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Sexo</Text>
             <Text style={[styles.tableHeaderCell, { flex: 0.7, textAlign: "right" }]}>
               Qtd
@@ -235,11 +238,10 @@ function GTAResult({
                 idx % 2 === 0 && styles.tableRowEven,
               ]}
             >
-              <Text style={[styles.tableCell, { flex: 2 }]}>
-                {animal.raca || "-"}
-              </Text>
-              <Text style={[styles.tableCell, { flex: 1.5 }]}>
-                {animal.categoria || "-"}
+              <Text style={[styles.tableCell, { flex: 2.5 }]}>
+                {animal.faixaEtaria
+                  ? `${animal.especie || "-"}, ${animal.faixaEtaria}`
+                  : animal.descricao || "-"}
               </Text>
               <Text style={[styles.tableCell, { flex: 1 }]}>
                 {animal.sexo || "-"}
@@ -250,19 +252,10 @@ function GTAResult({
                   { flex: 0.7, textAlign: "right", fontWeight: "700" },
                 ]}
               >
-                {animal.quantidade ?? "-"}
+                {animal.qtdEnviada ?? "-"}
               </Text>
             </View>
           ))}
-        </SectionCard>
-      )}
-
-      {/* Dados brutos (fallback) */}
-      {!gta.numero && !gta.animais?.length && (
-        <SectionCard title="Dados Retornados" icon="info">
-          <Text style={styles.rawJson}>
-            {JSON.stringify(gta, null, 2)}
-          </Text>
         </SectionCard>
       )}
     </View>
@@ -295,7 +288,7 @@ function InfoRow({
   bold,
 }: {
   label: string;
-  value?: string;
+  value?: string | null;
   bold?: boolean;
 }) {
   if (!value) return null;
