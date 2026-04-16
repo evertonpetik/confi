@@ -1,9 +1,5 @@
-import { Platform } from "react-native";
-
 const API_BASE =
-  Platform.OS === "web"
-    ? "/api/sintegra"
-    : "https://confi-gilt.vercel.app/api/sintegra";
+  "https://consultarsintegra-vof422eeva-rj.a.run.app";
 
 export type SintegraData = {
   inscricaoEstadual: string | null;
