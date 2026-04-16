@@ -2,6 +2,10 @@ import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { useResponsive } from "@/hooks/useResponsive";
 import { consultarGTA, GTAData } from "@/services/gtaService";
+import {
+  consultarSintegra,
+  SintegraData,
+} from "@/services/sintegraService";
 import { Feather } from "@expo/vector-icons";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -16,6 +20,8 @@ import {
   View,
 } from "react-native";
 
+type TabType = "gta" | "sintegra";
+
 export default function ConsultaGTA() {
   const {
     isTablet,
@@ -26,40 +32,83 @@ export default function ConsultaGTA() {
     headerPaddingTop,
   } = useResponsive();
 
-  const [barcode, setBarcode] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [gta, setGta] = useState<GTAData | null>(null);
-  const [erro, setErro] = useState("");
-  const inputRef = useRef<TextInput>(null);
+  const [tab, setTab] = useState<TabType>("gta");
 
-  const handleConsultar = useCallback(async () => {
+  // GTA state
+  const [barcode, setBarcode] = useState("");
+  const [loadingGta, setLoadingGta] = useState(false);
+  const [gta, setGta] = useState<GTAData | null>(null);
+  const [erroGta, setErroGta] = useState("");
+  const inputGtaRef = useRef<TextInput>(null);
+
+  // Sintegra state
+  const [inscricaoEstadual, setInscricaoEstadual] = useState("");
+  const [loadingSintegra, setLoadingSintegra] = useState(false);
+  const [sintegra, setSintegra] = useState<SintegraData | null>(null);
+  const [erroSintegra, setErroSintegra] = useState("");
+  const inputSintegraRef = useRef<TextInput>(null);
+
+  const handleConsultarGTA = useCallback(async () => {
     const trimmed = barcode.replace(/\s/g, "");
     if (!trimmed) {
       Alert.alert("Aviso", "Informe o codigo de barras MAPA.");
       return;
     }
 
-    setLoading(true);
+    setLoadingGta(true);
     setGta(null);
-    setErro("");
+    setErroGta("");
 
     try {
       const data = await consultarGTA(trimmed);
       setGta(data);
     } catch (error: any) {
-      const msg = error?.message || "Erro desconhecido";
-      setErro(msg);
+      setErroGta(error?.message || "Erro desconhecido");
     } finally {
-      setLoading(false);
+      setLoadingGta(false);
     }
   }, [barcode]);
 
-  function handleNovaPesquisa() {
+  const handleConsultarSintegra = useCallback(async () => {
+    const trimmed = inscricaoEstadual.replace(/\s/g, "");
+    if (!trimmed) {
+      Alert.alert("Aviso", "Informe a inscricao estadual.");
+      return;
+    }
+
+    setLoadingSintegra(true);
+    setSintegra(null);
+    setErroSintegra("");
+
+    try {
+      const data = await consultarSintegra(trimmed);
+      setSintegra(data);
+    } catch (error: any) {
+      setErroSintegra(error?.message || "Erro desconhecido");
+    } finally {
+      setLoadingSintegra(false);
+    }
+  }, [inscricaoEstadual]);
+
+  function handleNovaPesquisaGTA() {
     setBarcode("");
     setGta(null);
-    setErro("");
-    inputRef.current?.focus();
+    setErroGta("");
+    inputGtaRef.current?.focus();
   }
+
+  function handleNovaPesquisaSintegra() {
+    setInscricaoEstadual("");
+    setSintegra(null);
+    setErroSintegra("");
+    inputSintegraRef.current?.focus();
+  }
+
+  function switchTab(newTab: TabType) {
+    setTab(newTab);
+  }
+
+  const loading = tab === "gta" ? loadingGta : loadingSintegra;
 
   return (
     <DrawerSceneWrapper>
@@ -73,11 +122,11 @@ export default function ConsultaGTA() {
             styles.container,
             { padding: containerPadding },
             isTablet &&
-            !isDesktop && {
-              maxWidth: maxWidthContent,
-              alignSelf: "center" as const,
-              width: "100%",
-            },
+              !isDesktop && {
+                maxWidth: maxWidthContent,
+                alignSelf: "center" as const,
+                width: "100%",
+              },
           ]}
         >
           {/* Header */}
@@ -86,89 +135,200 @@ export default function ConsultaGTA() {
               style={[styles.title, { fontSize: titleFontSize, flex: 1 }]}
               numberOfLines={1}
             >
-              Consulta GTA
+              Consultas
             </Text>
             {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
           </View>
 
           <Text style={styles.subtitle}>
-            Consulte documentos de transito animal pelo codigo de barras MAPA.
+            Consulte documentos de transito animal e dados cadastrais de
+            contribuintes.
           </Text>
 
-          {/* Input */}
-          <View style={styles.inputRow}>
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              placeholder="Codigo de barras MAPA (44 digitos)"
-              placeholderTextColor="#999"
-              value={barcode}
-              onChangeText={setBarcode}
-              keyboardType="numeric"
-              maxLength={44}
-              editable={!loading}
-              onSubmitEditing={handleConsultar}
-            />
-          </View>
-
-          {/* Buttons */}
-          <View style={styles.buttonRow}>
+          {/* Tabs */}
+          <View style={styles.tabRow}>
             <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
+              style={[styles.tab, tab === "gta" && styles.tabActive]}
               activeOpacity={0.8}
-              onPress={handleConsultar}
-              disabled={loading}
+              onPress={() => switchTab("gta")}
             >
-              {loading ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <Feather name="search" size={20} color="#FFF" />
-              )}
-              <Text style={styles.buttonLabel}>
-                {loading ? "Consultando..." : "Consultar"}
+              <Feather
+                name="file-text"
+                size={16}
+                color={tab === "gta" ? "#3366FF" : "#999"}
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  tab === "gta" && styles.tabLabelActive,
+                ]}
+              >
+                GTA
               </Text>
             </TouchableOpacity>
-
-            {gta && (
-              <TouchableOpacity
-                style={[styles.button, styles.buttonSecondary]}
-                activeOpacity={0.8}
-                onPress={handleNovaPesquisa}
+            <TouchableOpacity
+              style={[styles.tab, tab === "sintegra" && styles.tabActive]}
+              activeOpacity={0.8}
+              onPress={() => switchTab("sintegra")}
+            >
+              <Feather
+                name="search"
+                size={16}
+                color={tab === "sintegra" ? "#3366FF" : "#999"}
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  tab === "sintegra" && styles.tabLabelActive,
+                ]}
               >
-                <Feather name="refresh-cw" size={18} color="#3366FF" />
-                <Text style={[styles.buttonLabel, { color: "#3366FF" }]}>
-                  Nova Pesquisa
-                </Text>
-              </TouchableOpacity>
-            )}
+                Sintegra
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Error */}
-          {!!erro && (
-            <View style={styles.errorBox}>
-              <Feather name="alert-circle" size={18} color="#E53935" />
-              <Text style={styles.errorText}>{erro}</Text>
-            </View>
+          {/* GTA Tab */}
+          {tab === "gta" && (
+            <>
+              <View style={styles.inputRow}>
+                <TextInput
+                  ref={inputGtaRef}
+                  style={styles.input}
+                  placeholder="Codigo de barras MAPA (44 digitos)"
+                  placeholderTextColor="#999"
+                  value={barcode}
+                  onChangeText={setBarcode}
+                  keyboardType="numeric"
+                  maxLength={44}
+                  editable={!loadingGta}
+                  onSubmitEditing={handleConsultarGTA}
+                />
+              </View>
+
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={[styles.button, loadingGta && styles.buttonDisabled]}
+                  activeOpacity={0.8}
+                  onPress={handleConsultarGTA}
+                  disabled={loadingGta}
+                >
+                  {loadingGta ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Feather name="search" size={20} color="#FFF" />
+                  )}
+                  <Text style={styles.buttonLabel}>
+                    {loadingGta ? "Consultando..." : "Consultar"}
+                  </Text>
+                </TouchableOpacity>
+
+                {gta && (
+                  <TouchableOpacity
+                    style={[styles.button, styles.buttonSecondary]}
+                    activeOpacity={0.8}
+                    onPress={handleNovaPesquisaGTA}
+                  >
+                    <Feather name="refresh-cw" size={18} color="#3366FF" />
+                    <Text style={[styles.buttonLabel, { color: "#3366FF" }]}>
+                      Nova Pesquisa
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {!!erroGta && (
+                <View style={styles.errorBox}>
+                  <Feather name="alert-circle" size={18} color="#E53935" />
+                  <Text style={styles.errorText}>{erroGta}</Text>
+                </View>
+              )}
+
+              {gta && <GTAResult gta={gta} />}
+            </>
           )}
 
-          {/* Results */}
-          {gta && <GTAResult gta={gta} isDesktop={isDesktop} />}
+          {/* Sintegra Tab */}
+          {tab === "sintegra" && (
+            <>
+              <View style={styles.inputRow}>
+                <TextInput
+                  ref={inputSintegraRef}
+                  style={styles.input}
+                  placeholder="Inscricao Estadual (ex: 28.828.982-0)"
+                  placeholderTextColor="#999"
+                  value={inscricaoEstadual}
+                  onChangeText={setInscricaoEstadual}
+                  maxLength={15}
+                  editable={!loadingSintegra}
+                  onSubmitEditing={handleConsultarSintegra}
+                />
+              </View>
+
+              {loadingSintegra && (
+                <View style={styles.loadingBox}>
+                  <ActivityIndicator size="small" color="#3366FF" />
+                  <Text style={styles.loadingText}>
+                    Resolvendo captcha e consultando... isso pode levar ate 30
+                    segundos.
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.button,
+                    loadingSintegra && styles.buttonDisabled,
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={handleConsultarSintegra}
+                  disabled={loadingSintegra}
+                >
+                  {loadingSintegra ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Feather name="search" size={20} color="#FFF" />
+                  )}
+                  <Text style={styles.buttonLabel}>
+                    {loadingSintegra ? "Consultando..." : "Consultar"}
+                  </Text>
+                </TouchableOpacity>
+
+                {sintegra && (
+                  <TouchableOpacity
+                    style={[styles.button, styles.buttonSecondary]}
+                    activeOpacity={0.8}
+                    onPress={handleNovaPesquisaSintegra}
+                  >
+                    <Feather name="refresh-cw" size={18} color="#3366FF" />
+                    <Text style={[styles.buttonLabel, { color: "#3366FF" }]}>
+                      Nova Pesquisa
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {!!erroSintegra && (
+                <View style={styles.errorBox}>
+                  <Feather name="alert-circle" size={18} color="#E53935" />
+                  <Text style={styles.errorText}>{erroSintegra}</Text>
+                </View>
+              )}
+
+              {sintegra && <SintegraResult data={sintegra} />}
+            </>
+          )}
         </View>
       </ScrollView>
     </DrawerSceneWrapper>
   );
 }
 
-function GTAResult({
-  gta,
-  isDesktop,
-}: {
-  gta: GTAData;
-  isDesktop: boolean;
-}) {
+// ─── GTA Result ────────────────────────────────────────────
+
+function GTAResult({ gta }: { gta: GTAData }) {
   return (
     <View style={styles.resultContainer}>
-      {/* Dados da GTA */}
       <SectionCard title="Dados da GTA" icon="file-text">
         <InfoRow label="Situacao" value={gta.identificacao.situacao} />
         <InfoRow label="Protocolo" value={gta.identificacao.protocolo} />
@@ -188,7 +348,6 @@ function GTAResult({
         />
       </SectionCard>
 
-      {/* Origem */}
       <SectionCard title="Origem" icon="log-out">
         <InfoRow label="Codigo" value={gta.origem.codigo} />
         <InfoRow label="Produtor" value={gta.origem.nomeProdutor} />
@@ -204,7 +363,6 @@ function GTAResult({
         />
       </SectionCard>
 
-      {/* Destino */}
       <SectionCard title="Destino" icon="log-in">
         <InfoRow label="Codigo" value={gta.destino.codigo} />
         <InfoRow label="Produtor" value={gta.destino.nomeProdutor} />
@@ -220,13 +378,19 @@ function GTAResult({
         />
       </SectionCard>
 
-      {/* Animais */}
       {gta.animais && gta.animais.length > 0 && (
         <SectionCard title="Animais" icon="list">
           <View style={styles.tableHeader}>
-            <Text style={[styles.tableHeaderCell, { flex: 2.5 }]}>Descricao</Text>
+            <Text style={[styles.tableHeaderCell, { flex: 2.5 }]}>
+              Descricao
+            </Text>
             <Text style={[styles.tableHeaderCell, { flex: 1 }]}>Sexo</Text>
-            <Text style={[styles.tableHeaderCell, { flex: 0.7, textAlign: "right" }]}>
+            <Text
+              style={[
+                styles.tableHeaderCell,
+                { flex: 0.7, textAlign: "right" },
+              ]}
+            >
               Qtd
             </Text>
           </View>
@@ -261,6 +425,51 @@ function GTAResult({
     </View>
   );
 }
+
+// ─── Sintegra Result ───────────────────────────────────────
+
+function SintegraResult({ data }: { data: SintegraData }) {
+  const endereco = [data.endereco, data.numero, data.complemento]
+    .filter(Boolean)
+    .join(", ");
+  const localidade = [data.bairro, data.municipio, data.uf]
+    .filter(Boolean)
+    .join(" - ");
+
+  return (
+    <View style={styles.resultContainer}>
+      <SectionCard title="Dados do Contribuinte" icon="user">
+        <InfoRow label="Inscricao Estadual" value={data.inscricaoEstadual} />
+        <InfoRow label="Razao Social" value={data.razaoSocial} />
+        <InfoRow label="Nome Fantasia" value={data.nomeFantasia} />
+        <InfoRow label="CPF/CNPJ" value={data.cnpjCpf} />
+        <InfoRow label="Situacao" value={data.situacao} />
+        <InfoRow label="Credenciamento" value={data.dataCredenciamento} />
+      </SectionCard>
+
+      {(endereco || localidade || data.cep) && (
+        <SectionCard title="Endereco" icon="map-pin">
+          <InfoRow label="Endereco" value={endereco || undefined} />
+          <InfoRow label="Localidade" value={localidade || undefined} />
+          <InfoRow label="CEP" value={data.cep} />
+          <InfoRow label="Telefone" value={data.telefone} />
+        </SectionCard>
+      )}
+
+      {(data.atividadePrincipal || data.regimeApuracao) && (
+        <SectionCard title="Atividade" icon="briefcase">
+          <InfoRow
+            label="Atividade Principal"
+            value={data.atividadePrincipal}
+          />
+          <InfoRow label="Regime de Apuracao" value={data.regimeApuracao} />
+        </SectionCard>
+      )}
+    </View>
+  );
+}
+
+// ─── Shared Components ─────────────────────────────────────
 
 function SectionCard({
   title,
@@ -302,6 +511,8 @@ function InfoRow({
   );
 }
 
+// ─── Styles ────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -324,8 +535,36 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 8,
   },
-  inputRow: {
+  tabRow: {
+    flexDirection: "row",
+    gap: 0,
     marginTop: 24,
+    borderBottomWidth: 2,
+    borderBottomColor: "#E8E8E8",
+  },
+  tab: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+    marginBottom: -2,
+  },
+  tabActive: {
+    borderBottomColor: "#3366FF",
+  },
+  tabLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#999",
+  },
+  tabLabelActive: {
+    color: "#3366FF",
+  },
+  inputRow: {
+    marginTop: 20,
   },
   input: {
     borderWidth: 1,
@@ -364,6 +603,20 @@ const styles = StyleSheet.create({
     color: "#FFF",
     fontSize: 16,
     fontWeight: "600",
+  },
+  loadingBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#E3F2FD",
+    borderRadius: 8,
+    padding: 16,
+    marginTop: 12,
+  },
+  loadingText: {
+    color: "#1565C0",
+    fontSize: 13,
+    flex: 1,
   },
   errorBox: {
     flexDirection: "row",
@@ -450,10 +703,5 @@ const styles = StyleSheet.create({
   tableCell: {
     fontSize: 14,
     color: "#333",
-  },
-  rawJson: {
-    fontSize: 12,
-    color: "#555",
-    fontFamily: Platform.OS === "web" ? "monospace" : undefined,
   },
 });
