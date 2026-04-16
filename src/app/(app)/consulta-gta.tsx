@@ -2,10 +2,7 @@ import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { useResponsive } from "@/hooks/useResponsive";
 import { consultarGTA, GTAData } from "@/services/gtaService";
-import {
-  consultarSintegra,
-  SintegraData,
-} from "@/services/sintegraService";
+import { consultarSintegra, SintegraData } from "@/services/sintegraService";
 import { Feather } from "@expo/vector-icons";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -429,40 +426,53 @@ function GTAResult({ gta }: { gta: GTAData }) {
 // ─── Sintegra Result ───────────────────────────────────────
 
 function SintegraResult({ data }: { data: SintegraData }) {
-  const endereco = [data.endereco, data.numero, data.complemento]
-    .filter(Boolean)
-    .join(", ");
-  const localidade = [data.bairro, data.municipio, data.uf]
-    .filter(Boolean)
-    .join(" - ");
-
   return (
     <View style={styles.resultContainer}>
-      <SectionCard title="Dados do Contribuinte" icon="user">
+      <SectionCard title="Dados Cadastrais" icon="user">
         <InfoRow label="Inscricao Estadual" value={data.inscricaoEstadual} />
+        <InfoRow label="Data de Inclusao" value={data.dataInclusao} />
         <InfoRow label="Razao Social" value={data.razaoSocial} />
-        <InfoRow label="Nome Fantasia" value={data.nomeFantasia} />
-        <InfoRow label="CPF/CNPJ" value={data.cnpjCpf} />
-        <InfoRow label="Situacao" value={data.situacao} />
-        <InfoRow label="Credenciamento" value={data.dataCredenciamento} />
+        <InfoRow label="CPF/CNPJ" value={data.cpfCnpj} />
+        <InfoRow
+          label="Nome Doc. Fiscais"
+          value={data.nomeDocumentosFiscais}
+        />
+        <InfoRow label="Situacao" value={data.situacaoCadastral} bold />
+        <InfoRow label="Motivo" value={data.motivoSituacao} />
+        <InfoRow label="Atualizacao" value={data.dataAtualizacao} />
       </SectionCard>
 
-      {(endereco || localidade || data.cep) && (
-        <SectionCard title="Endereco" icon="map-pin">
-          <InfoRow label="Endereco" value={endereco || undefined} />
-          <InfoRow label="Localidade" value={localidade || undefined} />
-          <InfoRow label="CEP" value={data.cep} />
-          <InfoRow label="Telefone" value={data.telefone} />
+      <SectionCard title="Propriedade" icon="map-pin">
+        <InfoRow label="Nome" value={data.nomePropriedade} />
+        <InfoRow label="Atividade" value={data.descricaoAtividade} />
+        <InfoRow label="Municipio" value={data.municipio} />
+        <InfoRow label="Domicilio Fiscal" value={data.domicilioFiscal} />
+      </SectionCard>
+
+      {data.localizacaoPropriedade && (
+        <SectionCard title="Localizacao" icon="navigation">
+          <Text style={{ fontSize: 13, color: "#555", lineHeight: 20 }}>
+            {data.localizacaoPropriedade}
+          </Text>
         </SectionCard>
       )}
 
-      {(data.atividadePrincipal || data.regimeApuracao) && (
-        <SectionCard title="Atividade" icon="briefcase">
-          <InfoRow
-            label="Atividade Principal"
-            value={data.atividadePrincipal}
-          />
-          <InfoRow label="Regime de Apuracao" value={data.regimeApuracao} />
+      {data.condominos && data.condominos.length > 0 && (
+        <SectionCard title="Condominos" icon="users">
+          {data.condominos.map((c, idx) => (
+            <Text
+              key={idx}
+              style={{
+                fontSize: 14,
+                color: "#333",
+                paddingVertical: 4,
+                borderBottomWidth: 1,
+                borderBottomColor: "#F0F0F0",
+              }}
+            >
+              {c}
+            </Text>
+          ))}
         </SectionCard>
       )}
     </View>
