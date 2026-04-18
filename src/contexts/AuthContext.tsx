@@ -20,11 +20,16 @@ import {
   useState,
 } from "react";
 
+export type ModuloId = "iconfi" | "ifarm" | "abastecimento";
+
+export const ALL_MODULOS: ModuloId[] = ["iconfi", "ifarm", "abastecimento"];
+
 export type UsuarioProfile = {
   nome: string;
   email: string;
   tipo: "admin" | "gestor" | "cliente";
   fazendas: string[];
+  modulos: ModuloId[];
 };
 
 export type Fazenda = {
@@ -37,12 +42,15 @@ type AuthContextType = {
   userProfile: UsuarioProfile | null;
   selectedFazendaId: string | null;
   selectedFazendaNome: string | null;
+  selectedModulo: ModuloId | null;
   fazendas: Fazenda[];
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   selectFazenda: (id: string, nome: string) => void;
   clearFazenda: () => void;
+  selectModulo: (id: ModuloId) => void;
+  clearModulo: () => void;
 };
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -56,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userProfile, setUserProfile] = useState<UsuarioProfile | null>(null);
   const [selectedFazendaId, setSelectedFazendaId] = useState<string | null>(null);
   const [selectedFazendaNome, setSelectedFazendaNome] = useState<string | null>(null);
+  const [selectedModulo, setSelectedModulo] = useState<ModuloId | null>(null);
   const [fazendas, setFazendas] = useState<Fazenda[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -69,6 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUserProfile(null);
         setSelectedFazendaId(null);
         setSelectedFazendaNome(null);
+        setSelectedModulo(null);
         setFazendas([]);
         setCurrentFazendaId(null);
       }
@@ -87,10 +97,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: data.email ?? "",
           tipo: data.tipo ?? "cliente",
           fazendas: data.fazendas ?? [],
+          modulos: data.modulos ?? [],
         };
         setUserProfile(profile);
         await loadFazendas(profile);
         await restoreFazenda(profile);
+        await restoreModulo();
       } else {
         // Documento nao existe — verificar se e o primeiro usuario (bootstrap admin)
         const usersSnap = await getRawCollection("usuarios");
@@ -101,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email: email ?? "",
             tipo: "admin",
             fazendas: [],
+            modulos: [],
           };
           await setRawDocument(["usuarios"], uid, adminProfile);
           setUserProfile(adminProfile);
@@ -155,6 +168,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function restoreModulo() {
+    try {
+      const saved = await AsyncStorage.getItem("@selectedModulo");
+      if (saved && ALL_MODULOS.includes(saved as ModuloId)) {
+        setSelectedModulo(saved as ModuloId);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   const signIn = useCallback(async (email: string, password: string) => {
     await authSignIn(email, password);
   }, []);
@@ -163,10 +187,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentFazendaId(null);
     setSelectedFazendaId(null);
     setSelectedFazendaNome(null);
+    setSelectedModulo(null);
     setUserProfile(null);
     setFazendas([]);
     await AsyncStorage.removeItem("@selectedFazendaId");
     await AsyncStorage.removeItem("@selectedFazendaNome");
+    await AsyncStorage.removeItem("@selectedModulo");
     await authSignOut();
   }, []);
 
@@ -181,9 +207,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearFazenda = useCallback(() => {
     setSelectedFazendaId(null);
     setSelectedFazendaNome(null);
+    setSelectedModulo(null);
     setCurrentFazendaId(null);
     AsyncStorage.removeItem("@selectedFazendaId");
     AsyncStorage.removeItem("@selectedFazendaNome");
+    AsyncStorage.removeItem("@selectedModulo");
+  }, []);
+
+  const selectModulo = useCallback((id: ModuloId) => {
+    setSelectedModulo(id);
+    AsyncStorage.setItem("@selectedModulo", id);
+  }, []);
+
+  const clearModulo = useCallback(() => {
+    setSelectedModulo(null);
+    AsyncStorage.removeItem("@selectedModulo");
   }, []);
 
   return (
@@ -193,12 +231,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userProfile,
         selectedFazendaId,
         selectedFazendaNome,
+        selectedModulo,
         fazendas,
         loading,
         signIn,
         signOut,
         selectFazenda,
         clearFazenda,
+        selectModulo,
+        clearModulo,
       }}
     >
       {children}

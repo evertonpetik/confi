@@ -6,7 +6,7 @@ import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 function AuthGate() {
-  const { user, userProfile, selectedFazendaId, loading, signOut } = useAuth();
+  const { user, userProfile, selectedFazendaId, selectedModulo, loading, signOut } = useAuth();
   const { primaryColor } = useTheme();
   const segments = useSegments();
   const router = useRouter();
@@ -16,30 +16,37 @@ function AuthGate() {
 
     const inAppGroup = segments[0] === "(app)";
     const onFazendaSelect = segments[0] === "selecao-fazenda";
+    const onModuloSelect = segments[0] === "selecao-modulo";
 
     if (!user) {
-      // Nao autenticado -> login
-      if (inAppGroup || onFazendaSelect) {
+      if (inAppGroup || onFazendaSelect || onModuloSelect) {
         router.replace("/");
       }
     } else if (!userProfile) {
-      // Autenticado mas sem perfil no Firestore -> manter na tela atual
-      // (mostraremos uma tela de "sem acesso" abaixo)
       if (inAppGroup) {
         router.replace("/");
       }
     } else if (!selectedFazendaId) {
-      // Autenticado com perfil mas sem fazenda -> selecao
       if (!onFazendaSelect) {
         router.replace("/selecao-fazenda");
       }
+    } else if (!selectedModulo) {
+      if (!onModuloSelect) {
+        router.replace("/selecao-modulo");
+      }
     } else {
-      // Tudo OK -> app
+      // Tudo OK -> home do modulo
       if (!inAppGroup) {
-        router.replace("/(app)/home");
+        const homeRoute =
+          selectedModulo === "ifarm"
+            ? "/(app)/home-ifarm"
+            : selectedModulo === "abastecimento"
+              ? "/(app)/home-abastecimento"
+              : "/(app)/home";
+        router.replace(homeRoute as any);
       }
     }
-  }, [user, userProfile, selectedFazendaId, loading, segments]);
+  }, [user, userProfile, selectedFazendaId, selectedModulo, loading, segments]);
 
   if (loading) {
     return (

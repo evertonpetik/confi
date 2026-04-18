@@ -3,7 +3,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Input } from "@/components/Input";
-import { Fazenda, useAuth } from "@/contexts/AuthContext";
+import { ALL_MODULOS, Fazenda, ModuloId, useAuth } from "@/contexts/AuthContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { createUserOnSecondaryApp } from "@/services/authService";
 import {
@@ -38,6 +38,7 @@ type Usuario = {
   email: string;
   tipo: "admin" | "gestor" | "cliente";
   fazendas: string[];
+  modulos: ModuloId[];
 };
 
 export default function Signup() {
@@ -55,6 +56,7 @@ export default function Signup() {
   const [formSenha, setFormSenha] = useState("");
   const [formTipo, setFormTipo] = useState<"admin" | "gestor" | "cliente">("cliente");
   const [formFazendas, setFormFazendas] = useState<string[]>([]);
+  const [formModulos, setFormModulos] = useState<ModuloId[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Fazenda form modal
@@ -108,6 +110,7 @@ export default function Signup() {
     setFormSenha("");
     setFormTipo("cliente");
     setFormFazendas([]);
+    setFormModulos([]);
     setUserModalVisible(true);
   }
 
@@ -118,6 +121,7 @@ export default function Signup() {
     setFormSenha("");
     setFormTipo(user.tipo);
     setFormFazendas(user.fazendas ?? []);
+    setFormModulos(user.modulos ?? []);
     setUserModalVisible(true);
   }
 
@@ -139,6 +143,7 @@ export default function Signup() {
           email: formEmail.trim(),
           tipo: formTipo,
           fazendas: formFazendas,
+          modulos: formModulos,
         });
         setUsuarios((prev) =>
           prev.map((u) =>
@@ -149,6 +154,7 @@ export default function Signup() {
                 email: formEmail.trim(),
                 tipo: formTipo,
                 fazendas: formFazendas,
+                modulos: formModulos,
               }
               : u
           )
@@ -163,6 +169,7 @@ export default function Signup() {
           email: formEmail.trim(),
           tipo: formTipo,
           fazendas: formFazendas,
+          modulos: formModulos,
         };
         await setRawDocument(["usuarios"], uid, userData);
         setUsuarios((prev) =>
@@ -189,6 +196,14 @@ export default function Signup() {
       prev.includes(fazendaId)
         ? prev.filter((id) => id !== fazendaId)
         : [...prev, fazendaId]
+    );
+  }
+
+  function toggleModulo(moduloId: ModuloId) {
+    setFormModulos((prev) =>
+      prev.includes(moduloId)
+        ? prev.filter((id) => id !== moduloId)
+        : [...prev, moduloId]
     );
   }
 
@@ -380,6 +395,16 @@ export default function Signup() {
                               )
                               .join(", ") || "Nenhuma"}
                           </Text>
+                          <Text style={styles.itemDetail}>
+                            Modulos:{" "}
+                            {u.modulos?.length
+                              ? u.modulos
+                                  .map((m) =>
+                                    m === "iconfi" ? "iConfi" : m === "ifarm" ? "iFarm" : "Abastecimento"
+                                  )
+                                  .join(", ")
+                              : "Nenhum"}
+                          </Text>
                         </View>
                         <View style={{ flexDirection: "row", gap: 12 }}>
                           <TouchableOpacity
@@ -524,6 +549,36 @@ export default function Signup() {
                       <Text style={styles.checkLabel}>{f.nome}</Text>
                     </TouchableOpacity>
                   ))}
+
+                  <Text style={styles.label}>Modulos</Text>
+                  {ALL_MODULOS.map((moduloId) => {
+                    const labels: Record<ModuloId, string> = {
+                      iconfi: "iConfi - Confinamento",
+                      ifarm: "iFarm - Rebanho e Rastreabilidade",
+                      abastecimento: "Abastecimento - Combustivel",
+                    };
+                    return (
+                      <TouchableOpacity
+                        key={moduloId}
+                        style={styles.checkRow}
+                        activeOpacity={0.7}
+                        onPress={() => toggleModulo(moduloId)}
+                      >
+                        <Feather
+                          name={
+                            formModulos.includes(moduloId)
+                              ? "check-square"
+                              : "square"
+                          }
+                          size={18}
+                          color={
+                            formModulos.includes(moduloId) ? "#3366FF" : "#999"
+                          }
+                        />
+                        <Text style={styles.checkLabel}>{labels[moduloId]}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
 
                   <View style={{ marginTop: 16 }}>
                     {saving ? (

@@ -1,4 +1,4 @@
-import { useAuth } from "@/contexts/AuthContext";
+import { ModuloId, useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { DrawerProvider, useDrawer } from "@/contexts/DrawerContext";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -21,6 +21,8 @@ import {
 
 const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typeof Feather>["name"] }[] = [
   { route: "home", label: "Home", icon: "home" },
+  { route: "home-ifarm", label: "Home", icon: "home" },
+  { route: "home-abastecimento", label: "Home", icon: "home" },
   { route: "produtores", label: "Produtores", icon: "users" },
   { route: "lotes", label: "Lotes", icon: "trello" },
   { route: "leitura", label: "Leitura de Cocho", icon: "trending-up" },
@@ -40,12 +42,26 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
   { route: "signup", label: "Usuarios", icon: "user-plus" },
 ];
 
+const MODULO_ROUTES: Record<ModuloId, string[]> = {
+  iconfi: ["home", "produtores", "lotes", "leitura", "insumos", "dietas", "roteiros", "mapa-trato", "tratador", "estimativa-peso", "analise-lote"],
+  ifarm: ["home-ifarm", "consulta-gta"],
+  abastecimento: ["home-abastecimento", "tanques", "veiculos", "abastecimento", "historico-combustivel"],
+};
+
+const COMMON_ROUTES = ["configuracoes", "signup"];
+
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
-  const { userProfile, selectedFazendaNome, signOut, clearFazenda } = useAuth();
+  const { userProfile, selectedFazendaNome, selectedModulo, signOut, clearFazenda, clearModulo } = useAuth();
   const { logoUrl } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
   const isAdmin = userProfile?.tipo === "admin";
+
+  const visibleRoutes = selectedModulo
+    ? [...MODULO_ROUTES[selectedModulo], ...COMMON_ROUTES]
+    : [];
+
+  const moduloLabel = selectedModulo === "iconfi" ? "iConfi" : selectedModulo === "ifarm" ? "iFarm" : selectedModulo === "abastecimento" ? "Abastecimento" : "";
 
   return (
     <ScrollView contentContainerStyle={{ flex: 1 }} bounces={false}>
@@ -72,10 +88,17 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           {userProfile?.nome ?? ""} ({userProfile?.tipo ?? ""})
         </Text>
       </View>
+      {/* Module badge */}
+      {moduloLabel ? (
+        <View style={styles.moduloBadge}>
+          <Text style={styles.moduloBadgeText}>{moduloLabel}</Text>
+        </View>
+      ) : null}
       <View style={styles.divider} />
 
       {/* Menu items */}
       {MENU_ITEMS.map((item) => {
+        if (!visibleRoutes.includes(item.route)) return null;
         if (item.route === "signup" && !isAdmin) return null;
 
         const isActive = pathname.includes(item.route);
@@ -105,7 +128,21 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <TouchableOpacity
           style={styles.footerButton}
           activeOpacity={0.7}
-          onPress={clearFazenda}
+          onPress={() => {
+            clearModulo();
+            onNavigate?.();
+          }}
+        >
+          <Feather name="layers" size={18} color="#727D9B" />
+          <Text style={styles.footerText}>Trocar Modulo</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.footerButton}
+          activeOpacity={0.7}
+          onPress={() => {
+            clearFazenda();
+            onNavigate?.();
+          }}
         >
           <Feather name="refresh-cw" size={18} color="#727D9B" />
           <Text style={styles.footerText}>Trocar Fazenda</Text>
@@ -341,6 +378,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#2A2D35",
     marginHorizontal: 16,
     marginVertical: 8,
+  },
+  moduloBadge: {
+    marginHorizontal: 20,
+    marginBottom: 4,
+    backgroundColor: "#2A2D35",
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    alignSelf: "flex-start",
+  },
+  moduloBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#727D9B",
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
   drawerItem: {
     flexDirection: "row",
