@@ -30,6 +30,10 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
   { route: "estimativa-peso", label: "Estimativa Peso", icon: "camera" },
   { route: "analise-lote", label: "Analise Lote", icon: "bar-chart-2" },
   { route: "consulta-gta", label: "Consultas", icon: "search" },
+  { route: "tanques", label: "Tanques", icon: "database" },
+  { route: "veiculos", label: "Veiculos", icon: "navigation" },
+  { route: "abastecimento", label: "Abastecimento", icon: "droplet" },
+  { route: "historico-combustivel", label: "Hist. Combustivel", icon: "list" },
   { route: "configuracoes", label: "Configuracoes", icon: "settings" },
   { route: "signup", label: "Usuarios", icon: "user-plus" },
 ];

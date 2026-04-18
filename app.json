@@ -62,7 +62,13 @@
           "photosPermission": "O app precisa acessar suas fotos para estimar o peso dos animais."
         }
       ],
-      "react-native-fast-tflite"
+      "react-native-fast-tflite",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "O app precisa da camera para escanear QR codes e registrar abastecimentos."
+        }
+      ]
     ],
     "assetBundlePatterns": ["assets/models/*"],
     "experiments": {

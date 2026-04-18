@@ -26,6 +26,9 @@ const TOP_LEVEL_COLLECTIONS = [
   "notaLeitura",
   "historicoMapaTrato",
   "parametros",
+  "tanques",
+  "veiculos",
+  "abastecimentos",
 ];
 
 export async function prefetchAllData(onProgress?: ProgressCallback): Promise<void> {
