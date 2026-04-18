@@ -222,6 +222,7 @@ function MobileDrawer() {
 export default function AppLayout() {
   const { isDesktop } = useResponsive();
   const { selectedFazendaId } = useAuth();
+  const { primaryColor } = useTheme();
   const [checking, setChecking] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
@@ -263,7 +264,7 @@ export default function AppLayout() {
           backgroundColor: "#FDFDFD",
         }}
       >
-        <ActivityIndicator size="large" color="#3366FF" />
+        <ActivityIndicator size="large" color={primaryColor} />
       </View>
     );
   }
@@ -279,7 +280,7 @@ export default function AppLayout() {
           padding: 32,
         }}
       >
-        <ActivityIndicator size="large" color="#3366FF" />
+        <ActivityIndicator size="large" color={primaryColor} />
         <Text
           style={{
             marginTop: 16,

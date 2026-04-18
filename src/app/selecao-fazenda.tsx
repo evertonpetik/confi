@@ -1,6 +1,7 @@
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { addRawDocument, setCurrentFazendaId } from "@/services/firestoreService";
 import { seedTabelasAuxiliares } from "@/utils/seedTabelasAuxiliares";
@@ -19,6 +20,7 @@ import {
 export default function SelecaoFazenda() {
   const { isTablet, maxWidthAuth, containerPadding, titleFontSize } = useResponsive();
   const { fazendas, selectFazenda, signOut, userProfile, loading: authLoading } = useAuth();
+  const { primaryColor } = useTheme();
   const [ready, setReady] = useState(false);
   const [novaFazendaNome, setNovaFazendaNome] = useState("");
   const [criando, setCriando] = useState(false);
@@ -68,7 +70,7 @@ export default function SelecaoFazenda() {
   if (!ready) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#3366FF" />
+        <ActivityIndicator size="large" color={primaryColor} />
         <Text style={styles.loadingText}>Carregando...</Text>
       </View>
     );
@@ -109,7 +111,7 @@ export default function SelecaoFazenda() {
             />
             <View style={{ marginTop: 12 }}>
               {criando ? (
-                <ActivityIndicator size="large" color="#3366FF" />
+                <ActivityIndicator size="large" color={primaryColor} />
               ) : (
                 <Button label="Criar Fazenda" onPress={handleCriarFazenda} />
               )}
@@ -156,7 +158,7 @@ export default function SelecaoFazenda() {
   if (fazendas.length === 1) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#3366FF" />
+        <ActivityIndicator size="large" color={primaryColor} />
       </View>
     );
   }
@@ -193,8 +195,8 @@ export default function SelecaoFazenda() {
               activeOpacity={0.7}
               onPress={() => selectFazenda(f.id, f.nome)}
             >
-              <View style={styles.cardIcon}>
-                <Feather name="map-pin" size={24} color="#3366FF" />
+              <View style={[styles.cardIcon, { backgroundColor: primaryColor + "1A" }]}>
+                <Feather name="map-pin" size={24} color={primaryColor} />
               </View>
               <Text style={styles.cardText}>{f.nome}</Text>
               <Feather name="chevron-right" size={20} color="#999" />
