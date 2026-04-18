@@ -1,6 +1,7 @@
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useState } from "react";
 import {
@@ -17,6 +18,7 @@ import {
 export default function Index() {
   const { isTablet, isSmallPhone, maxWidthAuth, containerPadding, titleFontSize } = useResponsive();
   const { signIn } = useAuth();
+  const { primaryColor, logoUrl } = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -66,6 +68,13 @@ export default function Index() {
             },
           ]}
         >
+          {logoUrl && (
+            <Image
+              source={{ uri: logoUrl }}
+              resizeMode="contain"
+              style={[styles.logo, isTablet && styles.logoWide]}
+            />
+          )}
           <Image
             source={require("@/assets/img1.png")}
             resizeMode="contain"
@@ -93,7 +102,7 @@ export default function Index() {
             {loading ? (
               <ActivityIndicator
                 size="large"
-                color="#3366FF"
+                color={primaryColor}
                 style={{ marginTop: 8 }}
               />
             ) : (
@@ -144,5 +153,16 @@ const styles = StyleSheet.create({
     color: "#E53935",
     fontSize: 14,
     textAlign: "center",
+  },
+  logo: {
+    width: 160,
+    height: 70,
+    alignSelf: "center",
+    marginTop: 40,
+    marginBottom: -20,
+  },
+  logoWide: {
+    marginTop: 16,
+    marginBottom: -8,
   },
 });

@@ -1,4 +1,5 @@
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
@@ -6,6 +7,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 function AuthGate() {
   const { user, userProfile, selectedFazendaId, loading, signOut } = useAuth();
+  const { primaryColor } = useTheme();
   const segments = useSegments();
   const router = useRouter();
 
@@ -42,7 +44,7 @@ function AuthGate() {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#FDFDFD" }}>
-        <ActivityIndicator size="large" color="#3366FF" />
+        <ActivityIndicator size="large" color={primaryColor} />
       </View>
     );
   }
@@ -59,7 +61,7 @@ function AuthGate() {
         </Text>
         <TouchableOpacity
           onPress={signOut}
-          style={{ marginTop: 24, paddingVertical: 12, paddingHorizontal: 24, backgroundColor: "#3366FF", borderRadius: 8 }}
+          style={{ marginTop: 24, paddingVertical: 12, paddingHorizontal: 24, backgroundColor: primaryColor, borderRadius: 8 }}
         >
           <Text style={{ color: "#FFF", fontWeight: "600", fontSize: 16 }}>Voltar ao Login</Text>
         </TouchableOpacity>
@@ -73,9 +75,11 @@ function AuthGate() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <AuthGate />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AuthGate />
+        </AuthProvider>
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }

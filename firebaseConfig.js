@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 
 let db;
 let auth;
+let storage;
 
 const webFirebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -21,6 +22,7 @@ if (Platform.OS === "web") {
     persistentMultipleTabManager,
   } = require("firebase/firestore");
   const { getAuth } = require("firebase/auth");
+  const { getStorage } = require("firebase/storage");
 
   const app = initializeApp(webFirebaseConfig);
   db = initializeFirestore(app, {
@@ -29,6 +31,7 @@ if (Platform.OS === "web") {
     }),
   });
   auth = getAuth(app);
+  storage = getStorage(app);
 } else {
   const firestore = require("@react-native-firebase/firestore").default;
   firestore().settings({ cacheSizeBytes: firestore.CACHE_SIZE_UNLIMITED });
@@ -36,6 +39,9 @@ if (Platform.OS === "web") {
 
   const rnAuth = require("@react-native-firebase/auth").default;
   auth = rnAuth();
+
+  const rnStorage = require("@react-native-firebase/storage").default;
+  storage = rnStorage();
 }
 
-export { auth, db, webFirebaseConfig };
+export { auth, db, storage, webFirebaseConfig };

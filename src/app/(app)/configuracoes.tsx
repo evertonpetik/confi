@@ -7,22 +7,27 @@ import {
   TabelaAuxiliarFormModal,
 } from "@/components/TabelaAuxiliarFormModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { THEME_COLORS, useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
   deleteDocument,
   getCollection,
+  setDocument,
   updateDocument,
 } from "@/services/firestoreService";
+import { uploadBlob } from "@/services/storageService";
 import { prefetchAllData } from "@/utils/prefetchFirestore";
 import { seedTabelasAuxiliares } from "@/utils/seedTabelasAuxiliares";
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -89,11 +94,13 @@ type ItemAux = { id: string } & Record<string, string | number>;
 export default function Configuracoes() {
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const { selectedFazendaId } = useAuth();
+  const { primaryColor, setPrimaryColor, logoUrl, setLogoUrl } = useTheme();
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState("");
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   // Data per table: colecao -> items[]
   const [dados, setDados] = useState<Map<string, ItemAux[]>>(new Map());
@@ -114,6 +121,30 @@ export default function Configuracoes() {
     id: string;
     descricao: string;
   } | null>(null);
+
+  async function handleUploadLogo() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        quality: 0.8,
+        allowsEditing: true,
+      });
+
+      if (result.canceled || !result.assets[0]) return;
+
+      setUploadingLogo(true);
+      const uri = result.assets[0].uri;
+      const url = await uploadBlob("config/logo.png", uri);
+      await setDocument(["config"], "app", { logoUrl: url }, { merge: true });
+      setLogoUrl(url);
+      Alert.alert("Sucesso", "Logo atualizada com sucesso.");
+    } catch (err) {
+      console.error("Erro ao fazer upload da logo:", err);
+      Alert.alert("Erro", "Nao foi possivel fazer upload da logo.");
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -298,7 +329,76 @@ export default function Configuracoes() {
               Gerencie as tabelas auxiliares do sistema.
             </Text>
 
+            {/* Identidade Visual */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Identidade Visual</Text>
 
+              {/* Color Picker */}
+              <Text style={styles.sectionDescription}>
+                Escolha a cor principal do sistema.
+              </Text>
+              <View style={styles.colorGrid}>
+                {THEME_COLORS.map((c) => (
+                  <TouchableOpacity
+                    key={c.value}
+                    style={styles.colorItem}
+                    activeOpacity={0.7}
+                    onPress={() => setPrimaryColor(c.value)}
+                  >
+                    <View
+                      style={[
+                        styles.colorCircle,
+                        { backgroundColor: c.value },
+                        c.value === primaryColor && styles.colorCircleSelected,
+                      ]}
+                    >
+                      {c.value === primaryColor && (
+                        <Feather name="check" size={16} color="#FFF" />
+                      )}
+                    </View>
+                    <Text style={styles.colorLabel}>{c.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Logo Upload */}
+              <Text style={[styles.sectionDescription, { marginTop: 20 }]}>
+                Logo da empresa (exibida no menu e na tela de login).
+              </Text>
+              <View style={styles.logoSection}>
+                <View style={styles.logoPreview}>
+                  {logoUrl ? (
+                    <Image
+                      source={{ uri: logoUrl }}
+                      style={styles.logoImage}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <View style={styles.logoPlaceholder}>
+                      <Feather name="image" size={32} color="#DCDCDC" />
+                      <Text style={styles.logoPlaceholderText}>Sem logo</Text>
+                    </View>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={[styles.uploadButton, { backgroundColor: primaryColor }]}
+                  activeOpacity={0.8}
+                  onPress={handleUploadLogo}
+                  disabled={uploadingLogo}
+                >
+                  {uploadingLogo ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <>
+                      <Feather name="upload" size={16} color="#FFF" />
+                      <Text style={styles.uploadButtonText}>
+                        {logoUrl ? "Alterar Logo" : "Enviar Logo"}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
 
             {/* Sync button */}
             <View style={styles.section}>
@@ -588,5 +688,75 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#3366FF",
     textAlign: "center",
+  },
+  colorGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 12,
+  },
+  colorItem: {
+    alignItems: "center",
+    width: 56,
+  },
+  colorCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  colorCircleSelected: {
+    borderWidth: 3,
+    borderColor: "#1a1a1a",
+  },
+  colorLabel: {
+    fontSize: 10,
+    color: "#666",
+    marginTop: 4,
+    textAlign: "center",
+  },
+  logoSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginTop: 12,
+  },
+  logoPreview: {
+    width: 160,
+    height: 80,
+    borderRadius: 12,
+    backgroundColor: "#F5F5F5",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  logoImage: {
+    width: "100%",
+    height: "100%",
+  },
+  logoPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  logoPlaceholderText: {
+    fontSize: 12,
+    color: "#DCDCDC",
+  },
+  uploadButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFF",
   },
 });

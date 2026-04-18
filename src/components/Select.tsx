@@ -1,3 +1,4 @@
+import { useTheme } from "@/contexts/ThemeContext";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -40,6 +41,7 @@ export function Select({
 }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const { primaryColor } = useTheme();
 
   const selectedLabel =
     options.find((o) => o.value === value)?.label ?? "";
@@ -147,13 +149,13 @@ export function Select({
                   <Text
                     style={[
                       styles.optionText,
-                      item.value === value && styles.optionTextSelected,
+                      item.value === value && [styles.optionTextSelected, { color: primaryColor }],
                     ]}
                   >
                     {item.label}
                   </Text>
                   {item.value === value && (
-                    <Feather name="check" size={18} color="#3366FF" />
+                    <Feather name="check" size={18} color={primaryColor} />
                   )}
                 </TouchableOpacity>
               )}

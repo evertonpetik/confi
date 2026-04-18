@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { DrawerProvider, useDrawer } from "@/contexts/DrawerContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { prefetchAllData } from "@/utils/prefetchFirestore";
@@ -9,6 +10,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -40,12 +42,23 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { userProfile, selectedFazendaNome, signOut, clearFazenda } = useAuth();
+  const { logoUrl } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
   const isAdmin = userProfile?.tipo === "admin";
 
   return (
     <ScrollView contentContainerStyle={{ flex: 1 }} bounces={false}>
+      {/* Logo */}
+      {logoUrl && (
+        <View style={styles.logoContainer}>
+          <Image
+            source={{ uri: logoUrl }}
+            style={styles.sidebarLogo}
+            resizeMode="contain"
+          />
+        </View>
+      )}
       {/* Fazenda header */}
       <View style={styles.header}>
         <Feather name="map-pin" size={16} color="#727D9B" />
@@ -289,6 +302,15 @@ export default function AppLayout() {
 }
 
 const styles = StyleSheet.create({
+  logoContainer: {
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  sidebarLogo: {
+    width: 120,
+    height: 50,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
