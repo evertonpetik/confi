@@ -1,3 +1,4 @@
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -37,6 +38,7 @@ export function VeiculoCard({
   onDelete,
   onQRCode,
 }: VeiculoCardProps) {
+  const { primaryColor } = useTheme();
   return (
     <View style={styles.card}>
       <View style={styles.content}>
@@ -89,7 +91,7 @@ export function VeiculoCard({
           activeOpacity={0.7}
           onPress={() => onEdit(veiculo)}
         >
-          <Feather name="edit-2" size={18} color="#3366FF" />
+          <Feather name="edit-2" size={18} color={primaryColor} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}

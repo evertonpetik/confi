@@ -1,5 +1,6 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { consultarGTA, GTAData } from "@/services/gtaService";
 import { consultarSintegra, SintegraData } from "@/services/sintegraService";
@@ -8,18 +9,18 @@ import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 type TabType = "gta" | "sintegra";
 
 export default function ConsultaGTA() {
+  const { primaryColor } = useTheme();
   const {
     isTablet,
     isDesktop,
@@ -119,11 +120,11 @@ export default function ConsultaGTA() {
             styles.container,
             { padding: containerPadding },
             isTablet &&
-              !isDesktop && {
-                maxWidth: maxWidthContent,
-                alignSelf: "center" as const,
-                width: "100%",
-              },
+            !isDesktop && {
+              maxWidth: maxWidthContent,
+              alignSelf: "center" as const,
+              width: "100%",
+            },
           ]}
         >
           {/* Header */}
@@ -145,38 +146,40 @@ export default function ConsultaGTA() {
           {/* Tabs */}
           <View style={styles.tabRow}>
             <TouchableOpacity
-              style={[styles.tab, tab === "gta" && styles.tabActive]}
+              style={[styles.tab, tab === "gta" && styles.tabActive, tab === "gta" && { borderBottomColor: primaryColor }]}
               activeOpacity={0.8}
               onPress={() => switchTab("gta")}
             >
               <Feather
                 name="file-text"
                 size={16}
-                color={tab === "gta" ? "#3366FF" : "#999"}
+                color={tab === "gta" ? primaryColor : "#999"}
               />
               <Text
                 style={[
                   styles.tabLabel,
                   tab === "gta" && styles.tabLabelActive,
+                  tab === "gta" && { color: primaryColor },
                 ]}
               >
                 GTA
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.tab, tab === "sintegra" && styles.tabActive]}
+              style={[styles.tab, tab === "sintegra" && styles.tabActive, tab === "sintegra" && { borderBottomColor: primaryColor }]}
               activeOpacity={0.8}
               onPress={() => switchTab("sintegra")}
             >
               <Feather
                 name="search"
                 size={16}
-                color={tab === "sintegra" ? "#3366FF" : "#999"}
+                color={tab === "sintegra" ? primaryColor : "#999"}
               />
               <Text
                 style={[
                   styles.tabLabel,
                   tab === "sintegra" && styles.tabLabelActive,
+                  tab === "sintegra" && { color: primaryColor },
                 ]}
               >
                 Sintegra
@@ -204,7 +207,7 @@ export default function ConsultaGTA() {
 
               <View style={styles.buttonRow}>
                 <TouchableOpacity
-                  style={[styles.button, loadingGta && styles.buttonDisabled]}
+                  style={[styles.button, { backgroundColor: primaryColor }, loadingGta && styles.buttonDisabled]}
                   activeOpacity={0.8}
                   onPress={handleConsultarGTA}
                   disabled={loadingGta}
@@ -221,12 +224,12 @@ export default function ConsultaGTA() {
 
                 {gta && (
                   <TouchableOpacity
-                    style={[styles.button, styles.buttonSecondary]}
+                    style={[styles.button, styles.buttonSecondary, { borderColor: primaryColor }]}
                     activeOpacity={0.8}
                     onPress={handleNovaPesquisaGTA}
                   >
-                    <Feather name="refresh-cw" size={18} color="#3366FF" />
-                    <Text style={[styles.buttonLabel, { color: "#3366FF" }]}>
+                    <Feather name="refresh-cw" size={18} color={primaryColor} />
+                    <Text style={[styles.buttonLabel, { color: primaryColor }]}>
                       Nova Pesquisa
                     </Text>
                   </TouchableOpacity>
@@ -263,7 +266,7 @@ export default function ConsultaGTA() {
 
               {loadingSintegra && (
                 <View style={styles.loadingBox}>
-                  <ActivityIndicator size="small" color="#3366FF" />
+                  <ActivityIndicator size="small" color={primaryColor} />
                   <Text style={styles.loadingText}>
                     Resolvendo captcha e consultando... isso pode levar ate 30
                     segundos.
@@ -275,6 +278,7 @@ export default function ConsultaGTA() {
                 <TouchableOpacity
                   style={[
                     styles.button,
+                    { backgroundColor: primaryColor },
                     loadingSintegra && styles.buttonDisabled,
                   ]}
                   activeOpacity={0.8}
@@ -293,12 +297,12 @@ export default function ConsultaGTA() {
 
                 {sintegra && (
                   <TouchableOpacity
-                    style={[styles.button, styles.buttonSecondary]}
+                    style={[styles.button, styles.buttonSecondary, { borderColor: primaryColor }]}
                     activeOpacity={0.8}
                     onPress={handleNovaPesquisaSintegra}
                   >
-                    <Feather name="refresh-cw" size={18} color="#3366FF" />
-                    <Text style={[styles.buttonLabel, { color: "#3366FF" }]}>
+                    <Feather name="refresh-cw" size={18} color={primaryColor} />
+                    <Text style={[styles.buttonLabel, { color: primaryColor }]}>
                       Nova Pesquisa
                     </Text>
                   </TouchableOpacity>
@@ -490,10 +494,11 @@ function SectionCard({
   icon: React.ComponentProps<typeof Feather>["name"];
   children: React.ReactNode;
 }) {
+  const { primaryColor } = useTheme();
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <Feather name={icon} size={18} color="#3366FF" />
+        <Feather name={icon} size={18} color={primaryColor} />
         <Text style={styles.cardTitle}>{title}</Text>
       </View>
       <View style={styles.cardBody}>{children}</View>
@@ -563,7 +568,7 @@ const styles = StyleSheet.create({
     marginBottom: -2,
   },
   tabActive: {
-    borderBottomColor: "#3366FF",
+    borderBottomColor: "transparent",
   },
   tabLabel: {
     fontSize: 15,
@@ -571,7 +576,7 @@ const styles = StyleSheet.create({
     color: "#999",
   },
   tabLabelActive: {
-    color: "#3366FF",
+    color: "#333",
   },
   inputRow: {
     marginTop: 20,
@@ -595,7 +600,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#3366FF",
+    backgroundColor: "#999",
     borderRadius: 8,
     height: 48,
     paddingHorizontal: 24,
@@ -607,7 +612,7 @@ const styles = StyleSheet.create({
   buttonSecondary: {
     backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: "#3366FF",
+    borderColor: "#DDD",
   },
   buttonLabel: {
     color: "#FFF",

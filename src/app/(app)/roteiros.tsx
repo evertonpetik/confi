@@ -8,6 +8,7 @@ import { InsumoFormModal } from "@/components/InsumoFormModal";
 import { Roteiro, RoteiroCard } from "@/components/RoteiroCard";
 import { RoteiroFormModal } from "@/components/RoteiroFormModal";
 import { SelectOption } from "@/components/Select";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -41,6 +42,7 @@ type LoteRef = {
 type FiltroStatus = "ativos" | "inativos";
 
 export default function Roteiros() {
+  const { primaryColor } = useTheme();
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [roteiros, setRoteiros] = useState<Roteiro[]>([]);
   const [loading, setLoading] = useState(true);
@@ -275,9 +277,8 @@ export default function Roteiros() {
                 style={[
                   styles.filterButton,
                   filtro === "ativos" && styles.filterActive,
+                  filtro === "ativos" && { backgroundColor: primaryColor, borderColor: primaryColor },
                 ]}
-                activeOpacity={0.8}
-                onPress={() => setFiltro("ativos")}
               >
                 <Text
                   style={[
@@ -292,9 +293,8 @@ export default function Roteiros() {
                 style={[
                   styles.filterButton,
                   filtro === "inativos" && styles.filterActive,
+                  filtro === "inativos" && { backgroundColor: primaryColor, borderColor: primaryColor },
                 ]}
-                activeOpacity={0.8}
-                onPress={() => setFiltro("inativos")}
               >
                 <Text
                   style={[
@@ -308,7 +308,7 @@ export default function Roteiros() {
             </View>
 
             <TouchableOpacity
-              style={styles.addButton}
+              style={[styles.addButton, { backgroundColor: primaryColor }]}
               activeOpacity={0.8}
               onPress={handleNew}
             >
@@ -319,7 +319,7 @@ export default function Roteiros() {
             {loading ? (
               <ActivityIndicator
                 size="large"
-                color="#3366FF"
+                color={primaryColor}
                 style={{ marginTop: 32 }}
               />
             ) : roteirosFiltrados.length === 0 ? (
@@ -421,8 +421,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   filterActive: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
+    borderColor: "transparent",
   },
   filterText: {
     fontSize: 14,
@@ -436,7 +435,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#3366FF",
     borderRadius: 8,
     height: 48,
     gap: 8,

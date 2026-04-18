@@ -2,6 +2,7 @@ import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
 import type { Tanque } from "@/components/TanqueCard";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
@@ -58,6 +59,7 @@ export function TanqueFormModal({
   onClose,
 }: TanqueFormModalProps) {
   const [form, setForm] = useState<TanqueForm>(emptyForm);
+  const { primaryColor } = useTheme();
   const isEditing = !!tanque;
 
   useEffect(() => {
@@ -198,7 +200,7 @@ export function TanqueFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      form.localizacao === "fixo" && styles.toggleActive,
+                      form.localizacao === "fixo" && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() =>
@@ -217,7 +219,7 @@ export function TanqueFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      form.localizacao === "movel" && styles.toggleActive,
+                      form.localizacao === "movel" && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() =>
@@ -240,7 +242,7 @@ export function TanqueFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      form.ativo && styles.toggleActive,
+                      form.ativo && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() => setForm((p) => ({ ...p, ativo: true }))}
@@ -257,7 +259,7 @@ export function TanqueFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      !form.ativo && styles.toggleActive,
+                      !form.ativo && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() => setForm((p) => ({ ...p, ativo: false }))}
@@ -348,8 +350,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   toggleActive: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
   },
   toggleText: {
     fontSize: 14,

@@ -11,6 +11,7 @@ import {
   Saida,
 } from "@/components/InsumoCard";
 import { InsumoFormModal } from "@/components/InsumoFormModal";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -34,6 +35,7 @@ import {
 } from "react-native";
 
 export default function Insumos() {
+  const { primaryColor } = useTheme();
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -367,7 +369,7 @@ export default function Insumos() {
             </Text>
 
             <TouchableOpacity
-              style={styles.addButton}
+              style={[styles.addButton, { backgroundColor: primaryColor }]}
               activeOpacity={0.8}
               onPress={handleNew}
             >
@@ -378,7 +380,7 @@ export default function Insumos() {
             {loading ? (
               <ActivityIndicator
                 size="large"
-                color="#3366FF"
+                color={primaryColor}
                 style={{ marginTop: 32 }}
               />
             ) : insumos.length === 0 ? (
@@ -472,7 +474,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#3366FF",
     borderRadius: 8,
     height: 48,
     gap: 8,

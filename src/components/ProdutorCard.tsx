@@ -1,3 +1,4 @@
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -21,6 +22,7 @@ type ProdutorCardProps = {
 };
 
 export function ProdutorCard({ produtor, onEdit, onDelete }: ProdutorCardProps) {
+  const { primaryColor } = useTheme();
   return (
     <View style={styles.card}>
       <View style={styles.content}>
@@ -43,7 +45,7 @@ export function ProdutorCard({ produtor, onEdit, onDelete }: ProdutorCardProps) 
           activeOpacity={0.7}
           onPress={() => onEdit(produtor)}
         >
-          <Feather name="edit-2" size={18} color="#3366FF" />
+          <Feather name="edit-2" size={18} color={primaryColor} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}

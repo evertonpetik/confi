@@ -1,5 +1,6 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -57,6 +58,7 @@ type AlertaCmsLote = {
 };
 
 export default function Leitura() {
+  const { primaryColor } = useTheme();
   const { isTablet, isDesktop, maxWidthContent, isSmallPhone, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [lotes, setLotes] = useState<LoteComPiquete[]>([]);
   const [notas, setNotas] = useState<NotaLeitura[]>([]);
@@ -390,16 +392,16 @@ export default function Leitura() {
             <View style={styles.dateRow}>
               <Text style={styles.dateLabel}>Data:</Text>
               <TouchableOpacity onPress={() => mudarData(-1)} style={styles.dateArrow}>
-                <Feather name="chevron-left" size={20} color="#3366FF" />
+                <Feather name="chevron-left" size={20} color={primaryColor} />
               </TouchableOpacity>
               <Text style={styles.dateValue}>
                 {dataSelecionada.toLocaleDateString("pt-BR")}
               </Text>
               <TouchableOpacity onPress={() => mudarData(1)} style={styles.dateArrow}>
-                <Feather name="chevron-right" size={20} color="#3366FF" />
+                <Feather name="chevron-right" size={20} color={primaryColor} />
               </TouchableOpacity>
               {hoje !== getHojeStr() && (
-                <TouchableOpacity onPress={() => setDataSelecionada(new Date())} style={styles.dateHojeBtn}>
+                <TouchableOpacity onPress={() => setDataSelecionada(new Date())} style={[styles.dateHojeBtn, { backgroundColor: primaryColor }]}>
                   <Text style={styles.dateHojeBtnText}>Hoje</Text>
                 </TouchableOpacity>
               )}
@@ -408,7 +410,7 @@ export default function Leitura() {
             {loading ? (
               <ActivityIndicator
                 size="large"
-                color="#3366FF"
+                color={primaryColor}
                 style={{ marginTop: 32 }}
               />
             ) : lotes.length === 0 ? (
@@ -483,7 +485,7 @@ export default function Leitura() {
                             >
                               <Feather name="minus" size={14} color="#E53935" />
                             </TouchableOpacity>
-                            <Text style={styles.cmsText}>
+                            <Text style={[styles.cmsText, { color: primaryColor }]}>
                               {formatCms(lote.cmsAtual)}
                             </Text>
                             <TouchableOpacity
@@ -599,7 +601,6 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   dateHojeBtn: {
-    backgroundColor: "#3366FF",
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -677,7 +678,6 @@ const styles = StyleSheet.create({
   cmsText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#3366FF",
   },
   ajusteButton: {
     width: 26,

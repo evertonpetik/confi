@@ -1,6 +1,7 @@
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Insumo } from "@/components/InsumoCard";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
@@ -41,6 +42,7 @@ export function InsumoFormModal({
   onClose,
 }: InsumoFormModalProps) {
   const [form, setForm] = useState<InsumoForm>(emptyForm);
+  const { primaryColor } = useTheme();
   const isEditing = !!insumo;
 
   useEffect(() => {
@@ -128,7 +130,7 @@ export function InsumoFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      !form.materiaSecaVariavel && styles.toggleActive,
+                      !form.materiaSecaVariavel && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() =>
@@ -147,7 +149,7 @@ export function InsumoFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      form.materiaSecaVariavel && styles.toggleActive,
+                      form.materiaSecaVariavel && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() =>
@@ -240,8 +242,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   toggleActive: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
   },
   toggleText: {
     fontSize: 14,

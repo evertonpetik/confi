@@ -1,4 +1,5 @@
 import { Button } from "@/components/Button";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
@@ -50,6 +51,7 @@ export function CargaModal({
 }: CargaModalProps) {
   const [tratoAtual, setTratoAtual] = useState(1);
   const [localCargas, setLocalCargas] = useState<CargaTrato[]>([]);
+  const { primaryColor } = useTheme();
 
   useEffect(() => {
     if (visible) {
@@ -152,7 +154,7 @@ export function CargaModal({
                       key={num}
                       style={[
                         styles.tab,
-                        tratoAtual === num && styles.tabActive,
+                        tratoAtual === num && [styles.tabActive, { backgroundColor: primaryColor, borderColor: primaryColor }],
                       ]}
                       activeOpacity={0.8}
                       onPress={() => setTratoAtual(num)}
@@ -194,7 +196,7 @@ export function CargaModal({
                   <Text style={[styles.cellText, { flex: 2 }]} numberOfLines={2}>
                     {ins.insumoNome}
                   </Text>
-                  <Text style={[styles.cellPrevisto, { flex: 1 }]}>
+                  <Text style={[styles.cellPrevisto, { flex: 1, color: primaryColor }]}>
                     {Math.round(ins.previsto)} kg
                   </Text>
                   <View style={{ flex: 1 }}>
@@ -214,7 +216,7 @@ export function CargaModal({
                 <Text style={[styles.cellText, styles.aguaText, { flex: 2 }]}>
                   Água
                 </Text>
-                <Text style={[styles.cellPrevisto, { flex: 1 }]}>
+                <Text style={[styles.cellPrevisto, { flex: 1, color: primaryColor }]}>
                   {Math.round(cargaAtual?.aguaPrevista ?? 0)} kg
                 </Text>
                 <View style={{ flex: 1 }}>
@@ -294,8 +296,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   tabActive: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
   },
   tabText: {
     fontSize: 13,
@@ -333,7 +333,6 @@ const styles = StyleSheet.create({
   cellPrevisto: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#3366FF",
   },
   cellInput: {
     height: 38,

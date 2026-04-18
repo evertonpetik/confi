@@ -8,6 +8,7 @@ import {
   type Movimentacao,
 } from "@/components/LoteCard";
 import { Select } from "@/components/Select";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { getCollection } from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
@@ -39,6 +40,7 @@ type DailyData = {
 // ---- Component ----
 
 export default function AnaliseLote() {
+  const { primaryColor } = useTheme();
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop, cardValueFontSize } = useResponsive();
 
   const [lotes, setLotes] = useState<Lote[]>([]);
@@ -269,7 +271,7 @@ export default function AnaliseLote() {
   function leituraColor(nota: string): string {
     switch (nota) {
       case "1": return "#4CAF50";
-      case "2": return "#3366FF";
+      case "2": return primaryColor;
       case "3": return "#FF9800";
       case "4": return "#FF5722";
       case "5": return "#E53935";
@@ -369,7 +371,7 @@ export default function AnaliseLote() {
           {/* Dias de Confinamento */}
           <View style={[styles.kpiCard, { flex: 1 }]}>
             <Text style={styles.kpiTitle}>Dias de confinamento</Text>
-            <Text style={[styles.kpiMainValue, { fontSize: cardValueFontSize, color: "#3366FF" }]} adjustsFontSizeToFit numberOfLines={1}>
+            <Text style={[styles.kpiMainValue, { fontSize: cardValueFontSize, color: primaryColor }]} adjustsFontSizeToFit numberOfLines={1}>
               {diasConfinamento}
             </Text>
             <Text style={styles.kpiSubLabel}>dias</Text>
@@ -417,9 +419,9 @@ export default function AnaliseLote() {
                 data={cmsChartData}
                 width={chartWidth}
                 height={180}
-                color="#3366FF"
+                color={primaryColor}
                 thickness={2}
-                dataPointsColor="#3366FF"
+                dataPointsColor={primaryColor}
                 dataPointsRadius={4}
                 xAxisLabelTextStyle={styles.chartXLabel}
                 yAxisTextStyle={styles.chartYLabel}
@@ -459,9 +461,9 @@ export default function AnaliseLote() {
                 showLine
                 lineData={custoLineData}
                 lineConfig={{
-                  color: "#3366FF",
+                  color: primaryColor,
                   thickness: 2,
-                  dataPointsColor: "#3366FF",
+                  dataPointsColor: primaryColor,
                   dataPointsRadius: 3,
                 }}
                 hideRules
@@ -481,7 +483,7 @@ export default function AnaliseLote() {
             </View>
             <View style={styles.legendItem}>
               <View
-                style={[styles.legendDot, { backgroundColor: "#3366FF" }]}
+                style={[styles.legendDot, { backgroundColor: primaryColor }]}
               />
               <Text style={styles.legendText}>Custo MS Animal Dia (R$)</Text>
             </View>
@@ -604,7 +606,7 @@ export default function AnaliseLote() {
             {loadingData && (
               <ActivityIndicator
                 size="large"
-                color="#3366FF"
+                color={primaryColor}
                 style={{ marginTop: 32 }}
               />
             )}

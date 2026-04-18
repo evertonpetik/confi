@@ -81,7 +81,7 @@ export function Select({
 
         {onAdd && (
           <TouchableOpacity
-            style={styles.addButton}
+            style={[styles.addButton, { backgroundColor: primaryColor }]}
             activeOpacity={0.7}
             onPress={onAdd}
           >
@@ -268,7 +268,6 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
   },
   optionTextSelected: {
-    color: "#3366FF",
     fontWeight: "600",
   },
   emptyText: {
@@ -281,7 +280,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 8,
-    backgroundColor: "#3366FF",
     alignItems: "center",
     justifyContent: "center",
   },

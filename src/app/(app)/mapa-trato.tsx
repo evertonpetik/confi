@@ -3,6 +3,7 @@ import { DescargaModal, DescargaTrato } from "@/components/DescargaModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Select, SelectOption } from "@/components/Select";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { setDocument } from "@/services/firestoreService";
 import {
@@ -53,6 +54,7 @@ function parseCSVLine(line: string): string[] {
 // ---- Component ----
 
 export default function MapaTrato() {
+  const { primaryColor } = useTheme();
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop, isSmallPhone } = useResponsive();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -755,16 +757,16 @@ export default function MapaTrato() {
             <View style={styles.dateRow}>
               <Text style={styles.dateLabel}>Data:</Text>
               <TouchableOpacity onPress={() => mudarData(-1)} style={styles.dateArrow}>
-                <Feather name="chevron-left" size={20} color="#3366FF" />
+                <Feather name="chevron-left" size={20} color={primaryColor} />
               </TouchableOpacity>
               <Text style={styles.dateValue}>
                 {dataSelecionada.toLocaleDateString("pt-BR")}
               </Text>
               <TouchableOpacity onPress={() => mudarData(1)} style={styles.dateArrow}>
-                <Feather name="chevron-right" size={20} color="#3366FF" />
+                <Feather name="chevron-right" size={20} color={primaryColor} />
               </TouchableOpacity>
               {hoje !== getHojeStr() && (
-                <TouchableOpacity onPress={() => setDataSelecionada(new Date())} style={styles.dateHojeBtn}>
+                <TouchableOpacity onPress={() => setDataSelecionada(new Date())} style={[styles.dateHojeBtn, { backgroundColor: primaryColor }]}>
                   <Text style={styles.dateHojeBtnText}>Hoje</Text>
                 </TouchableOpacity>
               )}
@@ -782,7 +784,7 @@ export default function MapaTrato() {
             {loading ? (
               <ActivityIndicator
                 size="large"
-                color="#3366FF"
+                color={primaryColor}
                 style={{ marginTop: 32 }}
               />
             ) : !selectedVagaoId ? (
@@ -805,7 +807,7 @@ export default function MapaTrato() {
                     <Text style={styles.exportButtonLabel} numberOfLines={1} adjustsFontSizeToFit>Exportar CSV</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={styles.importButton}
+                    style={[styles.importButton, { backgroundColor: primaryColor }]}
                     activeOpacity={0.8}
                     onPress={handleImportCSV}
                   >
@@ -870,7 +872,7 @@ export default function MapaTrato() {
 
                         <View style={styles.cardActions}>
                           <TouchableOpacity
-                            style={[styles.actionBtn, styles.actionBtnCarga]}
+                            style={[styles.actionBtn, styles.actionBtnCarga, { backgroundColor: primaryColor }]}
                             activeOpacity={0.8}
                             onPress={() =>
                               setCargaModal({ visible: true, index })
@@ -986,7 +988,6 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   dateHojeBtn: {
-    backgroundColor: "#3366FF",
     borderRadius: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -1086,7 +1087,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   actionBtnCarga: {
-    backgroundColor: "#3366FF",
   },
   actionBtnDescarga: {
     backgroundColor: "#FF9800",
@@ -1116,7 +1116,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#3366FF",
     borderRadius: 8,
     height: 44,
     gap: 8,

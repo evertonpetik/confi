@@ -3,6 +3,7 @@ import { Dieta, DietaInsumo } from "@/components/DietaCard";
 import { Input } from "@/components/Input";
 import { Insumo } from "@/components/InsumoCard";
 import { Select, SelectOption } from "@/components/Select";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
@@ -65,6 +66,7 @@ export function DietaFormModal({
   const [form, setForm] = useState<DietaForm>(emptyForm);
   const [insumoRows, setInsumoRows] = useState<InsumoRow[]>([]);
   const [manterMS, setManterMS] = useState<boolean>(false);
+  const { primaryColor } = useTheme();
   const isEditing = !!dieta;
 
   useEffect(() => {
@@ -286,7 +288,7 @@ export function DietaFormModal({
                       Total: {somaAtual.toFixed(2).replace(".", ",")}%
                     </Text>
                     {msDieta > 0 && (
-                      <Text style={[styles.sectionSubtitle, { color: "#3366FF" }]}>
+                      <Text style={[styles.sectionSubtitle, { color: primaryColor }]}>
                         MS da Dieta: {msDieta.toFixed(2).replace(".", ",")}%
                       </Text>
                     )}
@@ -327,12 +329,12 @@ export function DietaFormModal({
                 ))}
 
                 <TouchableOpacity
-                  style={styles.addInsumoButton}
+                  style={[styles.addInsumoButton, { borderColor: primaryColor }]}
                   activeOpacity={0.8}
                   onPress={handleAddInsumoRow}
                 >
-                  <Feather name="plus-circle" size={18} color="#3366FF" />
-                  <Text style={styles.addInsumoLabel}>Adicionar Insumo</Text>
+                  <Feather name="plus-circle" size={18} color={primaryColor} />
+                  <Text style={[styles.addInsumoLabel, { color: primaryColor }]}>Adicionar Insumo</Text>
                 </TouchableOpacity>
 
                 {/* Toggle Manter MS da Dieta */}
@@ -343,7 +345,7 @@ export function DietaFormModal({
                       <TouchableOpacity
                         style={[
                           styles.toggleButton,
-                          manterMS && styles.toggleActive,
+                          manterMS && { backgroundColor: primaryColor, borderColor: primaryColor },
                         ]}
                         activeOpacity={0.8}
                         onPress={() => setManterMS(true)}
@@ -360,7 +362,7 @@ export function DietaFormModal({
                       <TouchableOpacity
                         style={[
                           styles.toggleButton,
-                          !manterMS && styles.toggleActive,
+                          !manterMS && { backgroundColor: primaryColor, borderColor: primaryColor },
                         ]}
                         activeOpacity={0.8}
                         onPress={() => setManterMS(false)}
@@ -417,7 +419,7 @@ export function DietaFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      form.ativo && styles.toggleActive,
+                      form.ativo && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() => setForm((p) => ({ ...p, ativo: true }))}
@@ -555,14 +557,12 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#3366FF",
     borderStyle: "dashed",
     marginTop: 4,
   },
   addInsumoLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#3366FF",
   },
   toggleRow: {
     flexDirection: "row",
@@ -579,8 +579,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   toggleActive: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
   },
   toggleInactive: {
     backgroundColor: "#E53935",

@@ -7,6 +7,7 @@ import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Select } from "@/components/Select";
 import type { Tanque } from "@/components/TanqueCard";
 import type { Veiculo } from "@/components/VeiculoCard";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { getCollection } from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
@@ -24,6 +25,7 @@ import {
 } from "react-native";
 
 export default function HistoricoCombustivel() {
+  const { primaryColor } = useTheme();
   const {
     isTablet,
     isDesktop,
@@ -195,15 +197,15 @@ export default function HistoricoCombustivel() {
                   setFiltroTanque("");
                 }}
               >
-                <Feather name="x" size={14} color="#3366FF" />
-                <Text style={styles.clearFiltersText}>Limpar filtros</Text>
+                <Feather name="x" size={14} color={primaryColor} />
+                <Text style={[styles.clearFiltersText, { color: primaryColor }]}>Limpar filtros</Text>
               </TouchableOpacity>
             )}
 
             {loading ? (
               <ActivityIndicator
                 size="large"
-                color="#3366FF"
+                color={primaryColor}
                 style={{ marginTop: 32 }}
               />
             ) : filtered.length === 0 ? (
@@ -291,7 +293,6 @@ const styles = StyleSheet.create({
   },
   clearFiltersText: {
     fontSize: 13,
-    color: "#3366FF",
     fontWeight: "500",
   },
   emptyText: {

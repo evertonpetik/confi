@@ -4,6 +4,7 @@ import { Input } from "@/components/Input";
 import { Select } from "@/components/Select";
 import type { Tanque } from "@/components/TanqueCard";
 import type { Veiculo } from "@/components/VeiculoCard";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -36,6 +37,7 @@ type Step = "SCAN_QR" | "PHOTO_BOMBA" | "PHOTO_PAINEL" | "CONFIRM" | "SAVED";
 const STEPS: Step[] = ["SCAN_QR", "PHOTO_BOMBA", "PHOTO_PAINEL", "CONFIRM", "SAVED"];
 
 export default function Abastecimento() {
+  const { primaryColor } = useTheme();
   const {
     isTablet,
     isDesktop,
@@ -377,7 +379,7 @@ export default function Abastecimento() {
           <>
             {!permission?.granted ? (
               <TouchableOpacity
-                style={styles.primaryButton}
+                style={[styles.primaryButton, { backgroundColor: primaryColor }]}
                 activeOpacity={0.7}
                 onPress={requestPermission}
               >
@@ -393,7 +395,7 @@ export default function Abastecimento() {
                   onBarcodeScanned={scanned ? undefined : handleQRScanned}
                 />
                 <View style={styles.cameraOverlay}>
-                  <View style={styles.scanFrame} />
+                  <View style={[styles.scanFrame, { borderColor: primaryColor }]} />
                 </View>
               </View>
             )}
@@ -403,7 +405,7 @@ export default function Abastecimento() {
               activeOpacity={0.7}
               onPress={() => setManualMode(true)}
             >
-              <Text style={styles.secondaryButtonText}>
+              <Text style={[styles.secondaryButtonText, { color: primaryColor }]}>
                 Selecionar manualmente
               </Text>
             </TouchableOpacity>
@@ -429,7 +431,7 @@ export default function Abastecimento() {
                   setScanned(false);
                 }}
               >
-                <Text style={styles.secondaryButtonText}>
+                <Text style={[styles.secondaryButtonText, { color: primaryColor }]}>
                   Voltar para QR code
                 </Text>
               </TouchableOpacity>
@@ -495,6 +497,7 @@ export default function Abastecimento() {
               <TouchableOpacity
                 style={[
                   styles.primaryButton,
+                  { backgroundColor: primaryColor },
                   !selectedTanqueId && styles.buttonDisabled,
                 ]}
                 activeOpacity={0.7}
@@ -535,12 +538,12 @@ export default function Abastecimento() {
                 setOcrLitros(null);
               }}
             >
-              <Text style={styles.secondaryButtonText}>Tirar outra foto</Text>
+              <Text style={[styles.secondaryButtonText, { color: primaryColor }]}>Tirar outra foto</Text>
             </TouchableOpacity>
           </>
         ) : (
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: primaryColor }]}
             activeOpacity={0.7}
             onPress={handleTakePhotoBomba}
           >
@@ -556,8 +559,8 @@ export default function Abastecimento() {
 
         {ocrProcessing && (
           <View style={styles.ocrStatus}>
-            <ActivityIndicator size="small" color="#3366FF" />
-            <Text style={styles.ocrStatusText}>Lendo imagem...</Text>
+            <ActivityIndicator size="small" color={primaryColor} />
+            <Text style={[styles.ocrStatusText, { color: primaryColor }]}>Lendo imagem...</Text>
           </View>
         )}
 
@@ -578,7 +581,7 @@ export default function Abastecimento() {
 
         <View style={styles.buttonGroup}>
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: primaryColor }]}
             activeOpacity={0.7}
             onPress={proceedFromBomba}
           >
@@ -589,8 +592,8 @@ export default function Abastecimento() {
             activeOpacity={0.7}
             onPress={() => setStep("SCAN_QR")}
           >
-            <Feather name="arrow-left" size={16} color="#3366FF" />
-            <Text style={styles.backLinkText}>Voltar</Text>
+            <Feather name="arrow-left" size={16} color={primaryColor} />
+            <Text style={[styles.backLinkText, { color: primaryColor }]}>Voltar</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -640,12 +643,12 @@ export default function Abastecimento() {
                 setOcrMarcador(null);
               }}
             >
-              <Text style={styles.secondaryButtonText}>Tirar outra foto</Text>
+              <Text style={[styles.secondaryButtonText, { color: primaryColor }]}>Tirar outra foto</Text>
             </TouchableOpacity>
           </>
         ) : (
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: primaryColor }]}
             activeOpacity={0.7}
             onPress={handleTakePhotoPainel}
           >
@@ -661,8 +664,8 @@ export default function Abastecimento() {
 
         {ocrProcessing && (
           <View style={styles.ocrStatus}>
-            <ActivityIndicator size="small" color="#3366FF" />
-            <Text style={styles.ocrStatusText}>Lendo imagem...</Text>
+            <ActivityIndicator size="small" color={primaryColor} />
+            <Text style={[styles.ocrStatusText, { color: primaryColor }]}>Lendo imagem...</Text>
           </View>
         )}
 
@@ -687,7 +690,7 @@ export default function Abastecimento() {
 
         <View style={styles.buttonGroup}>
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: primaryColor }]}
             activeOpacity={0.7}
             onPress={proceedFromPainel}
           >
@@ -698,8 +701,8 @@ export default function Abastecimento() {
             activeOpacity={0.7}
             onPress={() => setStep("PHOTO_BOMBA")}
           >
-            <Feather name="arrow-left" size={16} color="#3366FF" />
-            <Text style={styles.backLinkText}>Voltar</Text>
+            <Feather name="arrow-left" size={16} color={primaryColor} />
+            <Text style={[styles.backLinkText, { color: primaryColor }]}>Voltar</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -800,7 +803,7 @@ export default function Abastecimento() {
 
         <View style={styles.buttonGroup}>
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: primaryColor }]}
             activeOpacity={0.7}
             onPress={handleConfirm}
             disabled={saving}
@@ -832,8 +835,8 @@ export default function Abastecimento() {
               )
             }
           >
-            <Feather name="arrow-left" size={16} color="#3366FF" />
-            <Text style={styles.backLinkText}>Voltar</Text>
+            <Feather name="arrow-left" size={16} color={primaryColor} />
+            <Text style={[styles.backLinkText, { color: primaryColor }]}>Voltar</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -856,7 +859,7 @@ export default function Abastecimento() {
 
         <View style={styles.buttonGroup}>
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: primaryColor }]}
             activeOpacity={0.7}
             onPress={handleNewAbastecimento}
           >
@@ -869,7 +872,7 @@ export default function Abastecimento() {
             <Text style={styles.primaryButtonText}>Novo Abastecimento</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.outlineButton}
+            style={[styles.outlineButton, { borderColor: primaryColor }]}
             activeOpacity={0.7}
             onPress={() =>
               router.replace("/(app)/historico-combustivel" as any)
@@ -878,10 +881,10 @@ export default function Abastecimento() {
             <Feather
               name="list"
               size={18}
-              color="#3366FF"
+              color={primaryColor}
               style={{ marginRight: 8 }}
             />
-            <Text style={styles.outlineButtonText}>Ver Historico</Text>
+            <Text style={[styles.outlineButtonText, { color: primaryColor }]}>Ver Historico</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -943,8 +946,8 @@ export default function Abastecimento() {
                   key={s}
                   style={[
                     styles.stepDot,
-                    step === s && styles.stepDotActive,
-                    currentStepIndex > i && styles.stepDotDone,
+                    step === s && [styles.stepDotActive, { backgroundColor: primaryColor }],
+                    currentStepIndex > i && { backgroundColor: primaryColor },
                   ]}
                 />
               ))}
@@ -1013,11 +1016,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#DCDCDC",
   },
   stepDotActive: {
-    backgroundColor: "#3366FF",
     width: 28,
   },
   stepDotDone: {
-    backgroundColor: "#3366FF",
   },
   stepTitle: {
     fontSize: 20,
@@ -1055,7 +1056,6 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderWidth: 2,
-    borderColor: "#3366FF",
     borderRadius: 16,
   },
   infoCard: {
@@ -1095,7 +1095,6 @@ const styles = StyleSheet.create({
   },
   ocrStatusText: {
     fontSize: 13,
-    color: "#3366FF",
     fontWeight: "500",
   },
   ocrHint: {
@@ -1148,7 +1147,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   primaryButton: {
-    backgroundColor: "#3366FF",
     height: 52,
     borderRadius: 12,
     alignItems: "center",
@@ -1172,13 +1170,11 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#3366FF",
   },
   outlineButton: {
     height: 52,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#3366FF",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -1186,7 +1182,6 @@ const styles = StyleSheet.create({
   outlineButtonText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#3366FF",
   },
   backLink: {
     flexDirection: "row",
@@ -1196,7 +1191,6 @@ const styles = StyleSheet.create({
   },
   backLinkText: {
     fontSize: 14,
-    color: "#3366FF",
     fontWeight: "500",
   },
   savedContainer: {

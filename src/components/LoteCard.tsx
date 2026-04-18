@@ -1,3 +1,4 @@
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -82,6 +83,7 @@ function calcularPesoMedioInicial(movimentacoes: Movimentacao[]): number {
 export { calcularPesoMedio, calcularPesoMedioInicial, calcularQuantidadeAtual };
 
 export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoes, onFaturamento }: LoteCardProps) {
+  const { primaryColor } = useTheme();
   const qtdAtual = calcularQuantidadeAtual(lote.movimentacoes);
   const pesoMedio = calcularPesoMedio(lote.movimentacoes, lote.gmdEstimado);
   const pesoMedioInicial = calcularPesoMedioInicial(lote.movimentacoes);
@@ -155,7 +157,7 @@ export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoe
             {pesoReal !== null && (
               <View style={styles.stat}>
                 <Text style={styles.statLabel}>KG Real</Text>
-                <Text style={[styles.statValue, styles.statValueReal]}>
+                <Text style={[styles.statValue, styles.statValueReal, { color: primaryColor }]}>
                   {pesoReal.toFixed(1)} kg
                 </Text>
               </View>
@@ -163,7 +165,7 @@ export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoe
             {gmdRealMedio !== null && (
               <View style={styles.stat}>
                 <Text style={styles.statLabel}>GMD Real</Text>
-                <Text style={[styles.statValue, styles.statValueReal]}>
+                <Text style={[styles.statValue, styles.statValueReal, { color: primaryColor }]}>
                   {gmdRealMedio.toFixed(3)} kg
                 </Text>
               </View>
@@ -197,7 +199,7 @@ export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoe
           activeOpacity={0.7}
           onPress={() => onEdit(lote)}
         >
-          <Feather name="edit-2" size={18} color="#3366FF" />
+          <Feather name="edit-2" size={18} color={primaryColor} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
@@ -279,7 +281,6 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
   },
   statValueReal: {
-    color: "#3366FF",
   },
   actions: {
     flexDirection: "column",

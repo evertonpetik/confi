@@ -8,6 +8,7 @@ import { MovimentacaoFormModal } from "@/components/MovimentacaoFormModal";
 import { Produtor } from "@/components/ProdutorCard";
 import { ProdutorFormModal } from "@/components/ProdutorFormModal";
 import { SelectOption } from "@/components/Select";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -33,6 +34,7 @@ import {
 type FiltroStatus = "ativos" | "inativos";
 
 export default function Lotes() {
+  const { primaryColor } = useTheme();
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -546,7 +548,7 @@ export default function Lotes() {
               <TouchableOpacity
                 style={[
                   styles.filterButton,
-                  filtro === "ativos" && styles.filterActive,
+                  filtro === "ativos" && [styles.filterActive, { backgroundColor: primaryColor, borderColor: primaryColor }],
                 ]}
                 activeOpacity={0.8}
                 onPress={() => setFiltro("ativos")}
@@ -563,7 +565,7 @@ export default function Lotes() {
               <TouchableOpacity
                 style={[
                   styles.filterButton,
-                  filtro === "inativos" && styles.filterActive,
+                  filtro === "inativos" && [styles.filterActive, { backgroundColor: primaryColor, borderColor: primaryColor }],
                 ]}
                 activeOpacity={0.8}
                 onPress={() => setFiltro("inativos")}
@@ -580,7 +582,7 @@ export default function Lotes() {
             </View>
 
             <TouchableOpacity
-              style={styles.addButton}
+              style={[styles.addButton, { backgroundColor: primaryColor }]}
               activeOpacity={0.8}
               onPress={handleNew}
             >
@@ -591,7 +593,7 @@ export default function Lotes() {
             {loading ? (
               <ActivityIndicator
                 size="large"
-                color="#3366FF"
+                color={primaryColor}
                 style={{ marginTop: 32 }}
               />
             ) : lotesFiltrados.length === 0 ? (
@@ -713,8 +715,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   filterActive: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
   },
   filterText: {
     fontSize: 14,
@@ -728,7 +728,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#3366FF",
     borderRadius: 8,
     height: 48,
     gap: 8,

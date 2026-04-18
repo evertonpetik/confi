@@ -5,6 +5,7 @@ import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Input } from "@/components/Input";
 import { ALL_MODULOS, Fazenda, ModuloId, useAuth } from "@/contexts/AuthContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useTheme } from "@/contexts/ThemeContext";
 import { createUserOnSecondaryApp } from "@/services/authService";
 import {
   addRawDocument,
@@ -42,6 +43,7 @@ type Usuario = {
 };
 
 export default function Signup() {
+  const { primaryColor } = useTheme();
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const { userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -318,7 +320,7 @@ export default function Signup() {
             {loading ? (
               <ActivityIndicator
                 size="large"
-                color="#3366FF"
+                color={primaryColor}
                 style={{ marginTop: 32 }}
               />
             ) : (
@@ -328,7 +330,7 @@ export default function Signup() {
                   <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Fazendas</Text>
                     <TouchableOpacity
-                      style={styles.addBtn}
+                      style={[styles.addBtn, { backgroundColor: primaryColor }]}
                       activeOpacity={0.8}
                       onPress={openNewFazenda}
                     >
@@ -342,7 +344,7 @@ export default function Signup() {
                     fazendas.map((f) => (
                       <View key={f.id} style={styles.itemRow}>
                         <View style={styles.itemInfo}>
-                          <Feather name="map-pin" size={16} color="#3366FF" />
+                          <Feather name="map-pin" size={16} color={primaryColor} />
                           <Text style={styles.itemName}>{f.nome}</Text>
                         </View>
                         <TouchableOpacity
@@ -367,7 +369,7 @@ export default function Signup() {
                   <View style={styles.sectionHeader}>
                     <Text style={styles.sectionTitle}>Usuarios</Text>
                     <TouchableOpacity
-                      style={styles.addBtn}
+                      style={[styles.addBtn, { backgroundColor: primaryColor }]}
                       activeOpacity={0.8}
                       onPress={openNewUser}
                     >
@@ -414,7 +416,7 @@ export default function Signup() {
                             <Feather
                               name="edit-2"
                               size={16}
-                              color="#3366FF"
+                              color={primaryColor}
                             />
                           </TouchableOpacity>
                           <TouchableOpacity
@@ -511,6 +513,7 @@ export default function Signup() {
                         style={[
                           styles.toggleButton,
                           formTipo === t && styles.toggleActive,
+                          formTipo === t && { backgroundColor: primaryColor, borderColor: primaryColor },
                         ]}
                         activeOpacity={0.8}
                         onPress={() => setFormTipo(t)}
@@ -543,7 +546,7 @@ export default function Signup() {
                         }
                         size={18}
                         color={
-                          formFazendas.includes(f.id) ? "#3366FF" : "#999"
+                          formFazendas.includes(f.id) ? primaryColor : "#999"
                         }
                       />
                       <Text style={styles.checkLabel}>{f.nome}</Text>
@@ -572,7 +575,7 @@ export default function Signup() {
                           }
                           size={18}
                           color={
-                            formModulos.includes(moduloId) ? "#3366FF" : "#999"
+                            formModulos.includes(moduloId) ? primaryColor : "#999"
                           }
                         />
                         <Text style={styles.checkLabel}>{labels[moduloId]}</Text>
@@ -582,7 +585,7 @@ export default function Signup() {
 
                   <View style={{ marginTop: 16 }}>
                     {saving ? (
-                      <ActivityIndicator size="large" color="#3366FF" />
+                      <ActivityIndicator size="large" color={primaryColor} />
                     ) : (
                       <Button
                         label={editingUser ? "Salvar" : "Cadastrar"}
@@ -628,7 +631,7 @@ export default function Signup() {
                 />
                 <View style={{ marginTop: 16 }}>
                   {savingFazenda ? (
-                    <ActivityIndicator size="large" color="#3366FF" />
+                    <ActivityIndicator size="large" color={primaryColor} />
                   ) : (
                     <Button
                       label="Criar Fazenda"
@@ -693,7 +696,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#3366FF",
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -790,8 +792,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   toggleActive: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
   },
   toggleText: {
     fontSize: 13,

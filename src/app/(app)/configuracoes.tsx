@@ -413,8 +413,8 @@ export default function Configuracoes() {
               )}
               {syncing ? (
                 <View style={{ alignItems: "center", marginTop: 12, gap: 8 }}>
-                  <ActivityIndicator size="large" color="#3366FF" />
-                  <Text style={styles.syncProgressText}>{syncProgress}</Text>
+                  <ActivityIndicator size="large" color={primaryColor} />
+                  <Text style={[styles.syncProgressText, { color: primaryColor }]}>{syncProgress}</Text>
                 </View>
               ) : (
                 <Button label="Sincronizar Dados" onPress={handleSync} />
@@ -428,7 +428,7 @@ export default function Configuracoes() {
               {loadingData ? (
                 <ActivityIndicator
                   size="large"
-                  color="#3366FF"
+                  color={primaryColor}
                   style={{ marginTop: 16 }}
                 />
               ) : (
@@ -454,7 +454,7 @@ export default function Configuracoes() {
                               {tabela.nome}
                             </Text>
                           </View>
-                          <View style={styles.tableCardBadge}>
+                          <View style={[styles.tableCardBadge, { backgroundColor: primaryColor }]}>
                             <Text style={styles.tableCardBadgeText}>
                               {items.length}
                             </Text>
@@ -469,8 +469,8 @@ export default function Configuracoes() {
                               activeOpacity={0.8}
                               onPress={() => openAdd(tabela)}
                             >
-                              <Feather name="plus" size={16} color="#3366FF" />
-                              <Text style={styles.addItemText}>
+                              <Feather name="plus" size={16} color={primaryColor} />
+                              <Text style={[styles.addItemText, { color: primaryColor }]}>
                                 Adicionar
                               </Text>
                             </TouchableOpacity>
@@ -496,7 +496,7 @@ export default function Configuracoes() {
                                       <Feather
                                         name="edit-2"
                                         size={16}
-                                        color="#3366FF"
+                                        color={primaryColor}
                                       />
                                     </TouchableOpacity>
                                     <TouchableOpacity
@@ -620,7 +620,6 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
   },
   tableCardBadge: {
-    backgroundColor: "#3366FF",
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -644,7 +643,7 @@ const styles = StyleSheet.create({
   addItemText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#3366FF",
+    color: "#666",
   },
   emptyText: {
     fontSize: 14,
@@ -686,7 +685,7 @@ const styles = StyleSheet.create({
   },
   syncProgressText: {
     fontSize: 13,
-    color: "#3366FF",
+    color: "#666",
     textAlign: "center",
   },
   colorGrid: {

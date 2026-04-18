@@ -2,6 +2,7 @@ import { Button } from "@/components/Button";
 import { MultiSelect } from "@/components/MultiSelect";
 import { Roteiro } from "@/components/RoteiroCard";
 import { Select, SelectOption } from "@/components/Select";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
@@ -60,6 +61,7 @@ export function RoteiroFormModal({
   onAddDieta,
 }: RoteiroFormModalProps) {
   const [form, setForm] = useState<RoteiroForm>(emptyForm);
+  const { primaryColor } = useTheme();
   const isEditing = !!roteiro;
 
   useEffect(() => {
@@ -211,7 +213,7 @@ export function RoteiroFormModal({
                         );
                         return (
                           <View key={id} style={styles.orderItem}>
-                            <Text style={styles.orderNumber}>
+                            <Text style={[styles.orderNumber, { color: primaryColor }]}>
                               {index + 1}.
                             </Text>
                             <Text style={styles.orderName} numberOfLines={1}>
@@ -230,7 +232,7 @@ export function RoteiroFormModal({
                                 <Feather
                                   name="chevron-up"
                                   size={18}
-                                  color={index === 0 ? "#CCC" : "#3366FF"}
+                                  color={index === 0 ? "#CCC" : primaryColor}
                                 />
                               </TouchableOpacity>
                               <TouchableOpacity
@@ -251,7 +253,7 @@ export function RoteiroFormModal({
                                   color={
                                     index === form.piqueteIds.length - 1
                                       ? "#CCC"
-                                      : "#3366FF"
+                                      : primaryColor
                                   }
                                 />
                               </TouchableOpacity>
@@ -282,7 +284,7 @@ export function RoteiroFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      form.ativo && styles.toggleActive,
+                      form.ativo && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() => setForm((p) => ({ ...p, ativo: true }))}
@@ -423,7 +425,6 @@ const styles = StyleSheet.create({
   orderNumber: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#3366FF",
     width: 28,
   },
   orderName: {
@@ -465,8 +466,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   toggleActive: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
   },
   toggleInactive: {
     backgroundColor: "#E53935",

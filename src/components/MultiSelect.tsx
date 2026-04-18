@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 
 export type MultiSelectOption = {
@@ -35,6 +36,7 @@ export function MultiSelect({
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const { primaryColor } = useTheme();
 
   const selectedLabels = options
     .filter((o) => values.includes(o.value))
@@ -133,7 +135,7 @@ export function MultiSelect({
                     activeOpacity={0.7}
                     onPress={() => handleToggle(item.value)}
                   >
-                    <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                    <View style={[styles.checkbox, isSelected && [styles.checkboxSelected, { backgroundColor: primaryColor, borderColor: primaryColor }]]}>
                       {isSelected && (
                         <Feather name="check" size={14} color="#FFF" />
                       )}
@@ -141,7 +143,7 @@ export function MultiSelect({
                     <Text
                       style={[
                         styles.optionText,
-                        isSelected && styles.optionTextSelected,
+                        isSelected && [styles.optionTextSelected, { color: primaryColor }],
                       ]}
                     >
                       {item.label}
@@ -155,7 +157,7 @@ export function MultiSelect({
             />
 
             <TouchableOpacity
-              style={styles.confirmButton}
+              style={[styles.confirmButton, { backgroundColor: primaryColor }]}
               activeOpacity={0.8}
               onPress={() => {
                 setOpen(false);
@@ -263,7 +265,6 @@ const styles = StyleSheet.create({
     color: "#1a1a1a",
   },
   optionTextSelected: {
-    color: "#3366FF",
     fontWeight: "600",
   },
   checkbox: {
@@ -277,15 +278,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   checkboxSelected: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
   },
   confirmButton: {
     marginHorizontal: 24,
     marginTop: 12,
     height: 48,
     borderRadius: 8,
-    backgroundColor: "#3366FF",
     alignItems: "center",
     justifyContent: "center",
   },

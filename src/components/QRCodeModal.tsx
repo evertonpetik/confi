@@ -1,3 +1,4 @@
+import { useTheme } from "@/contexts/ThemeContext";
 import { generateVeiculoQRPayload } from "@/services/qrCodeService";
 import { Feather } from "@expo/vector-icons";
 import { Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -10,6 +11,7 @@ type QRCodeModalProps = {
 };
 
 export function QRCodeModal({ visible, veiculo, onClose }: QRCodeModalProps) {
+  const { primaryColor } = useTheme();
   if (!veiculo) return null;
 
   const qrData = generateVeiculoQRPayload(veiculo);
@@ -47,7 +49,7 @@ export function QRCodeModal({ visible, veiculo, onClose }: QRCodeModalProps) {
           </Text>
 
           <TouchableOpacity
-            style={styles.closeButton}
+            style={[styles.closeButton, { backgroundColor: primaryColor }]}
             activeOpacity={0.8}
             onPress={onClose}
           >
@@ -112,7 +114,6 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     marginTop: 20,
-    backgroundColor: "#3366FF",
     height: 44,
     borderRadius: 8,
     alignItems: "center",

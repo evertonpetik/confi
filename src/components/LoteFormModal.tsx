@@ -2,6 +2,7 @@ import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Lote } from "@/components/LoteCard";
 import { Select, SelectOption } from "@/components/Select";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
@@ -78,6 +79,7 @@ export function LoteFormModal({
   onAddProdutor,
 }: LoteFormModalProps) {
   const [form, setForm] = useState<LoteForm>(emptyForm);
+  const { primaryColor } = useTheme();
   const isEditing = !!lote;
 
   useEffect(() => {
@@ -285,7 +287,7 @@ export function LoteFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      form.ativo && styles.toggleActive,
+                      form.ativo && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() => setForm((p) => ({ ...p, ativo: true }))}
@@ -407,8 +409,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   toggleActive: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
   },
   toggleInactive: {
     backgroundColor: "#E53935",

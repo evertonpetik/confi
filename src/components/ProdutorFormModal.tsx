@@ -14,6 +14,7 @@ import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
 import { Produtor } from "@/components/ProdutorCard";
 import { Select, SelectOption } from "@/components/Select";
+import { useTheme } from "@/contexts/ThemeContext";
 import {
   formatCNPJ,
   formatCPF,
@@ -55,6 +56,7 @@ export function ProdutorFormModal({
   const [form, setForm] = useState(emptyForm);
   const [tipoPessoa, setTipoPessoa] = useState<TipoPessoa>("PF");
   const [docError, setDocError] = useState("");
+  const { primaryColor } = useTheme();
   const isEditing = !!produtor;
 
   const [estados, setEstados] = useState<SelectOption[]>([]);
@@ -221,7 +223,7 @@ export function ProdutorFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      tipoPessoa === "PF" && styles.toggleActive,
+                      tipoPessoa === "PF" && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() => handleTipoPessoaChange("PF")}
@@ -238,7 +240,7 @@ export function ProdutorFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      tipoPessoa === "PJ" && styles.toggleActive,
+                      tipoPessoa === "PJ" && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() => handleTipoPessoaChange("PJ")}
@@ -395,8 +397,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   toggleActive: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
   },
   toggleText: {
     fontSize: 14,

@@ -1,6 +1,7 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Movimentacao } from "@/components/LoteCard";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   fsLimit,
@@ -48,6 +49,7 @@ type LoteReportRow = {
 // ---- Component ----
 
 export default function Home() {
+  const { primaryColor } = useTheme();
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop, cardValueFontSize } = useResponsive();
   const [lotesAtivos, setLotesAtivos] = useState(0);
   const [totalAnimais, setTotalAnimais] = useState(0);
@@ -355,7 +357,7 @@ export default function Home() {
             {loading ? (
               <ActivityIndicator
                 size="large"
-                color="#3366FF"
+                color={primaryColor}
                 style={{ marginTop: 48 }}
               />
             ) : (
@@ -368,7 +370,7 @@ export default function Home() {
                       <ScrollView horizontal showsHorizontalScrollIndicator>
                         <View>
                           {/* Header */}
-                          <View style={styles.tableHeaderRow}>
+                          <View style={[styles.tableHeaderRow, { backgroundColor: primaryColor }]}>
                             {columns.map((col) => (
                               <View key={col.key} style={[styles.tableHeaderCell, { width: col.width }]}>
                                 <Text style={styles.tableHeaderText} numberOfLines={2}>{col.label}</Text>
@@ -400,7 +402,7 @@ export default function Home() {
                 <View style={styles.cardsContainer}>
                   <View style={[styles.card, styles.cardBlue, { flexBasis: cardBasis }]}>
                     <View style={styles.cardIcon}>
-                      <Feather name="layers" size={24} color="#3366FF" />
+                      <Feather name="layers" size={24} color={primaryColor} />
                     </View>
                     <Text style={[styles.cardValue, { fontSize: cardValueFontSize }]} adjustsFontSizeToFit numberOfLines={1}>{lotesAtivos}</Text>
                     <Text style={styles.cardLabel} numberOfLines={2}>Lotes Ativos</Text>
@@ -505,7 +507,6 @@ const styles = StyleSheet.create({
   },
   tableHeaderRow: {
     flexDirection: "row",
-    backgroundColor: "#3366FF",
   },
   tableHeaderCell: {
     paddingHorizontal: 6,

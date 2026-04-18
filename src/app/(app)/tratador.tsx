@@ -3,6 +3,7 @@ import { DescargaTrato } from "@/components/DescargaModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Select, SelectOption } from "@/components/Select";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { setDocument } from "@/services/firestoreService";
 import {
@@ -60,6 +61,7 @@ type DescargaItem = {
 // ---- Component ----
 
 export default function Tratador() {
+  const { primaryColor } = useTheme();
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop, isSmallPhone } = useResponsive();
   const [step, setStep] = useState<Step>("SELECT_VAGAO");
   const [saving, setSaving] = useState(false);
@@ -653,7 +655,7 @@ export default function Tratador() {
             i < current
               ? styles.dotCompleted
               : i === current
-                ? styles.dotActive
+                ? [styles.dotActive, { backgroundColor: primaryColor }]
                 : styles.dotPending,
           ]}
         />
@@ -708,7 +710,7 @@ export default function Tratador() {
                 {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
               </View>
               {loadingData ? (
-                <ActivityIndicator size="large" color="#3366FF" style={{ marginTop: 48 }} />
+                <ActivityIndicator size="large" color={primaryColor} style={{ marginTop: 48 }} />
               ) : (
                 <>
                   <Text style={styles.stepLabel}>Selecione o Vagao</Text>
@@ -721,7 +723,7 @@ export default function Tratador() {
                     />
                   </View>
                   {selectedVagaoId ? (
-                    <TouchableOpacity style={styles.bigButton} activeOpacity={0.8} onPress={handleVagaoConfirm}>
+                    <TouchableOpacity style={[styles.bigButton, { backgroundColor: primaryColor }]} activeOpacity={0.8} onPress={handleVagaoConfirm}>
                       <Text style={styles.bigButtonText}>Continuar</Text>
                       <Feather name="arrow-right" size={24} color="#FFF" />
                     </TouchableOpacity>
@@ -766,7 +768,7 @@ export default function Tratador() {
                 />
               </View>
               {selectedRoteiroId ? (
-                <TouchableOpacity style={styles.bigButton} activeOpacity={0.8} onPress={handleRoteiroConfirm}>
+                <TouchableOpacity style={[styles.bigButton, { backgroundColor: primaryColor }]} activeOpacity={0.8} onPress={handleRoteiroConfirm}>
                   <Text style={styles.bigButtonText}>Iniciar</Text>
                   <Feather name="play" size={24} color="#FFF" />
                 </TouchableOpacity>
@@ -787,7 +789,7 @@ export default function Tratador() {
     return (
       <DrawerSceneWrapper>
         <View style={styles.fullScreenCenter}>
-          <ActivityIndicator size="large" color="#3366FF" />
+          <ActivityIndicator size="large" color={primaryColor} />
           <Text style={styles.loadingText}>Carregando dados...</Text>
         </View>
       </DrawerSceneWrapper>
@@ -809,7 +811,7 @@ export default function Tratador() {
         >
           <View style={styles.playerContainer}>
             {/* Header */}
-            <View style={styles.playerHeader}>
+            <View style={[styles.playerHeader, { backgroundColor: primaryColor }]}>
               <View style={styles.headerTopRow}>
                 <TouchableOpacity style={styles.exitButton} onPress={handleExit} activeOpacity={0.7}>
                   <Feather name="x" size={24} color="rgba(255,255,255,0.8)" />
@@ -832,7 +834,7 @@ export default function Tratador() {
 
               <Text style={styles.playerItemName}>{info.label.toUpperCase()}</Text>
 
-              <Text style={styles.playerPrevisto}>
+              <Text style={[styles.playerPrevisto, { color: primaryColor }]}>
                 Previsto: {Math.round(info.previsto)} kg
               </Text>
 
@@ -878,7 +880,7 @@ export default function Tratador() {
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  style={styles.centerButton}
+                  style={[styles.centerButton, { backgroundColor: primaryColor }]}
                   activeOpacity={0.8}
                   onPress={handleNext}
                 >
@@ -940,7 +942,7 @@ export default function Tratador() {
 
               <Text style={styles.playerItemName}>{info.label.toUpperCase()}</Text>
 
-              <Text style={styles.playerPrevisto}>
+              <Text style={[styles.playerPrevisto, { color: primaryColor }]}>
                 Previsto: {Math.round(info.previsto)} kg
               </Text>
 
@@ -1035,7 +1037,7 @@ export default function Tratador() {
 
           {hasMoreTratos && (
             <TouchableOpacity
-              style={[styles.bigButton, { marginTop: 24 }]}
+              style={[styles.bigButton, { marginTop: 24, backgroundColor: primaryColor }]}
               activeOpacity={0.8}
               onPress={handleNextTrato}
             >
@@ -1106,7 +1108,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#3366FF",
     height: 56,
     borderRadius: 16,
     paddingHorizontal: 32,
@@ -1145,7 +1146,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FDFDFD",
   },
   playerHeader: {
-    backgroundColor: "#3366FF",
     paddingTop: 48,
     paddingBottom: 20,
     paddingHorizontal: 24,
@@ -1199,7 +1199,7 @@ const styles = StyleSheet.create({
   },
   playerPrevisto: {
     fontSize: 18,
-    color: "#3366FF",
+    color: "#999",
     fontWeight: "600",
     marginBottom: 24,
   },
@@ -1241,7 +1241,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#4CAF50",
   },
   dotActive: {
-    backgroundColor: "#3366FF",
   },
   dotPending: {
     backgroundColor: "#E0E0E0",
@@ -1272,7 +1271,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 56,
     borderRadius: 16,
-    backgroundColor: "#3366FF",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

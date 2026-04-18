@@ -1,3 +1,4 @@
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -23,6 +24,7 @@ type RoteiroCardProps = {
 };
 
 export function RoteiroCard({ roteiro, onEdit, onDelete }: RoteiroCardProps) {
+  const { primaryColor } = useTheme();
   return (
     <View style={styles.card}>
       <View style={styles.content}>
@@ -69,7 +71,7 @@ export function RoteiroCard({ roteiro, onEdit, onDelete }: RoteiroCardProps) {
           activeOpacity={0.7}
           onPress={() => onEdit(roteiro)}
         >
-          <Feather name="edit-2" size={18} color="#3366FF" />
+          <Feather name="edit-2" size={18} color={primaryColor} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}

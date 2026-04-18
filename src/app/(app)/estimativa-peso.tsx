@@ -7,6 +7,7 @@ import {
   type Movimentacao,
 } from "@/components/LoteCard";
 import { Select } from "@/components/Select";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   estimarPesoPorImagem,
@@ -38,6 +39,7 @@ import {
 type Step = "SELECT_LOTE" | "CAMERA" | "ANALYZING" | "RESULTS";
 
 export default function EstimativaPeso() {
+  const { primaryColor } = useTheme();
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
 
   const [step, setStep] = useState<Step>("SELECT_LOTE");
@@ -363,7 +365,7 @@ export default function EstimativaPeso() {
 
         <View style={styles.buttonGroup}>
           <TouchableOpacity
-            style={[styles.primaryButton, !selectedLoteId && styles.buttonDisabled]}
+            style={[styles.primaryButton, { backgroundColor: primaryColor }, !selectedLoteId && styles.buttonDisabled]}
             activeOpacity={0.7}
             onPress={goToCamera}
             disabled={!selectedLoteId}
@@ -376,7 +378,7 @@ export default function EstimativaPeso() {
             activeOpacity={0.7}
             onPress={skipLote}
           >
-            <Text style={styles.secondaryButtonText}>
+            <Text style={[styles.secondaryButtonText, { color: primaryColor }]}>
               Pular sem selecionar lote
             </Text>
           </TouchableOpacity>
@@ -403,6 +405,7 @@ export default function EstimativaPeso() {
                 style={[
                   styles.modeToggleButton,
                   !modoOffline && styles.modeToggleButtonActive,
+                  !modoOffline && { backgroundColor: primaryColor },
                 ]}
                 activeOpacity={0.7}
                 onPress={() => setModoOffline(false)}
@@ -421,6 +424,7 @@ export default function EstimativaPeso() {
                 style={[
                   styles.modeToggleButton,
                   modoOffline && styles.modeToggleButtonActive,
+                  modoOffline && { backgroundColor: primaryColor },
                   !modeloDisponivel && styles.buttonDisabled,
                 ]}
                 activeOpacity={0.7}
@@ -448,7 +452,7 @@ export default function EstimativaPeso() {
 
         {/* Camera guidance */}
         <View style={styles.guideCard}>
-          <Feather name="info" size={18} color="#3366FF" />
+          <Feather name="info" size={18} color={primaryColor} />
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={styles.guideText}>
               Dicas para uma boa foto:
@@ -477,7 +481,7 @@ export default function EstimativaPeso() {
             />
             <View style={styles.buttonGroup}>
               <TouchableOpacity
-                style={styles.primaryButton}
+                style={[styles.primaryButton, { backgroundColor: primaryColor }]}
                 activeOpacity={0.7}
                 onPress={handleAnalyze}
               >
@@ -489,14 +493,14 @@ export default function EstimativaPeso() {
                 activeOpacity={0.7}
                 onPress={clearPhoto}
               >
-                <Text style={styles.secondaryButtonText}>Tirar outra foto</Text>
+                <Text style={[styles.secondaryButtonText, { color: primaryColor }]}>Tirar outra foto</Text>
               </TouchableOpacity>
             </View>
           </>
         ) : (
           <View style={styles.buttonGroup}>
             <TouchableOpacity
-              style={styles.primaryButton}
+              style={[styles.primaryButton, { backgroundColor: primaryColor }]}
               activeOpacity={0.7}
               onPress={handleTakePhoto}
             >
@@ -504,12 +508,12 @@ export default function EstimativaPeso() {
               <Text style={styles.primaryButtonText}>Tirar Foto</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.outlineButton}
+              style={[styles.outlineButton, { borderColor: primaryColor }]}
               activeOpacity={0.7}
               onPress={handlePickFromGallery}
             >
-              <Feather name="image" size={18} color="#3366FF" style={{ marginRight: 8 }} />
-              <Text style={styles.outlineButtonText}>Escolher da Galeria</Text>
+              <Feather name="image" size={18} color={primaryColor} style={{ marginRight: 8 }} />
+              <Text style={[styles.outlineButtonText, { color: primaryColor }]}>Escolher da Galeria</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -522,8 +526,8 @@ export default function EstimativaPeso() {
             setStep("SELECT_LOTE");
           }}
         >
-          <Feather name="arrow-left" size={16} color="#3366FF" />
-          <Text style={styles.backLinkText}>Voltar para selecao de lote</Text>
+          <Feather name="arrow-left" size={16} color={primaryColor} />
+          <Text style={[styles.backLinkText, { color: primaryColor }]}>Voltar para selecao de lote</Text>
         </TouchableOpacity>
       </>
     );
@@ -532,7 +536,7 @@ export default function EstimativaPeso() {
   function renderAnalyzing() {
     return (
       <View style={styles.analyzingContainer}>
-        <ActivityIndicator size="large" color="#3366FF" />
+        <ActivityIndicator size="large" color={primaryColor} />
         <Text style={styles.analyzingTitle}>Analisando imagem...</Text>
         <Text style={styles.analyzingSubtitle}>
           {modoOffline
@@ -574,7 +578,7 @@ export default function EstimativaPeso() {
           </Text>
 
           <View style={styles.resultBadgeRow}>
-            <View style={styles.eccBadge}>
+            <View style={[styles.eccBadge, { backgroundColor: primaryColor }]}>
               <Text style={styles.eccBadgeText}>
                 ECC: {result.escoreCondicaoCorporal}/9
               </Text>
@@ -634,7 +638,7 @@ export default function EstimativaPeso() {
 
         <View style={styles.buttonGroup}>
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[styles.primaryButton, { backgroundColor: primaryColor }]}
             activeOpacity={0.7}
             onPress={handleSave}
             disabled={saving}
@@ -650,12 +654,12 @@ export default function EstimativaPeso() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.outlineButton}
+            style={[styles.outlineButton, { borderColor: primaryColor }]}
             activeOpacity={0.7}
             onPress={handleNewEstimation}
           >
-            <Feather name="refresh-cw" size={18} color="#3366FF" style={{ marginRight: 8 }} />
-            <Text style={styles.outlineButtonText}>Nova Estimativa</Text>
+            <Feather name="refresh-cw" size={18} color={primaryColor} style={{ marginRight: 8 }} />
+            <Text style={[styles.outlineButtonText, { color: primaryColor }]}>Nova Estimativa</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -701,10 +705,10 @@ export default function EstimativaPeso() {
                     key={s}
                     style={[
                       styles.stepDot,
-                      step === s && styles.stepDotActive,
+                      step === s && [styles.stepDotActive, { backgroundColor: primaryColor }],
                       (
                         ["SELECT_LOTE", "CAMERA", "ANALYZING", "RESULTS"] as Step[]
-                      ).indexOf(step) > i && styles.stepDotDone,
+                      ).indexOf(step) > i && [styles.stepDotDone, { backgroundColor: primaryColor }],
                     ]}
                   />
                 )
@@ -758,11 +762,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#DCDCDC",
   },
   stepDotActive: {
-    backgroundColor: "#3366FF",
     width: 28,
   },
   stepDotDone: {
-    backgroundColor: "#3366FF",
   },
   stepTitle: {
     fontSize: 20,
@@ -803,7 +805,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   primaryButton: {
-    backgroundColor: "#3366FF",
     height: 52,
     borderRadius: 12,
     alignItems: "center",
@@ -826,13 +827,13 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#3366FF",
+    color: "#666",
   },
   outlineButton: {
     height: 52,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#3366FF",
+    borderColor: "#DDD",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
@@ -840,7 +841,7 @@ const styles = StyleSheet.create({
   outlineButtonText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#3366FF",
+    color: "#666",
   },
   guideCard: {
     backgroundColor: "#EEF2FF",
@@ -877,7 +878,7 @@ const styles = StyleSheet.create({
   },
   backLinkText: {
     fontSize: 14,
-    color: "#3366FF",
+    color: "#666",
     fontWeight: "500",
   },
   analyzingContainer: {
@@ -927,7 +928,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   eccBadge: {
-    backgroundColor: "#3366FF",
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 6,
@@ -998,7 +998,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   modeToggleButtonActive: {
-    backgroundColor: "#3366FF",
   },
   modeToggleText: {
     fontSize: 14,

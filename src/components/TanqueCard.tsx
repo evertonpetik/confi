@@ -1,3 +1,4 @@
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -19,6 +20,7 @@ type TanqueCardProps = {
 };
 
 export function TanqueCard({ tanque, onEdit, onDelete }: TanqueCardProps) {
+  const { primaryColor } = useTheme();
   const percentual =
     tanque.capacidadeLitros > 0
       ? (tanque.nivelAtual / tanque.capacidadeLitros) * 100
@@ -96,7 +98,7 @@ export function TanqueCard({ tanque, onEdit, onDelete }: TanqueCardProps) {
           activeOpacity={0.7}
           onPress={() => onEdit(tanque)}
         >
-          <Feather name="edit-2" size={18} color="#3366FF" />
+          <Feather name="edit-2" size={18} color={primaryColor} />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}

@@ -7,6 +7,7 @@ import {
   Movimentacao,
 } from "@/components/LoteCard";
 import { Select, SelectOption } from "@/components/Select";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Feather } from "@expo/vector-icons";
 import { useState } from "react";
 import {
@@ -66,6 +67,7 @@ export function MovimentacaoFormModal({
   onClose,
 }: MovimentacaoFormModalProps) {
   const [movForm, setMovForm] = useState<MovForm>(getEmptyMovForm);
+  const { primaryColor } = useTheme();
 
   if (!lote) return null;
 
@@ -223,7 +225,7 @@ export function MovimentacaoFormModal({
                   <TouchableOpacity
                     style={[
                       styles.toggleButton,
-                      movForm.evento === "Entrada" && styles.toggleActive,
+                      movForm.evento === "Entrada" && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
                     onPress={() =>
@@ -490,8 +492,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFF",
   },
   toggleActive: {
-    backgroundColor: "#3366FF",
-    borderColor: "#3366FF",
   },
   toggleInactive: {
     backgroundColor: "#E53935",
