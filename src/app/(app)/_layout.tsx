@@ -1,6 +1,6 @@
 import { ModuloId, useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { DrawerProvider, useDrawer } from "@/contexts/DrawerContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { prefetchAllData } from "@/utils/prefetchFirestore";
 import { Feather } from "@expo/vector-icons";
@@ -52,7 +52,7 @@ const COMMON_ROUTES = ["configuracoes", "signup"];
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { userProfile, selectedFazendaNome, selectedModulo, signOut, clearFazenda, clearModulo } = useAuth();
-  const { logoUrl } = useTheme();
+  const { logoUrl, primaryColor } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
   const isAdmin = userProfile?.tipo === "admin";
@@ -77,21 +77,21 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       )}
       {/* Fazenda header */}
       <View style={styles.header}>
-        <Feather name="map-pin" size={16} color="#727D9B" />
+        <Feather name="map-pin" size={16} color={primaryColor} />
         <Text style={styles.fazendaNome} numberOfLines={1}>
           {selectedFazendaNome ?? ""}
         </Text>
       </View>
       <View style={styles.userRow}>
-        <Feather name="user" size={14} color="#727D9B" />
-        <Text style={styles.userName} numberOfLines={1}>
+        <Feather name="user" size={14} color={primaryColor} />
+        <Text style={[styles.userName, { color: primaryColor }]} numberOfLines={1}>
           {userProfile?.nome ?? ""} ({userProfile?.tipo ?? ""})
         </Text>
       </View>
       {/* Module badge */}
       {moduloLabel ? (
         <View style={styles.moduloBadge}>
-          <Text style={styles.moduloBadgeText}>{moduloLabel}</Text>
+          <Text style={[styles.moduloBadgeText, { color: primaryColor }]}>{moduloLabel}</Text>
         </View>
       ) : null}
       <View style={styles.divider} />
@@ -102,7 +102,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         if (item.route === "signup" && !isAdmin) return null;
 
         const isActive = pathname.includes(item.route);
-        const color = isActive ? "#727D9B" : "#FFFFFF";
+        const color = isActive ? primaryColor : "#FFFFFF";
 
         return (
           <TouchableOpacity
@@ -133,8 +133,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             onNavigate?.();
           }}
         >
-          <Feather name="layers" size={18} color="#727D9B" />
-          <Text style={styles.footerText}>Trocar Modulo</Text>
+          <Feather name="layers" size={18} color={primaryColor} />
+          <Text style={[styles.footerText, { color: primaryColor }]}>Trocar Modulo</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.footerButton}
@@ -144,8 +144,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             onNavigate?.();
           }}
         >
-          <Feather name="refresh-cw" size={18} color="#727D9B" />
-          <Text style={styles.footerText}>Trocar Fazenda</Text>
+          <Feather name="refresh-cw" size={18} color={primaryColor} />
+          <Text style={[styles.footerText, { color: primaryColor }]}>Trocar Fazenda</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.footerButton}
@@ -371,7 +371,6 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: 12,
-    color: "#727D9B",
     flex: 1,
   },
   divider: {
@@ -392,7 +391,6 @@ const styles = StyleSheet.create({
   moduloBadgeText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#727D9B",
     textTransform: "uppercase",
     letterSpacing: 1,
   },
@@ -421,6 +419,5 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#727D9B",
   },
 });
