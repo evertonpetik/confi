@@ -1,26 +1,18 @@
 /**
  * whatsappAuth.ts
  *
- * Controla quais números de telefone podem interagir com o copiloto.
- * Nova coleção Firestore: "whatsappUsuarios"
+ * Autoriza usuários do WhatsApp consultando o cadastro EXISTENTE de produtores.
+ * Não precisa de coleção separada `whatsappUsuarios`.
  *
- *   telefone    string   ex: "5567999999999" (mesmo formato que a Meta envia, sem "+")
- *   fazendaId   string   OBRIGATÓRIO — qual fazenda esse número pertence (seu sistema é
- *                        multi-tenant: toda consulta de lotes/insumos/etc. é escopada
- *                        por fazenda via setCurrentFazendaId())
- *   produtorId  string   vincula a um produtor dentro da fazenda (opcional)
- *   nome        string   nome de exibição
- *   papel       string   "admin" | "tratador" | "produtor"
- *   ativo       boolean  permite desativar acesso sem apagar o registro
- *
- * IMPORTANTE — coleção raiz: como ainda não sabemos a fazenda quando o número
- * escreve pela primeira vez, essa busca precisa acontecer FORA do escopo de
- * fazenda. Este arquivo usa firestoreServiceServer.ts (não o
- * firestoreService.ts do app), cujo ROOT_COLLECTIONS já inclui
- * "whatsappUsuarios" e "whatsappSessoes".
+ * Fluxo:
+ * 1. Número do WhatsApp chega
+ * 2. Procura em `usuarios` (app users) - se for admin/gestor
+ * 3. Se não achar, procura em `produtores` (de cada fazenda)
+ * 4. Retorna dados do usuário autorizado
  */
 
 import {
+  getCollection,
   queryCollection,
   fsWhere,
 } from "./firestoreServiceServer";
@@ -29,52 +21,88 @@ export interface WhatsAppUsuario {
   id: string;
   telefone: string;
   fazendaId: string;
-  produtorId?: string;
   nome: string;
-  papel: "admin" | "tratador" | "produtor";
+  email?: string;
+  papel: "admin" | "gestor" | "cliente" | "produtor" | "tratador";
   ativo: boolean;
 }
 
 const cache = new Map<string, { usuario: WhatsAppUsuario | null; expiresAt: number }>();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min, pra não bater no Firestore a cada mensagem
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
 
 export async function getUsuarioAutorizado(
   telefone: string
 ): Promise<WhatsAppUsuario | null> {
+  // Busca no cache primeiro
   const cached = cache.get(telefone);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.usuario;
   }
 
-  const snapshot = await queryCollection(["whatsappUsuarios"], [
-    fsWhere("telefone", "==", telefone),
-  ]);
+  try {
+    // Estratégia 1: Procura em `usuarios` (usuários da app - admin/gestor)
+    const usuariosSnap = await queryCollection(["usuarios"], [
+      fsWhere("telefone", "==", telefone),
+    ]);
 
-  if (snapshot.empty) {
+    if (!usuariosSnap.empty) {
+      const doc = usuariosSnap.docs[0];
+      const data = doc.data();
+
+      // Um usuário de app pode ter múltiplas fazendas
+      // Para WhatsApp, usa a primeira fazenda (ou admin vê todas)
+      const primeiraFazenda = data.fazendas?.[0];
+
+      if (!primeiraFazenda) {
+        console.warn(`usuario/${doc.id} sem fazendas associadas`);
+        return null;
+      }
+
+      const usuario: WhatsAppUsuario = {
+        id: doc.id,
+        telefone: data.telefone,
+        fazendaId: primeiraFazenda,
+        nome: data.nome ?? "Usuário",
+        email: data.email,
+        papel: data.tipo ?? "cliente", // tipo do usuário app
+        ativo: true,
+      };
+
+      cache.set(telefone, { usuario, expiresAt: Date.now() + CACHE_TTL_MS });
+      return usuario;
+    }
+
+    // Estratégia 2: Procura em `produtores` de cada fazenda
+    // Precisamos iterar fazendas pois produtores estão dentro delas (multi-tenant)
+    const fazendaSnap = await getCollection("fazendas");
+
+    for (const fazendaDoc of fazendaSnap.docs) {
+      const fazendaId = fazendaDoc.id;
+      const produtoresSnap = await getCollection("fazendas", fazendaId, "produtores");
+
+      for (const prodDoc of produtoresSnap.docs) {
+        const prodData = prodDoc.data();
+        if (prodData.telefone === telefone) {
+          const usuario: WhatsAppUsuario = {
+            id: prodDoc.id,
+            telefone: prodData.telefone,
+            fazendaId: fazendaId,
+            nome: prodData.nome ?? "Produtor",
+            papel: prodData.papel ?? "produtor", // papel dentro da fazenda
+            ativo: prodData.ativo !== false,
+          };
+
+          cache.set(telefone, { usuario, expiresAt: Date.now() + CACHE_TTL_MS });
+          return usuario;
+        }
+      }
+    }
+
+    // Usuário não encontrado em nenhum lugar
     cache.set(telefone, { usuario: null, expiresAt: Date.now() + CACHE_TTL_MS });
     return null;
-  }
-
-  const doc = snapshot.docs[0];
-  const data = doc.data();
-  const usuario: WhatsAppUsuario | null =
-    data.ativo === false
-      ? null
-      : {
-          id: doc.id,
-          telefone: data.telefone,
-          fazendaId: data.fazendaId,
-          produtorId: data.produtorId,
-          nome: data.nome ?? "Usuário",
-          papel: data.papel ?? "tratador",
-          ativo: data.ativo !== false,
-        };
-
-  if (usuario && !usuario.fazendaId) {
-    console.error(`whatsappUsuarios/${doc.id} sem fazendaId — bloqueando acesso.`);
+  } catch (err) {
+    console.error("[whatsappAuth] Erro ao buscar usuário:", err);
     return null;
   }
-
-  cache.set(telefone, { usuario, expiresAt: Date.now() + CACHE_TTL_MS });
-  return usuario;
 }

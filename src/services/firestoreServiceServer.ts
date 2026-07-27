@@ -53,7 +53,7 @@ export function getCurrentFazendaId(): string | null {
   return _currentFazendaId;
 }
 
-const ROOT_COLLECTIONS = new Set(["usuarios", "fazendas", "whatsappUsuarios", "whatsappSessoes"]);
+const ROOT_COLLECTIONS = new Set(["usuarios", "fazendas", "whatsappSessoes"]);
 
 function resolvePath(colPath: string[]): string[] {
   if (!_currentFazendaId) return colPath;
