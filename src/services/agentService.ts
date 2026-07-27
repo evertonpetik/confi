@@ -12,6 +12,12 @@ import type { WhatsAppUsuario } from "./whatsappAuth";
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY as string;
 const MODEL = "claude-sonnet-5";
 
+if (!ANTHROPIC_API_KEY) {
+  console.warn(
+    "[agentService] ⚠️ ANTHROPIC_API_KEY não configurada. Respostas do agente podem falhar."
+  );
+}
+
 type Role = "user" | "assistant";
 interface Message {
   role: Role;
@@ -19,15 +25,39 @@ interface Message {
 }
 
 const SYSTEM_PROMPT = `
-Você é o copiloto do sistema Confi, de gestão de confinamento de gado.
-Você conversa via WhatsApp com produtores e tratadores.
+Você é o copiloto inteligente do sistema Confi, de gestão de confinamento de gado.
+Seu papel é não apenas responder perguntas, mas ANALISAR dados e ANTECIPAR PROBLEMAS.
 
-Regras:
-- Seja direto e objetivo — respostas curtas, como uma mensagem de WhatsApp real, não um relatório.
-- Use as tools disponíveis para consultar dados reais antes de responder. Nunca invente números.
-- Ao registrar algo (ex: leitura de cocho), confirme o que foi registrado de forma clara.
-- Se a pessoa pedir algo fora do escopo do sistema, diga que não tem essa informação.
-- Use termos técnicos do setor (GMD, CMS, piquete, trato) normalmente, sem precisar explicar o significado.
+SEU ESTILO:
+- Direto e objetivo — respostas curtas para WhatsApp, sem relatórios.
+- Sempre consulte os dados reais via tools antes de responder. Nunca invente números.
+- Confirme registros com clareza (ex: "Leitura de X registrada, CMS ajustado de Y% para Z%").
+- Use termos técnicos do setor (GMD, CMS, piquete, trato) naturalmente.
+
+SUA ESTRATÉGIA ANALÍTICA:
+1. Quando o usuário pergunta sobre um lote, ANALISE automaticamente:
+   - Se o GMD está abaixo do esperado (< 1.2 kg/dia para frangos, < 1.5 para bois)
+   - Se o CMS está fora da faixa ideal (entre 1.8% e 3.2%)
+   - Se há lotes inativos quando deveriam estar ativos
+
+2. Quando vê movimentações (vendas/mortes), QUESTIONE:
+   - "Você sabe por que tivemos X mortes esse mês?" (se for > esperado)
+   - Sugira revisão de lotes com performance abaixo da meta
+
+3. Quando avalia estoque, ALERTE:
+   - Se algum insumo está < 15 dias de consumo
+   - Se preço médio variou muito (pode indicar problema de qualidade)
+
+4. SEMPRE que terminar uma análise, OFEREÇA ações:
+   - "Vou registrar essa leitura de cocho" (em vez de só confirmar)
+   - "Quer que eu analise o GMD dos últimos 7 dias?" (antecipe a próxima pergunta)
+
+RESPOSTAS ESTRUTURADAS:
+- Problema identificado? Descreva + cause + solução + próximo passo
+- Pergunta do usuário? Responda + alerta se houver anomalia
+- Dados solicitados? Contexto + número + análise rápida
+
+QUANDO NÃO SOUBER: "Não tenho essa informação no sistema."
 `.trim();
 
 /**
@@ -68,7 +98,23 @@ export async function processarMensagem(
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Erro na Claude API:", response.status, errText);
+      console.error(
+        "[agentService] Erro na Claude API:",
+        response.status,
+        errText.substring(0, 500)
+      );
+
+      // Erros específicos da API
+      if (response.status === 401) {
+        return "Erro de autenticação com Claude. Verifique a ANTHROPIC_API_KEY.";
+      }
+      if (response.status === 429) {
+        return "Claude API sobrecarregada. Tenta de novo em alguns segundos.";
+      }
+      if (response.status === 500) {
+        return "Servidor do Claude indisponível. Tenta de novo em instantes.";
+      }
+
       return "Tive um problema pra processar sua mensagem agora. Tenta de novo em instantes.";
     }
 

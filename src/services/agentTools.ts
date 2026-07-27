@@ -102,6 +102,18 @@ export const AGENT_TOOLS = [
       required: ["numeroLote"],
     },
   },
+  {
+    name: "analisar_saude_rebanho",
+    description:
+      "Analisa a saúde geral do rebanho: compara GMD vs meta, identifica lotes com problemas, taxa de mortalidade.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "alertas_operacionais",
+    description:
+      "Retorna alertas críticos: lotes com CMS fora da faixa, estoques baixos, anomalias de GMD. Útil para relatórios proativos.",
+    input_schema: { type: "object", properties: {} },
+  },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -343,6 +355,109 @@ export async function consultarHistoricoGMD(numeroLote: number, dias = 7) {
   };
 }
 
+export async function analisarSaudeRebanho() {
+  const lotesSnap = await getCollection("lotes");
+  const lotes = lotesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const lotesAtivos = lotes.filter((l) => l.ativo);
+
+  const analise: any = {
+    lotesAtivos: lotesAtivos.length,
+    lotesComProblema: [],
+    resumo: "",
+  };
+
+  for (const lote of lotesAtivos) {
+    const movSnap = await getCollection("lotes", lote.id, "movimentacoes");
+    const movs = movSnap.docs.map((d) => d.data());
+    const qtdAtual = calcQtdAtual(movs);
+
+    if (qtdAtual <= 0) continue;
+
+    const gmdEstimado = lote.gmdEstimado ?? 1.3;
+    const cmsAtual = await getCmsAtualLote(lote.id);
+
+    // Alertas: GMD baixo ou CMS fora da faixa
+    const problemas = [];
+    if (gmdEstimado < 1.0) problemas.push("GMD abaixo de 1.0 (possível doença ou dieta ruim)");
+    if (cmsAtual < 1.5 || cmsAtual > 3.5) problemas.push(`CMS fora da faixa: ${cmsAtual}%`);
+
+    if (problemas.length > 0) {
+      analise.lotesComProblema.push({
+        numeroLote: lote.numero,
+        piquete: lote.piqueteNome,
+        gmd: gmdEstimado,
+        cms: cmsAtual,
+        problemas,
+      });
+    }
+  }
+
+  analise.resumo =
+    analise.lotesComProblema.length === 0
+      ? `✅ Rebanho saudável. ${lotesAtivos.length} lotes ativos sem alertas.`
+      : `⚠️ ${analise.lotesComProblema.length} lote(s) com anomalias detectadas.`;
+
+  return analise;
+}
+
+export async function alertasOperacionais() {
+  const lotesSnap = await getCollection("lotes");
+  const lotes = lotesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const insumosSnap = await getCollection("insumos");
+  const insumos = insumosSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+  const alertas: any[] = [];
+
+  // Alertas de CMS
+  for (const lote of lotes.filter((l) => l.ativo)) {
+    const cmsAtual = await getCmsAtualLote(lote.id);
+    if (cmsAtual < 1.5 || cmsAtual > 3.5) {
+      alertas.push({
+        tipo: "CMS_CRITICO",
+        lote: lote.numero,
+        mensagem: `Lote ${lote.numero}: CMS ${cmsAtual}% fora da faixa (esperado 1.5-3.5)`,
+      });
+    }
+  }
+
+  // Alertas de estoque
+  for (const insumo of insumos) {
+    const [comprasSnap, saidasSnap] = await Promise.all([
+      getCollection("insumos", insumo.id, "compras"),
+      getCollection("insumos", insumo.id, "saidas"),
+    ]);
+
+    const eventos = [
+      ...comprasSnap.docs.map((d) => ({ ...d.data(), tipo: "compra" as const })),
+      ...saidasSnap.docs.map((d) => ({ ...d.data(), tipo: "saida" as const })),
+    ].sort((a, b) => a.data.localeCompare(b.data));
+
+    let estoque = 0;
+    for (const ev of eventos) {
+      if (ev.tipo === "compra") {
+        estoque += ev.quantidade;
+      } else {
+        estoque -= ev.quantidade;
+      }
+    }
+
+    // Alerta: estoque < 15 dias (assumindo ~30kg/dia consumo)
+    if (estoque < 450) {
+      alertas.push({
+        tipo: "ESTOQUE_BAIXO",
+        insumo: insumo.nome,
+        mensagem: `${insumo.nome}: Apenas ${Math.round(estoque)}kg em estoque (< 15 dias).`,
+      });
+    }
+  }
+
+  return {
+    totalAlertas: alertas.length,
+    alertas,
+    resumo: alertas.length === 0 ? "✅ Nenhum alerta crítico." : `⚠️ ${alertas.length} alerta(s).`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 3. Roteador: dado o nome da tool e o input, executa e retorna o resultado
 // ---------------------------------------------------------------------------
@@ -359,6 +474,10 @@ export async function executarTool(nome: string, input: any) {
       return consultarEstoqueInsumo(input.nome);
     case "consultar_historico_gmd":
       return consultarHistoricoGMD(input.numeroLote, input.dias ?? 7);
+    case "analisar_saude_rebanho":
+      return analisarSaudeRebanho();
+    case "alertas_operacionais":
+      return alertasOperacionais();
     default:
       return { erro: `Tool desconhecida: ${nome}` };
   }

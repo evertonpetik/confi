@@ -24,7 +24,7 @@ import {
 } from "../../src/services/firestoreServiceServer";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN as string;
-const HISTORICO_MAX = 10;
+const HISTORICO_MAX = 20; // Aumentado para melhor contexto no agente
 
 /**
  * ATENÇÃO — MULTI-TENANCY E CONCORRÊNCIA
