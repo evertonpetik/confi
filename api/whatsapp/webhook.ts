@@ -21,7 +21,7 @@ import {
   setCurrentFazendaId,
   fsLimit,
   fsOrderBy,
-} from "../../src/services/firestoreService";
+} from "../../src/services/firestoreServiceServer";
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN as string;
 const HISTORICO_MAX = 10;

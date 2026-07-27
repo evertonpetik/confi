@@ -29,7 +29,7 @@ import {
   fsWhere,
   fsOrderBy,
   fsLimit,
-} from "./firestoreService";
+} from "./firestoreServiceServer";
 
 import {
   calcQtdAtual,

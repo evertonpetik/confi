@@ -22,7 +22,7 @@ import {
   queryCollection,
   setCurrentFazendaId,
   fsWhere,
-} from "../../src/services/firestoreService";
+} from "../../src/services/firestoreServiceServer";
 
 // Protege o endpoint de cron pra só o Vercel poder chamar (ver docs do Vercel Cron)
 const CRON_SECRET = process.env.CRON_SECRET as string;

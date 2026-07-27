@@ -10,7 +10,7 @@ import { AGENT_TOOLS, executarTool } from "./agentTools";
 import type { WhatsAppUsuario } from "./whatsappAuth";
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY as string;
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 
 type Role = "user" | "assistant";
 interface Message {

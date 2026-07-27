@@ -15,20 +15,15 @@
  *
  * IMPORTANTE — coleção raiz: como ainda não sabemos a fazenda quando o número
  * escreve pela primeira vez, essa busca precisa acontecer FORA do escopo de
- * fazenda. No seu firestoreService.ts, `resolvePath()` só deixa uma coleção
- * de fora do prefixo `fazendas/{id}/...` se ela estiver em ROOT_COLLECTIONS.
- * Adicione "whatsappUsuarios" (e "whatsappSessoes", usado no webhook) nessa
- * lista:
- *
- *   const ROOT_COLLECTIONS = new Set(["usuarios", "fazendas", "whatsappUsuarios", "whatsappSessoes"]);
- *
- * Essa é a única mudança necessária no seu firestoreService.ts original.
+ * fazenda. Este arquivo usa firestoreServiceServer.ts (não o
+ * firestoreService.ts do app), cujo ROOT_COLLECTIONS já inclui
+ * "whatsappUsuarios" e "whatsappSessoes".
  */
 
 import {
   queryCollection,
   fsWhere,
-} from "./firestoreService"; // ajuste o path se necessário no seu projeto
+} from "./firestoreServiceServer";
 
 export interface WhatsAppUsuario {
   id: string;
