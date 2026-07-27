@@ -2,8 +2,9 @@
  * agentTools.ts
  *
  * Define as "tools" (function calling) que o agente Claude pode chamar,
- * e a implementação de cada uma, reaproveitando firestoreService.ts e
- * mapaTratoCalc.ts que já existem no projeto.
+ * e a implementação de cada uma, reaproveitando firestoreServiceServer.ts e
+ * loteCalcCore.ts (versão sem dependência de react-native das funções de
+ * cálculo de mapaTratoCalc.ts — ver comentário em loteCalcCore.ts).
  *
  * Assinaturas confirmadas contra o código real (não mais suposição):
  *   - getCollection(...colPath: string[])
@@ -16,7 +17,7 @@
  */
 
 // Funções serverless da Vercel rodam em UTC por padrão. getHojeStr() (importado
-// de mapaTratoCalc.ts) usa new Date() com métodos locais — sem isso, à noite em
+// de loteCalcCore.ts) usa new Date() com métodos locais — sem isso, à noite em
 // MS (UTC-4) o servidor já estaria "no dia seguinte" em UTC, gerando datas
 // diferentes das que o app mobile grava. Fixamos o fuso do processo uma única
 // vez, no carregamento do módulo (não precisa reset — não é estado por request).
@@ -36,7 +37,7 @@ import {
   calcPesoMedio,
   CMS_INICIAL,
   getHojeStr,
-} from "../utils/mapaTratoCalc";
+} from "../utils/loteCalcCore";
 
 // CMS_BASE não é exportado por mapaTratoCalc.ts — vive hardcoded em leitura.tsx.
 // Mantenha esse valor sincronizado com o de lá caso você o altere no app.
