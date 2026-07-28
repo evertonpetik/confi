@@ -1,6 +1,7 @@
 import { ModuloId, useAuth } from "@/contexts/AuthContext";
 import { DrawerProvider, useDrawer } from "@/contexts/DrawerContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { WeighingProvider } from "@/contexts/WeighingContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { prefetchAllData } from "@/utils/prefetchFirestore";
 import { Feather } from "@expo/vector-icons";
@@ -34,6 +35,7 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
   { route: "estimativa-peso", label: "Estimativa Peso", icon: "camera" },
   { route: "analise-lote", label: "Analise Lote", icon: "bar-chart-2" },
   { route: "consulta-gta", label: "Consultas", icon: "search" },
+  { route: "pesagem-lista", label: "Pesagem", icon: "scale" },
   { route: "tanques", label: "Tanques", icon: "database" },
   { route: "veiculos", label: "Veiculos", icon: "navigation" },
   { route: "abastecimento", label: "Abastecimento", icon: "droplet" },
@@ -44,7 +46,7 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
 
 const MODULO_ROUTES: Record<ModuloId, string[]> = {
   iconfi: ["home", "produtores", "lotes", "leitura", "insumos", "dietas", "roteiros", "mapa-trato", "tratador", "estimativa-peso", "analise-lote"],
-  ifarm: ["home-ifarm", "consulta-gta"],
+  ifarm: ["home-ifarm", "consulta-gta", "pesagem-lista", "pesagem-leitura", "pesagem-historico"],
   abastecimento: ["home-abastecimento", "tanques", "veiculos", "abastecimento", "historico-combustivel"],
 };
 
@@ -317,25 +319,27 @@ export default function AppLayout() {
   }
 
   return (
-    <DrawerProvider>
-      <View style={{ flex: 1, flexDirection: "row" }}>
-        {isDesktop && (
-          <View
-            style={{
-              width: 280,
-              backgroundColor: "#1D1F25",
-              paddingTop: 32,
-            }}
-          >
-            <SidebarContent />
+    <WeighingProvider>
+      <DrawerProvider>
+        <View style={{ flex: 1, flexDirection: "row" }}>
+          {isDesktop && (
+            <View
+              style={{
+                width: 280,
+                backgroundColor: "#1D1F25",
+                paddingTop: 32,
+              }}
+            >
+              <SidebarContent />
+            </View>
+          )}
+          <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
+            <Slot />
           </View>
-        )}
-        <View style={{ flex: 1, backgroundColor: "#F5F5F5" }}>
-          <Slot />
+          {!isDesktop && <MobileDrawer />}
         </View>
-        {!isDesktop && <MobileDrawer />}
-      </View>
-    </DrawerProvider>
+      </DrawerProvider>
+    </WeighingProvider>
   );
 }
 
