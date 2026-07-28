@@ -12,9 +12,12 @@ import {
   parseIncomingWebhook,
   sendWhatsAppText,
   markAsRead,
+  getMediaUrl,
+  downloadMedia,
 } from "../../src/services/whatsappService";
 import { getUsuarioAutorizado } from "../../src/services/whatsappAuth";
 import { processarMensagem } from "../../src/services/agentService";
+import { transcreverAudio } from "../../src/services/transcriptionService";
 import {
   queryCollection,
   setDocument,
@@ -86,6 +89,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // estar escopada à fazenda do usuário.
       setCurrentFazendaId(usuario.fazendaId);
 
+      let textoRecebido: string;
+      if (incoming.type === "audio") {
+        try {
+          const mediaUrl = await getMediaUrl(incoming.audioId!);
+          const audioBuffer = await downloadMedia(mediaUrl);
+          textoRecebido = await transcreverAudio(audioBuffer, incoming.mimeType);
+        } catch (err) {
+          console.error("Erro ao transcrever áudio do WhatsApp:", err);
+          await sendWhatsAppText(
+            incoming.from,
+            "Não consegui entender o áudio, pode mandar em texto?"
+          );
+          return res.status(200).send("ok");
+        }
+      } else {
+        textoRecebido = incoming.text!;
+      }
+
       // whatsappSessoes é coleção raiz (não precisa do escopo de fazenda),
       // mas mantemos a chamada depois de setCurrentFazendaId sem problema,
       // já que "whatsappSessoes" está em ROOT_COLLECTIONS.
@@ -99,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .reverse()
         .map((m) => ({ role: m.role, content: m.content }));
 
-      const resposta = await processarMensagem(historico, incoming.text, usuario);
+      const resposta = await processarMensagem(historico, textoRecebido, usuario);
 
       await sendWhatsAppText(incoming.from, resposta);
 
@@ -107,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await setDocument(
         [...sessaoRef, incoming.from, "mensagens"],
         `${Date.now()}_u`,
-        { role: "user", content: incoming.text, timestamp: Date.now() }
+        { role: "user", content: textoRecebido, timestamp: Date.now() }
       );
       await setDocument(
         [...sessaoRef, incoming.from, "mensagens"],

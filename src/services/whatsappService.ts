@@ -72,7 +72,10 @@ export async function markAsRead(messageId: string): Promise<void> {
 export interface IncomingWhatsAppMessage {
   from: string; // telefone de quem enviou
   messageId: string;
-  text: string;
+  type: "text" | "audio";
+  text?: string; // presente quando type === "text"
+  audioId?: string; // presente quando type === "audio" (media ID da Meta)
+  mimeType?: string; // presente quando type === "audio"
   timestamp: string;
 }
 
@@ -85,19 +88,68 @@ export function parseIncomingWebhook(payload: any): IncomingWhatsAppMessage | nu
 
     if (!message) return null; // pode ser um "status" update (entregue/lido), ignoramos
 
-    if (message.type !== "text") {
-      // Poderia expandir aqui para lidar com áudio (transcrever) ou imagem no futuro
-      return null;
+    if (message.type === "text") {
+      return {
+        from: message.from,
+        messageId: message.id,
+        type: "text",
+        text: message.text.body,
+        timestamp: message.timestamp,
+      };
     }
 
-    return {
-      from: message.from,
-      messageId: message.id,
-      text: message.text.body,
-      timestamp: message.timestamp,
-    };
+    if (message.type === "audio") {
+      return {
+        from: message.from,
+        messageId: message.id,
+        type: "audio",
+        audioId: message.audio.id,
+        mimeType: message.audio.mime_type,
+        timestamp: message.timestamp,
+      };
+    }
+
+    // Outros tipos (imagem, documento, etc.) não são suportados ainda
+    return null;
   } catch (err) {
     console.error("Erro ao parsear webhook do WhatsApp:", err);
     return null;
   }
+}
+
+/**
+ * Busca a URL temporária de download de uma mídia recebida (ex: áudio).
+ * A URL retornada também exige o Bearer token pra ser baixada.
+ */
+export async function getMediaUrl(mediaId: string): Promise<string> {
+  const res = await fetch(`https://graph.facebook.com/${GRAPH_API_VERSION}/${mediaId}`, {
+    headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error("Erro ao buscar URL da mídia do WhatsApp:", res.status, errText);
+    throw new Error(`WhatsApp media API error: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.url;
+}
+
+/**
+ * Baixa o binário de uma mídia do WhatsApp a partir da URL obtida em getMediaUrl().
+ */
+export async function downloadMedia(url: string): Promise<Buffer> {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` },
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error("Erro ao baixar mídia do WhatsApp:", res.status, errText);
+    throw new Error(`WhatsApp media download error: ${res.status}`);
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  return Buffer.from(arrayBuffer);
 }
