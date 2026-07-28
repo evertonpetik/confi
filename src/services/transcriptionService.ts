@@ -32,7 +32,7 @@ export async function transcreverAudio(audio: Buffer, mimeType?: string): Promis
   const extensao = extensaoPorMimeType(mimeType);
 
   const form = new FormData();
-  form.append("file", new Blob([audio]), `audio.${extensao}`);
+  form.append("file", new Blob([new Uint8Array(audio)]), `audio.${extensao}`);
   form.append("model", "whisper-large-v3-turbo");
 
   const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {

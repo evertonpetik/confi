@@ -14,7 +14,7 @@ import {
  * Suporta: Balança ACR HD Easy, Leitor RFID XRS2i
  */
 export class BluetoothService {
-  private bleManager: BleManager;
+  private bleManager: BleManager | undefined;
   private dispositivosConectados: Map<string, Device> = new Map();
   private subscricoes: Map<string, any> = new Map();
   private listeners: {
@@ -26,14 +26,17 @@ export class BluetoothService {
   } = {};
 
   constructor() {
-    this.bleManager = new BleManager();
-    this.inicializarListeners();
+    if (Platform.OS !== "web") {
+      this.bleManager = new BleManager();
+      this.inicializarListeners();
+    }
   }
 
   /**
    * Inicializa listeners para eventos do BleManager
    */
   private inicializarListeners(): void {
+    if (!this.bleManager) return;
     this.bleManager.onStateChange((state) => {
       console.log(`[BLE] Estado: ${state}`);
       if (state === "PoweredOff") {
@@ -79,6 +82,7 @@ export class BluetoothService {
   public async descobrirDispositivos(
     duracao: number = 10000
   ): Promise<DispositivoBluetooth[]> {
+    if (!this.bleManager) return [];
     try {
       console.log("[BLE] Iniciando descoberta de dispositivos...");
 
