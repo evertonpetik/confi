@@ -132,7 +132,7 @@ export const WeighingProvider: React.FC<WeighingProviderProps> = ({ children }) 
             return {
               ...prev,
               chipLido: leitura,
-              etapa: leitura.valido ? "aguardando_peso" : "erro",
+              etapa: leitura.valido ? "aguardando_peso" : "aguardando_chip",
             };
           }
           return null;

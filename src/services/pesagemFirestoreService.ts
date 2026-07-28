@@ -410,6 +410,51 @@ export class PesagemFirestoreService {
   }
 
   /**
+   * Lista todos os bovinos de uma fazenda
+   */
+  static async listarBovinos(farmedaId: string): Promise<Bovino[]> {
+    try {
+      const snapshot = await firestore()
+        .collection("fazendas")
+        .doc(farmedaId)
+        .collection("bovinos")
+        .orderBy("nome")
+        .get();
+
+      return snapshot.docs.map(
+        (doc) =>
+          ({
+            id: doc.id,
+            ...doc.data(),
+          } as Bovino)
+      );
+    } catch (error) {
+      console.error("[Firestore] Erro ao listar bovinos:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Atualiza campos de um bovino existente
+   */
+  static async atualizarBovino(bovino: Bovino, farmedaId: string): Promise<void> {
+    try {
+      await firestore()
+        .collection("fazendas")
+        .doc(farmedaId)
+        .collection("bovinos")
+        .doc(bovino.id)
+        .update({
+          ...bovino,
+          atualizadoEm: new Date(),
+        });
+    } catch (error) {
+      console.error("[Firestore] Erro ao atualizar bovino:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Excluir uma pesagem (para correção)
    */
   static async excluirPesagem(

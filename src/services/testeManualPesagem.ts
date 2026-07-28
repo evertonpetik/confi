@@ -9,7 +9,11 @@ import { PesagemFirestoreService } from "./pesagemFirestoreService";
 import { PesagemLogger } from "./pesagemLogger";
 import {
   Bovino,
+  CategoriaBovino,
+  LeituraChip,
+  LeituraPeso,
   Pesagem,
+  StatusPeso,
   TipoMovimentacao,
   DispositivoBluetooth,
 } from "./weighing.types";
@@ -54,7 +58,7 @@ export class TesteManualPesagem {
     let pesoRecebido = false;
 
     // Registra listener de peso
-    bluetoothService.registrarListener("peso", (leitura) => {
+    bluetoothService.registrarListener("peso", (leitura: LeituraPeso) => {
       PesagemLogger.info("TESTE_2", "Peso recebido!", {
         peso: leitura.peso,
         status: leitura.status,
@@ -110,7 +114,7 @@ export class TesteManualPesagem {
     let chipRecebido = false;
 
     // Registra listener de chip
-    bluetoothService.registrarListener("chip", (leitura) => {
+    bluetoothService.registrarListener("chip", (leitura: LeituraChip) => {
       PesagemLogger.info("TESTE_3", "Chip recebido!", {
         chipId: leitura.chipId,
         sinal: leitura.sinSinal,
@@ -170,15 +174,15 @@ export class TesteManualPesagem {
     let pesoLido: number | null = null;
 
     // Setup listeners
-    bluetoothService.registrarListener("chip", (leitura) => {
+    bluetoothService.registrarListener("chip", (leitura: LeituraChip) => {
       if (leitura.valido) {
         chipLido = leitura.chipId;
         PesagemLogger.info("TESTE_4", "Chip validado", { chip: chipLido });
       }
     });
 
-    bluetoothService.registrarListener("peso", (leitura) => {
-      if (leitura.status === "estavel") {
+    bluetoothService.registrarListener("peso", (leitura: LeituraPeso) => {
+      if (leitura.status === StatusPeso.ESTAVEL) {
         pesoLido = leitura.peso;
         PesagemLogger.info("TESTE_4", "Peso estável", { peso: pesoLido });
       }
@@ -224,7 +228,7 @@ export class TesteManualPesagem {
       id: `teste_${Date.now()}`,
       chipId: chipLido,
       nome: "Animal de Teste",
-      categoria: "bois",
+      categoria: CategoriaBovino.BOIS,
       raca: "Nelore",
       sexo: "M",
       dataNascimento: new Date().toISOString(),
@@ -241,12 +245,12 @@ export class TesteManualPesagem {
     // Cria pesagem
     const pesagem: Pesagem = {
       animalId: bovinoTeste.id!,
-      chipId,
+      chipId: chipLido!,
       peso: pesoLido,
       dataHora: new Date().toISOString(),
       tipoPesagem: TipoMovimentacao.ENTRADA,
       leituraChip: {
-        chipId,
+        chipId: chipLido!,
         timestamp: new Date().toISOString(),
         sinSinal: -65,
         dispositivoId: rfidId,
@@ -255,7 +259,7 @@ export class TesteManualPesagem {
       leituraPeso: {
         peso: pesoLido,
         timestamp: new Date().toISOString(),
-        status: "estavel",
+        status: StatusPeso.ESTAVEL,
         dispositivoId: balancaId,
         valido: true,
       },

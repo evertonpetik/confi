@@ -3,7 +3,8 @@
  * Facilita rastreamento de eventos e detecção de problemas
  */
 
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
+import { EncodingType } from "expo-file-system/legacy";
 import { Platform } from "react-native";
 
 type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
@@ -17,8 +18,8 @@ interface LogEntry {
 }
 
 export class PesagemLogger {
-  private static logDirectory = `${FileSystem.DocumentationDirectory}confi-logs`;
-  private static logFile = `${FileSystem.DocumentationDirectory}confi-logs/pesagem.log`;
+  private static logDirectory = `${FileSystem.documentDirectory}confi-logs`;
+  private static logFile = `${FileSystem.documentDirectory}confi-logs/pesagem.log`;
   private static maxLogSize = 5 * 1024 * 1024; // 5MB
   private static logs: LogEntry[] = [];
   private static initialized = false;
@@ -116,10 +117,14 @@ export class PesagemLogger {
         });
       }
 
-      // Escreve no arquivo
-      await FileSystem.writeAsStringAsync(this.logFile, logLine, {
-        encoding: FileSystem.EncodingType.UTF8,
-        append: true,
+      // Escreve no arquivo (lê existente e concatena, pois expo-file-system não tem append nativo)
+      let existente = "";
+      const fileInfo2 = await FileSystem.getInfoAsync(this.logFile);
+      if (fileInfo2.exists) {
+        existente = await FileSystem.readAsStringAsync(this.logFile, { encoding: EncodingType.UTF8 });
+      }
+      await FileSystem.writeAsStringAsync(this.logFile, existente + logLine, {
+        encoding: EncodingType.UTF8,
       });
     } catch (error) {
       console.error("[Logger] Erro ao persistir log:", error);
@@ -195,7 +200,7 @@ export class PesagemLogger {
       });
 
       await FileSystem.writeAsStringAsync(caminhoExportacao, conteudo);
-      this.info("Logger", `Logs exportados para: ${caminhoExquivo}`);
+      this.info("Logger", `Logs exportados para: ${caminhoExportacao}`);
 
       return caminhoExportacao;
     } catch (error) {

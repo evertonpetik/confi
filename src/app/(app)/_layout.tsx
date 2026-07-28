@@ -34,8 +34,11 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
   { route: "tratador", label: "Tratador", icon: "play-circle" },
   { route: "estimativa-peso", label: "Estimativa Peso", icon: "camera" },
   { route: "analise-lote", label: "Analise Lote", icon: "bar-chart-2" },
+  { route: "animais", label: "Rebanho", icon: "list" },
+  { route: "movimentacoes", label: "Movimentações", icon: "shuffle" },
+  { route: "sanidade", label: "Sanidade", icon: "shield" },
   { route: "consulta-gta", label: "Consultas", icon: "search" },
-  { route: "pesagem-lista", label: "Pesagem", icon: "scale" },
+  { route: "pesagem-lista", label: "Pesagem", icon: "activity" },
   { route: "tanques", label: "Tanques", icon: "database" },
   { route: "veiculos", label: "Veiculos", icon: "navigation" },
   { route: "abastecimento", label: "Abastecimento", icon: "droplet" },
@@ -46,7 +49,7 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
 
 const MODULO_ROUTES: Record<ModuloId, string[]> = {
   iconfi: ["home", "produtores", "lotes", "leitura", "insumos", "dietas", "roteiros", "mapa-trato", "tratador", "estimativa-peso", "analise-lote"],
-  ifarm: ["home-ifarm", "consulta-gta", "pesagem-lista", "pesagem-leitura", "pesagem-historico"],
+  ifarm: ["home-ifarm", "animais", "movimentacoes", "pesagem-lista", "pesagem-leitura", "pesagem-historico", "sanidade", "consulta-gta"],
   abastecimento: ["home-abastecimento", "tanques", "veiculos", "abastecimento", "historico-combustivel"],
 };
 

@@ -84,18 +84,15 @@ export class BluetoothService {
 
       const deviceMap = new Map<string, Device>();
 
-      // Listener para dispositivos encontrados
-      this.bleManager.onDeviceDiscovered((device) => {
-        if (!deviceMap.has(device.id)) {
-          deviceMap.set(device.id, device);
-          console.log(`[BLE] Dispositivo encontrado: ${device.name} (${device.id})`);
-        }
-      });
-
-      // Inicia varredura
-      await this.bleManager.startDeviceScan(null, null, (error, device) => {
+      // Inicia varredura e coleta dispositivos via callback
+      this.bleManager.startDeviceScan(null, null, (error, device) => {
         if (error) {
           console.error("[BLE] Erro na varredura:", error.message);
+          return;
+        }
+        if (device && !deviceMap.has(device.id)) {
+          deviceMap.set(device.id, device);
+          console.log(`[BLE] Dispositivo encontrado: ${device.name} (${device.id})`);
         }
       });
 
@@ -169,9 +166,8 @@ export class BluetoothService {
         }
 
         // Reconectar para obter referência atualizada
-        const scannedDevice = await this.bleManager.centralManager
-          .getConnectedPeripherals([])
-          .then((devices) => devices.find((d) => d.id === dispositivoId));
+        const connectedDevices = await this.bleManager.connectedDevices([]);
+        const scannedDevice = connectedDevices.find((d) => d.id === dispositivoId);
 
         if (!scannedDevice) {
           throw new Error(`Não foi possível obter referência do dispositivo`);
@@ -189,7 +185,7 @@ export class BluetoothService {
       console.log(`[BLE] Conectado ao dispositivo: ${dispositivoId}`);
 
       // Descobre serviços
-      const device_info = await this.bleManager.discoverAllServicesAndCharacteristics(
+      const device_info = await this.bleManager.discoverAllServicesAndCharacteristicsForDevice(
         dispositivoId
       );
 

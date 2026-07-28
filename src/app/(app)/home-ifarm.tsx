@@ -5,16 +5,44 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-const QUICK_ACCESS = [
-  { route: "consulta-gta", label: "Consultas GTA", icon: "search" as const, description: "Consultar GTA e SISBOV" },
+const MODULES = [
+  {
+    route: "animais",
+    label: "Rebanho",
+    icon: "list" as const,
+    description: "Cadastro de animais e SISBOV",
+    cor: "#4CAF50",
+  },
+  {
+    route: "movimentacoes",
+    label: "Movimentações",
+    icon: "shuffle" as const,
+    description: "Entradas, saídas e GTA",
+    cor: "#2196F3",
+  },
+  {
+    route: "pesagem-lista",
+    label: "Pesagem",
+    icon: "activity" as const,
+    description: "Balança Bluetooth e RFID",
+    cor: "#FF9800",
+  },
+  {
+    route: "sanidade",
+    label: "Sanidade",
+    icon: "shield" as const,
+    description: "Vacinações e vermifugações",
+    cor: "#9C27B0",
+  },
+  {
+    route: "consulta-gta",
+    label: "Consulta GTA",
+    icon: "search" as const,
+    description: "Consultar GTA e SISBOV",
+    cor: "#607D8B",
+  },
 ];
 
 export default function HomeIFarm() {
@@ -33,8 +61,7 @@ export default function HomeIFarm() {
           style={[
             styles.container,
             { padding: containerPadding },
-            isTablet &&
-            !isDesktop && {
+            isTablet && !isDesktop && {
               maxWidth: maxWidthContent,
               alignSelf: "center" as const,
               width: "100%",
@@ -42,33 +69,56 @@ export default function HomeIFarm() {
           ]}
         >
           <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
-            <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>
-              iFarm
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.title, { fontSize: titleFontSize }]} numberOfLines={1}>
+                iFarm
+              </Text>
+              <Text style={styles.subtitle}>
+                {selectedFazendaNome ?? ""} · Gestão do Rebanho
+              </Text>
+            </View>
             {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
           </View>
-          <Text style={styles.subtitle}>
-            {selectedFazendaNome ?? ""} - Rebanho e Rastreabilidade
-          </Text>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Acesso Rapido</Text>
-            <View style={styles.cardGrid}>
-              {QUICK_ACCESS.map((item) => (
-                <TouchableOpacity
-                  key={item.route}
-                  style={styles.card}
-                  activeOpacity={0.7}
-                  onPress={() => router.push(`/(app)/${item.route}` as any)}
-                >
-                  <View style={[styles.cardIcon, { backgroundColor: primaryColor + "1A" }]}>
-                    <Feather name={item.icon} size={24} color={primaryColor} />
-                  </View>
-                  <Text style={styles.cardTitle}>{item.label}</Text>
-                  <Text style={styles.cardDescription}>{item.description}</Text>
-                </TouchableOpacity>
-              ))}
+          {/* Banner SISBOV */}
+          <View style={[styles.banner, { backgroundColor: primaryColor + "12", borderColor: primaryColor + "30" }]}>
+            <View style={[styles.bannerIcone, { backgroundColor: primaryColor + "20" }]}>
+              <Feather name="radio" size={22} color={primaryColor} />
             </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.bannerTitulo, { color: primaryColor }]}>
+                Rastreabilidade SISBOV
+              </Text>
+              <Text style={styles.bannerDesc}>
+                Controle individual por chip, conforme normas do MAPA
+              </Text>
+            </View>
+          </View>
+
+          {/* Grid de módulos */}
+          <View style={styles.grid}>
+            {MODULES.map((mod) => (
+              <TouchableOpacity
+                key={mod.route}
+                style={styles.card}
+                activeOpacity={0.75}
+                onPress={() => router.push(`/(app)/${mod.route}` as any)}
+              >
+                <View style={[styles.cardIcone, { backgroundColor: mod.cor + "18" }]}>
+                  <Feather name={mod.icon} size={26} color={mod.cor} />
+                </View>
+                <Text style={styles.cardLabel}>{mod.label}</Text>
+                <Text style={styles.cardDesc}>{mod.description}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Nota informativa */}
+          <View style={styles.nota}>
+            <Feather name="info" size={14} color="#999" />
+            <Text style={styles.notaText}>
+              Módulo conforme exigências SISBOV/MAPA · Integração com balança ACR e leitor RFID XRS2i via Bluetooth
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -80,41 +130,61 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FDFDFD",
-    padding: 32,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 40,
-    marginBottom: 8,
+    alignItems: "flex-start",
+    marginBottom: 20,
   },
   title: {
-    fontSize: 32,
     fontWeight: "900",
+    color: "#1a1a1a",
   },
   subtitle: {
-    fontSize: 16,
-    color: "#666",
+    fontSize: 14,
+    color: "#888",
+    marginTop: 2,
   },
-  section: {
-    marginTop: 32,
+  banner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 24,
   },
-  sectionTitle: {
-    fontSize: 20,
+  bannerIcone: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bannerTitulo: {
+    fontSize: 14,
     fontWeight: "700",
-    color: "#1a1a1a",
-    marginBottom: 16,
   },
-  cardGrid: {
+  bannerDesc: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 2,
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
   },
   card: {
-    backgroundColor: "#F5F5F5",
-    borderRadius: 12,
-    padding: 20,
+    width: "47%",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#F0F0F0",
   },
-  cardIcon: {
+  cardIcone: {
     width: 48,
     height: 48,
     borderRadius: 24,
@@ -122,14 +192,30 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 12,
   },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+  cardLabel: {
+    fontSize: 15,
+    fontWeight: "800",
     color: "#1a1a1a",
   },
-  cardDescription: {
-    fontSize: 13,
-    color: "#888",
+  cardDesc: {
+    fontSize: 12,
+    color: "#999",
     marginTop: 4,
+    lineHeight: 16,
+  },
+  nota: {
+    flexDirection: "row",
+    gap: 6,
+    alignItems: "flex-start",
+    marginTop: 28,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+  },
+  notaText: {
+    flex: 1,
+    fontSize: 11,
+    color: "#bbb",
+    lineHeight: 16,
   },
 });
