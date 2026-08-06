@@ -8,7 +8,8 @@
 
 export interface SerialDevice {
   id: string;
-  label: string;
+  label: string;       // ex: "Porta 1 (VID:0403)"
+  portIndex: number;   // ordem de concessão (1-based)
   type: "balanca" | "rfid" | "desconhecido";
   connected: boolean;
   baudRate: number;
@@ -27,14 +28,24 @@ const isWebSerialSupported = (): boolean =>
 
 // Parsers de protocolo para os equipamentos mais comuns do mercado
 function parseWeightLine(line: string): number | null {
-  // ACR HD Easy: "+  450.5 kg\r" / "  450.5\r"
-  // Rumax / Líder: "P:0450.5\r"
-  // Toledo: "  450.5  S\r" (S = stable)
+  // ACR HD Easy:      "+  450.5 kg"  /  "  450.5"
+  // Rumax / Líder:    "P:0450.5"
+  // Toledo:           "  450.5  S"  (S=stable, U=unstable)
+  // AND (FX-i):       "ST,GS,+00450.00  kg"
+  // Peso inteiro:     "450"  /  "  0450 "
   const clean = line.trim().replace(/[^0-9.,+\-]/g, " ").trim();
-  const match = clean.match(/[+\-]?\s*(\d+[.,]\d+)/);
-  if (!match) return null;
-  const val = parseFloat(match[1].replace(",", "."));
-  return isNaN(val) || val <= 0 ? null : val;
+  // Tenta primeiro número com decimal, depois inteiro >= 10
+  const matchDec = clean.match(/[+\-]?\s*(\d+[.,]\d+)/);
+  if (matchDec) {
+    const val = parseFloat(matchDec[1].replace(",", "."));
+    return isNaN(val) || val <= 0 ? null : val;
+  }
+  const matchInt = clean.match(/\b(\d{2,6})\b/); // 10–999999 kg
+  if (matchInt) {
+    const val = parseInt(matchInt[1], 10);
+    return val >= 10 && val <= 9999 ? val : null;
+  }
+  return null;
 }
 
 function parseRfidLine(line: string): string | null {
@@ -56,6 +67,7 @@ class SerialService {
   private listeners: SerialListener[] = [];
   private weightListeners: ((peso: number) => void)[] = [];
   private rfidListeners: ((chip: string) => void)[] = [];
+  private rawListeners: ((portId: string, portLabel: string, line: string) => void)[] = [];
   private connectedDevices: SerialDevice[] = [];
 
   get isSupported(): boolean {
@@ -69,6 +81,12 @@ class SerialService {
   onReading(fn: SerialListener): () => void {
     this.listeners.push(fn);
     return () => { this.listeners = this.listeners.filter((l) => l !== fn); };
+  }
+
+  /** Recebe cada linha crua recebida de qualquer porta — útil para diagnóstico. */
+  onRawLine(fn: (portId: string, portLabel: string, line: string) => void): () => void {
+    this.rawListeners.push(fn);
+    return () => { this.rawListeners = this.rawListeners.filter((l) => l !== fn); };
   }
 
   onWeight(fn: (peso: number) => void): () => void {
@@ -102,9 +120,15 @@ class SerialService {
       const id = `port_${Date.now()}`;
       this.ports.set(id, port);
 
+      const info = (port as any).getInfo?.() ?? {};
+      const vidHex = info.usbVendorId ? ` VID:${info.usbVendorId.toString(16).toUpperCase().padStart(4, '0')}` : "";
+      const portIndex = this.connectedDevices.length + 1;
+      const typeLabel = type === "balanca" ? "Balança" : type === "rfid" ? "Leitor RFID" : "Dispositivo Serial";
+
       const device: SerialDevice = {
         id,
-        label: `${type === "balanca" ? "Balança" : "Leitor RFID"} (${baudRate} baud)`,
+        label: `${typeLabel} — Porta ${portIndex}${vidHex}`,
+        portIndex,
         type,
         connected: true,
         baudRate,
@@ -133,9 +157,14 @@ class SerialService {
         const id = `port_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         this.ports.set(id, port);
 
+        const info = (port as any).getInfo?.() ?? {};
+        const vidHex = info.usbVendorId ? ` VID:${info.usbVendorId.toString(16).toUpperCase().padStart(4, '0')}` : "";
+        const portIndex = this.connectedDevices.length + 1;
+
         const device: SerialDevice = {
           id,
-          label: `Porta serial (${baudRate} baud)`,
+          label: `Porta ${portIndex}${vidHex}`,
+          portIndex,
           type: "desconhecido",
           connected: true,
           baudRate,
@@ -174,6 +203,10 @@ class SerialService {
 
         for (const line of lines) {
           if (!line.trim()) continue;
+
+          const device = this.connectedDevices.find((d) => d.id === id);
+          // Dispara linha bruta para diagnóstico antes de qualquer parsing
+          this.rawListeners.forEach((l) => l(id, device?.label ?? id, line));
 
           const reading: SerialReading = {
             raw: line,
@@ -224,6 +257,15 @@ class SerialService {
   async disconnectAll(): Promise<void> {
     const ids = Array.from(this.ports.keys());
     await Promise.all(ids.map((id) => this.disconnectPort(id)));
+  }
+
+  /** Reatribui o papel de um dispositivo já conectado (balança ↔ rfid). */
+  assignPortType(id: string, type: "balanca" | "rfid"): void {
+    const device = this.connectedDevices.find((d) => d.id === id);
+    if (!device) return;
+    device.type = type;
+    const typeLabel = type === "balanca" ? "Balança" : "Leitor RFID";
+    device.label = device.label.replace(/^[^—]+—?\s*/, `${typeLabel} — `);
   }
 }
 

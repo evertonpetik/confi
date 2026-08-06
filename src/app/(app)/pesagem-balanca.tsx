@@ -78,7 +78,16 @@ export default function PesagemBalanca() {
   // ─── Estado de conexão ─────────────────────────────────────────────────────
   const [dispositivos, setDispositivos] = useState<DispositivoInfo[]>([]);
   const [balancaConectada, setBalancaConectada] = useState(false);
+  const [balancaPortId, setBalancaPortId] = useState<string | null>(null);
   const [rfidConectado, setRfidConectado] = useState(false);
+  const [rfidPortId, setRfidPortId] = useState<string | null>(null);
+  // Baud rate selecionado para a balança (ACR HD Easy: 9600; alguns modelos: 4800)
+  const [balancaBaud, setBalancaBaud] = useState<4800 | 9600 | 19200>(9600);
+  // Portas reconectadas sem papel definido — requer identificação pelo usuário
+  const [portasParaIdentificar, setPortasParaIdentificar] = useState<DispositivoInfo[]>([]);
+  // Log de dados brutos recebidos das portas (diagnóstico)
+  const [logBruto, setLogBruto] = useState<{ portLabel: string; linha: string; ts: string }[]>([]);
+  const [mostrarLog, setMostrarLog] = useState(false);
 
   // ─── Estado de leitura ─────────────────────────────────────────────────────
   const [pesoAtual, setPesoAtual] = useState<number | null>(null);
@@ -181,17 +190,31 @@ export default function PesagemBalanca() {
   // ─── Conexão Web Serial (PC / Browser) ────────────────────────────────────
   const conectarSerialBalanca = async () => {
     try {
-      const dev = await serialService.requestPort("balanca", 9600);
+      const dev = await serialService.requestPort("balanca", balancaBaud);
       if (!dev) return;
       setDispositivos((prev) => [
         ...prev.filter((d) => d.tipo !== "balanca"),
         { id: dev.id, label: dev.label, tipo: "balanca", estado: "conectado" },
       ]);
       setBalancaConectada(true);
+      setBalancaPortId(dev.id);
       serialService.onWeight(handlePesoRecebido);
+      serialService.onRawLine((_, portLabel, linha) =>
+        setLogBruto((prev) => [{ portLabel, linha, ts: new Date().toLocaleTimeString("pt-BR") }, ...prev.slice(0, 49)])
+      );
     } catch (err: any) {
       Alert.alert("Erro", err.message ?? "Não foi possível conectar a balança.");
     }
+  };
+
+  const desconectarBalanca = async () => {
+    if (balancaPortId) await serialService.disconnectPort(balancaPortId);
+    setBalancaConectada(false);
+    setBalancaPortId(null);
+    setDispositivos((prev) => prev.filter((d) => d.tipo !== "balanca"));
+    setPesoAtual(null);
+    setPesoEstavel(false);
+    leituras.current = [];
   };
 
   const conectarSerialRfid = async () => {
@@ -203,27 +226,89 @@ export default function PesagemBalanca() {
         { id: dev.id, label: dev.label, tipo: "rfid", estado: "conectado" },
       ]);
       setRfidConectado(true);
+      setRfidPortId(dev.id);
       serialService.onRfid(handleChipRecebido);
     } catch (err: any) {
       Alert.alert("Erro", err.message ?? "Não foi possível conectar o leitor RFID.");
     }
   };
 
+  const desconectarRfid = async () => {
+    if (rfidPortId) await serialService.disconnectPort(rfidPortId);
+    setRfidConectado(false);
+    setRfidPortId(null);
+    setDispositivos((prev) => prev.filter((d) => d.tipo !== "rfid"));
+  };
+
+  /** Troca os papéis das duas portas quando estão invertidas. */
+  const trocarPortas = () => {
+    if (balancaPortId) serialService.assignPortType(balancaPortId, "rfid");
+    if (rfidPortId) serialService.assignPortType(rfidPortId, "balanca");
+    const oldBalanca = balancaPortId;
+    const oldRfid = rfidPortId;
+    setBalancaPortId(oldRfid);
+    setRfidPortId(oldBalanca);
+    setDispositivos((prev) =>
+      prev.map((d) => {
+        if (d.id === oldBalanca) return { ...d, tipo: "rfid" as const, label: d.label.replace("Balança", "Leitor RFID") };
+        if (d.id === oldRfid) return { ...d, tipo: "balanca" as const, label: d.label.replace("Leitor RFID", "Balança") };
+        return d;
+      })
+    );
+    setLogBruto([]);
+  };
+
+  /** Atribui papel (balança/rfid) a uma porta identificada como desconhecida. */
+  const atribuirPorta = (portaId: string, tipo: "balanca" | "rfid") => {
+    serialService.assignPortType(portaId, tipo);
+    const dev = serialService.devices.find((d) => d.id === portaId);
+    const label = dev?.label ?? (tipo === "balanca" ? "Balança" : "Leitor RFID");
+
+    setDispositivos((prev) => [
+      ...prev.filter((d) => d.id !== portaId && d.tipo !== tipo),
+      { id: portaId, label, tipo, estado: "conectado" },
+    ]);
+    setPortasParaIdentificar((prev) => prev.filter((p) => p.id !== portaId));
+
+    if (tipo === "balanca") setBalancaConectada(true);
+    else setRfidConectado(true);
+  };
+
   // Tenta reconectar portas já concedidas ao reabrir a página (web)
   useEffect(() => {
     if (!isWeb || !serialService.isSupported) return;
+
+    // Log de diagnóstico de dados brutos
+    const unsubRaw = serialService.onRawLine((portId, portLabel, linha) => {
+      setLogBruto((prev) => [
+        { portLabel, linha, ts: new Date().toLocaleTimeString("pt-BR") },
+        ...prev.slice(0, 49), // mantém últimas 50 linhas
+      ]);
+    });
+
     serialService.reconnectGranted(9600).then((devs) => {
-      if (devs.length > 0) {
-        setDispositivos(
-          devs.map((d) => ({ id: d.id, label: d.label, tipo: d.type as any, estado: "conectado" as const }))
+      if (devs.length === 0) return;
+
+      serialService.onWeight(handlePesoRecebido);
+      serialService.onRfid(handleChipRecebido);
+
+      const desconhecidos = devs.filter((d) => d.type === "desconhecido");
+      const identificados = devs.filter((d) => d.type !== "desconhecido");
+
+      identificados.forEach((d) => {
+        setDispositivos((prev) => [...prev, { id: d.id, label: d.label, tipo: d.type as any, estado: "conectado" }]);
+        if (d.type === "balanca") setBalancaConectada(true);
+        if (d.type === "rfid") setRfidConectado(true);
+      });
+
+      if (desconhecidos.length > 0) {
+        setPortasParaIdentificar(
+          desconhecidos.map((d) => ({ id: d.id, label: d.label, tipo: "rfid" as const, estado: "conectado" as const }))
         );
-        serialService.onWeight(handlePesoRecebido);
-        serialService.onRfid(handleChipRecebido);
-        setBalancaConectada(true);
-        setRfidConectado(true);
       }
     });
-    return () => { serialService.disconnectAll(); };
+
+    return () => { unsubRaw(); serialService.disconnectAll(); };
   }, []);
 
   // ─── Salvar pesagem ────────────────────────────────────────────────────────
@@ -321,18 +406,14 @@ export default function PesagemBalanca() {
             </Text>
             <Text style={styles.conexaoHint}>
               {isWeb
-                ? "No PC, pareie a balança/leitor via Bluetooth e selecione a porta COM virtual."
+                ? "Use sempre a porta de Entrada (não Saída). Ex: EASY → COM3, XRS2i → COM7."
                 : "Certifique-se que Bluetooth está ativo no celular."}
             </Text>
 
             <View style={styles.dispositivosRow}>
               {/* Balança */}
               <View style={[styles.dispositivoCard, balancaConectada && styles.dispositivoOk]}>
-                <Feather
-                  name="activity"
-                  size={24}
-                  color={balancaConectada ? "#2E7D32" : "#9E9E9E"}
-                />
+                <Feather name="activity" size={24} color={balancaConectada ? "#2E7D32" : "#9E9E9E"} />
                 <Text style={[styles.dispositivoLabel, balancaConectada && { color: "#2E7D32" }]}>
                   Balança
                 </Text>
@@ -340,22 +421,39 @@ export default function PesagemBalanca() {
                   {balancaConectada ? "Conectada" : "Desconectada"}
                 </Text>
                 {isWeb && !balancaConectada && (
-                  <TouchableOpacity
-                    style={[styles.btnConectar, { borderColor: primaryColor }]}
-                    onPress={conectarSerialBalanca}
-                  >
-                    <Text style={[styles.btnConectarText, { color: primaryColor }]}>Conectar</Text>
+                  <>
+                    {/* Seleção de baud rate antes de conectar */}
+                    <View style={styles.baudRow}>
+                      {([4800, 9600, 19200] as const).map((b) => (
+                        <TouchableOpacity
+                          key={b}
+                          style={[styles.baudChip, balancaBaud === b && styles.baudChipActive]}
+                          onPress={() => setBalancaBaud(b)}
+                        >
+                          <Text style={[styles.baudChipText, balancaBaud === b && styles.baudChipTextActive]}>
+                            {b}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.btnConectar, { borderColor: primaryColor }]}
+                      onPress={conectarSerialBalanca}
+                    >
+                      <Text style={[styles.btnConectarText, { color: primaryColor }]}>Conectar</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+                {isWeb && balancaConectada && (
+                  <TouchableOpacity style={styles.btnDesconectar} onPress={desconectarBalanca}>
+                    <Text style={styles.btnDesconectarText}>Desconectar</Text>
                   </TouchableOpacity>
                 )}
               </View>
 
               {/* Leitor RFID */}
               <View style={[styles.dispositivoCard, rfidConectado && styles.dispositivoOk]}>
-                <Feather
-                  name="radio"
-                  size={24}
-                  color={rfidConectado ? "#2E7D32" : "#9E9E9E"}
-                />
+                <Feather name="radio" size={24} color={rfidConectado ? "#2E7D32" : "#9E9E9E"} />
                 <Text style={[styles.dispositivoLabel, rfidConectado && { color: "#2E7D32" }]}>
                   Leitor RFID
                 </Text>
@@ -370,8 +468,21 @@ export default function PesagemBalanca() {
                     <Text style={[styles.btnConectarText, { color: primaryColor }]}>Conectar</Text>
                   </TouchableOpacity>
                 )}
+                {isWeb && rfidConectado && (
+                  <TouchableOpacity style={styles.btnDesconectar} onPress={desconectarRfid}>
+                    <Text style={styles.btnDesconectarText}>Desconectar</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
+
+            {/* Botão Trocar Portas — aparece quando ambas estão conectadas */}
+            {isWeb && balancaConectada && rfidConectado && (
+              <TouchableOpacity style={styles.btnTrocar} onPress={trocarPortas}>
+                <Feather name="repeat" size={14} color="#E65100" />
+                <Text style={styles.btnTrocarText}>Portas invertidas? Trocar balança ↔ RFID</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Modo manual toggle */}
             <TouchableOpacity
@@ -383,7 +494,88 @@ export default function PesagemBalanca() {
                 {modoManual ? "Usar dispositivos" : "Entrada manual"}
               </Text>
             </TouchableOpacity>
+
+            {/* Dica de identificação de portas no Windows */}
+            {isWeb && (balancaConectada || rfidConectado || portasParaIdentificar.length > 0) && (
+              <Text style={styles.portaHint}>
+                💡 Para saber qual porta é qual: no Windows abra o{" "}
+                <Text style={{ fontWeight: "700" }}>Gerenciador de Dispositivos → Portas (COM e LPT)</Text>
+                {" "}e ligue/desligue cada equipamento para ver qual COM aparece/desaparece.
+              </Text>
+            )}
           </View>
+
+          {/* ── Painel de identificação de portas desconhecidas ─────────────── */}
+          {isWeb && portasParaIdentificar.length > 0 && (
+            <View style={styles.identificacaoPanel}>
+              <View style={styles.identificacaoHeader}>
+                <Feather name="alert-circle" size={18} color="#E65100" />
+                <Text style={styles.identificacaoTitulo}>
+                  {portasParaIdentificar.length} porta{portasParaIdentificar.length > 1 ? "s" : ""} reconectada{portasParaIdentificar.length > 1 ? "s" : ""} — identifique cada equipamento
+                </Text>
+              </View>
+              <Text style={styles.identificacaoSub}>
+                Clique no botão correto para cada porta abaixo. Se não souber, use o Gerenciador de Dispositivos do Windows para descobrir qual COM é qual.
+              </Text>
+              {portasParaIdentificar.map((porta) => (
+                <View key={porta.id} style={styles.portaCard}>
+                  <View style={styles.portaCardHeader}>
+                    <Feather name="cpu" size={16} color="#555" />
+                    <Text style={styles.portaCardLabel}>{porta.label}</Text>
+                  </View>
+                  <Text style={styles.portaCardSub}>O que é esta porta?</Text>
+                  <View style={styles.portaCardBtns}>
+                    <TouchableOpacity
+                      style={[styles.portaBtn, { borderColor: "#1565C0", backgroundColor: "#E3F2FD" }]}
+                      onPress={() => atribuirPorta(porta.id, "balanca")}
+                      disabled={balancaConectada}
+                    >
+                      <Feather name="activity" size={14} color={balancaConectada ? "#9E9E9E" : "#1565C0"} />
+                      <Text style={[styles.portaBtnText, { color: balancaConectada ? "#9E9E9E" : "#1565C0" }]}>
+                        {balancaConectada ? "Balança já atribuída" : "É a Balança"}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.portaBtn, { borderColor: "#1B5E20", backgroundColor: "#E8F5E9" }]}
+                      onPress={() => atribuirPorta(porta.id, "rfid")}
+                      disabled={rfidConectado}
+                    >
+                      <Feather name="radio" size={14} color={rfidConectado ? "#9E9E9E" : "#1B5E20"} />
+                      <Text style={[styles.portaBtnText, { color: rfidConectado ? "#9E9E9E" : "#1B5E20" }]}>
+                        {rfidConectado ? "RFID já atribuído" : "É o Leitor RFID"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* ── Log de dados brutos (diagnóstico da balança) ───────────── */}
+          {isWeb && logBruto.length > 0 && (
+            <View style={styles.logPanel}>
+              <TouchableOpacity
+                style={styles.logHeader}
+                onPress={() => setMostrarLog((v) => !v)}
+              >
+                <Feather name="terminal" size={14} color="#546E7A" />
+                <Text style={styles.logHeaderText}>
+                  Dados brutos recebidos ({logBruto.length})
+                </Text>
+                <Feather name={mostrarLog ? "chevron-up" : "chevron-down"} size={14} color="#546E7A" />
+              </TouchableOpacity>
+              {mostrarLog && (
+                <ScrollView style={styles.logScroll} nestedScrollEnabled>
+                  {logBruto.map((entry, i) => (
+                    <View key={i} style={styles.logEntry}>
+                      <Text style={styles.logTs}>{entry.ts} [{entry.portLabel}]</Text>
+                      <Text style={styles.logLinha} selectable>{JSON.stringify(entry.linha)}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+          )}
 
           {/* Painel principal de leitura */}
           {modoManual ? (
@@ -654,6 +846,34 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   btnConectarText: { fontSize: 12, fontWeight: "700" },
+  btnDesconectar: {
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#EF9A9A",
+    backgroundColor: "#FFEBEE",
+  },
+  btnDesconectarText: { fontSize: 11, color: "#C62828", fontWeight: "700" },
+  // Seletor de baud rate da balança
+  baudRow: { flexDirection: "row", gap: 4, marginTop: 6, marginBottom: 4 },
+  baudChip: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+    borderWidth: 1, borderColor: "#E0E0E0", backgroundColor: "#F5F5F5",
+  },
+  baudChipActive: { backgroundColor: "#1565C0", borderColor: "#1565C0" },
+  baudChipText: { fontSize: 10, color: "#555" },
+  baudChipTextActive: { color: "#fff", fontWeight: "700" },
+  // Botão trocar portas
+  btnTrocar: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    alignSelf: "center", marginTop: 8,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 8, borderWidth: 1, borderColor: "#FFCC80",
+    backgroundColor: "#FFF3E0",
+  },
+  btnTrocarText: { fontSize: 12, fontWeight: "700", color: "#E65100" },
 
   modoManualBtn: {
     flexDirection: "row",
@@ -663,6 +883,65 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   modoManualText: { fontSize: 12, fontWeight: "600" },
+  portaHint: {
+    fontSize: 11,
+    color: "#616161",
+    marginTop: 8,
+    lineHeight: 16,
+    fontStyle: "italic",
+  },
+
+  // Painel de identificação de portas
+  identificacaoPanel: {
+    backgroundColor: "#FFF3E0",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FFB74D",
+    padding: 14,
+    marginBottom: 14,
+    gap: 10,
+  } as any,
+  identificacaoHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  identificacaoTitulo: { fontSize: 14, fontWeight: "700", color: "#E65100", flex: 1 },
+  identificacaoSub: { fontSize: 12, color: "#616161" },
+  portaCard: {
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#FFE0B2",
+    gap: 8,
+  },
+  portaCardHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  portaCardLabel: { fontSize: 13, fontWeight: "700", color: "#333" },
+  portaCardSub: { fontSize: 12, color: "#757575" },
+  portaCardBtns: { flexDirection: "row", gap: 10 },
+  portaBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 8, borderRadius: 8, borderWidth: 1.5,
+  },
+  portaBtnText: { fontSize: 12, fontWeight: "700" },
+
+  // Log de diagnóstico
+  logPanel: {
+    backgroundColor: "#ECEFF1",
+    borderRadius: 10,
+    marginBottom: 14,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#CFD8DC",
+  },
+  logHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10,
+  },
+  logHeaderText: { flex: 1, fontSize: 12, fontWeight: "700", color: "#546E7A" },
+  logScroll: { maxHeight: 200, backgroundColor: "#263238" },
+  logEntry: { paddingHorizontal: 10, paddingVertical: 3, borderBottomWidth: 1, borderBottomColor: "#37474F" },
+  logTs: { fontSize: 9, color: "#78909C" },
+  logLinha: { fontSize: 11, color: "#A5D6A7", fontFamily: Platform.OS === "ios" ? "Courier" : "monospace" },
 
   // Leitura
   leituraPanel: {
