@@ -43,6 +43,20 @@ const MODULES = [
     description: "Consultar GTA e SISBOV",
     cor: "#607D8B",
   },
+  {
+    route: "brincos",
+    label: "Brincos",
+    icon: "tag" as const,
+    description: "Pedidos MAPA e locais",
+    cor: "#795548",
+  },
+  {
+    route: "entrada-animais",
+    label: "Entrada de Animais",
+    icon: "log-in" as const,
+    description: "GTA + brinco + pesagem",
+    cor: "#009688",
+  },
 ];
 
 export default function HomeIFarm() {

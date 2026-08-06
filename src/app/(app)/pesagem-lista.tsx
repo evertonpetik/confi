@@ -1,18 +1,21 @@
-import React, { useState, useEffect } from "react";
+import { Redirect } from "expo-router";
+export default function PesagemListaPage() {
+  return <Redirect href="/(app)/pesagem-balanca" />;
+}
+
+import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  FlatList,
   ActivityIndicator,
   Alert,
+  FlatList,
   Platform,
   StyleSheet,
+  Text,
   TextInput,
-  Animated,
+  TouchableOpacity,
+  View
 } from "react-native";
 import { useWeighing } from "../../contexts/WeighingContext";
-import { PesagemFirestoreService } from "../../services/pesagemFirestoreService";
 import { Bovino, TipoMovimentacao } from "../../services/weighing.types";
 
 interface TelaListaPesagemProps {

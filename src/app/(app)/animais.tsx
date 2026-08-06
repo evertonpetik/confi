@@ -140,6 +140,7 @@ export default function Animais() {
         dataNascimento: formNascimento ? new Date(formNascimento).toISOString() : new Date().toISOString(),
         pesoEntrada: formPesoEntrada ? parseFloat(formPesoEntrada) : undefined,
         farmedaId: fazendaId,
+        ativo: true,
       };
 
       if (animalSelecionado?.id) {

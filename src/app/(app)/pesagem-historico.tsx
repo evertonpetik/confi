@@ -1,16 +1,21 @@
-import React, { useState, useEffect } from "react";
+import { Redirect } from "expo-router";
+export default function PesagemHistoricoPage() {
+  return <Redirect href="/(app)/pesagem-balanca" />;
+}
+
+import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  FlatList,
   ActivityIndicator,
+  Alert,
+  FlatList,
   Platform,
   StyleSheet,
-  Alert,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { PesagemFirestoreService } from "../../services/pesagemFirestoreService";
-import { Pesagem, Bovino } from "../../services/weighing.types";
+import { Bovino, Pesagem } from "../../services/weighing.types";
 
 interface TelaHistoricoPesagensProps {
   bovino: Bovino;
@@ -74,9 +79,9 @@ export const TelaHistoricoPesagens: React.FC<TelaHistoricoPesagensProps> = ({
 
     const diasDesdeUltima = pesagens.length > 0
       ? Math.floor(
-          (Date.now() - new Date(pesagens[0].dataHora).getTime()) /
-            (1000 * 60 * 60 * 24)
-        )
+        (Date.now() - new Date(pesagens[0].dataHora).getTime()) /
+        (1000 * 60 * 60 * 24)
+      )
       : 0;
 
     return { mediaWeight, minWeight, maxWeight, ganhoTotal, diasDesdeUltima };

@@ -1,13 +1,18 @@
-import React, { useState, useEffect } from "react";
+import { Redirect } from "expo-router";
+export default function PesagemLeituraPage() {
+  return <Redirect href="/(app)/pesagem-balanca" />;
+}
+
+import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
+  ActivityIndicator,
   Alert,
+  Animated,
   Platform,
   StyleSheet,
-  Animated,
-  ActivityIndicator,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useWeighing } from "../../contexts/WeighingContext";
 import { Bovino } from "../../services/weighing.types";

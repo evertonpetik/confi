@@ -309,12 +309,131 @@ export interface ConfiguracaoPesagem {
  */
 export interface ResultadoPesagem {
   sucesso: boolean;
-  pesagemId?: string;            // ID se sucesso
-  movimentacaoId?: string;       // ID da movimentação vinculada
-  erro?: string;                 // Mensagem de erro
+  pesagemId?: string;
+  movimentacaoId?: string;
+  erro?: string;
   validacoes?: {
     campo: string;
     valido: boolean;
     mensagem?: string;
   }[];
+}
+
+// ─── Módulo SISBOV: Brincos, GTA, Locais, Processos ─────────────────────────
+
+export enum RegimeAnimal {
+  PASTO = "pasto",
+  CONFINAMENTO = "confinamento",
+  BOITEL = "boitel",
+  SEMI_CONFINAMENTO = "semi_confinamento",
+}
+
+/** Pedido de brincos emitido pelo MAPA */
+export interface PedidoBrinco {
+  id?: string;
+  fabrica: string;               // Ex: "Animalltag", "Zee Tags"
+  numeroPedidoMapa: string;      // Número da solicitação no MAPA
+  brincoInicial: string;         // 15 dígitos (ex: 105500508077691)
+  brincoFinal: string;           // 15 dígitos (ex: 105500508097684)
+  controleInicial: string;       // 6 dígitos derivados do brinco (pos 9-14)
+  controleFinal: string;
+  brincosTotal: number;
+  proximoIndice: number;         // quantos já foram utilizados (0-based)
+  ativo: boolean;
+  farmedaId: string;
+  criadoEm: string;
+}
+
+/** Animal transportado em uma GTA */
+export interface GtaAnimal {
+  descricao: string;             // Ex: "BOVINO MACHO ACIMA DE 36 MESES"
+  quantidade: number;
+  sexo: "M" | "F" | "ambos";
+  idadeCategoria?: string;       // Ex: "ACIMA DE 36 MESES"
+}
+
+/** Guia de Trânsito Animal (e-GTA) */
+export interface GTA {
+  id?: string;
+  numero: string;                // Ex: "614660"
+  serie: string;                 // Ex: "Q"
+  uf: string;                    // UF emissora
+  // Procedência
+  procCpfCnpj: string;
+  procNome: string;
+  procFazenda: string;
+  procCodigoMapa: string;
+  procInscricaoEstadual: string;
+  procMunicipio: string;
+  procUf: string;
+  procRegiao?: string;
+  // Destino
+  destCpfCnpj: string;
+  destNome: string;
+  destFazenda: string;
+  destCodigoMapa: string;
+  destInscricaoEstadual: string;
+  destMunicipio: string;
+  destUf: string;
+  destRegiao?: string;
+  // Carga
+  finalidade: string;            // "ENGORDA"
+  transporte: string;            // "RODOVIÁRIO"
+  animais: GtaAnimal[];
+  totalMachos: number;
+  totalFemeas: number;
+  total: number;
+  rota?: string;
+  dataEmissao: string;           // ISO 8601
+  dataValidade: string;          // ISO 8601
+  unidadeExpedidora?: string;
+  // Sistema
+  farmedaId: string;
+  status: "ativa" | "vencida" | "processada";
+  criadoEm: string;
+}
+
+/** Local físico na propriedade (piquete, baia, etc.) */
+export interface LocalAnimal {
+  id?: string;
+  nome: string;                  // Ex: "Piquete 1", "Baia 10"
+  tipo: "piquete" | "baia" | "curral" | "pasto" | "outro";
+  capacidade?: number;
+  regime: RegimeAnimal;
+  ativo: boolean;
+  farmedaId: string;
+}
+
+/** Animal em processo de cadastro (antes de salvar como Bovino) */
+export interface AnimalEntrada {
+  sequencia: number;             // 1-based dentro da GTA
+  gtaId: string;
+  sexo: "M" | "F";
+  raca: string;
+  categoria: CategoriaBovino;
+  dataNascimento?: string;
+  pesoEntrada?: number;
+  regime: RegimeAnimal;
+  localId?: string;
+  localNome?: string;
+  brincoNumero?: string;         // 15 dígitos atribuído
+  brincoControle?: string;       // 6 dígitos
+  chipRfid?: string;             // chip lido
+  pedidoBrincoId?: string;
+  status: "pendente" | "concluido" | "pulado";
+}
+
+/** Processo de certificação SISBOV */
+export interface ProcessoSisbov {
+  id?: string;
+  nome: string;                  // Ex: "Entrada 5M - Jorge Veimar"
+  gtaIds: string[];
+  animalIds: string[];
+  status: "aberto" | "aguardando_certificadora" | "aprovado" | "rejeitado";
+  dataAbertura: string;
+  dataEnvio?: string;
+  dataResposta?: string;
+  observacoes?: string;
+  farmedaId: string;
+  criadoEm: string;
 }
