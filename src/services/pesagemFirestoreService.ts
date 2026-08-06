@@ -1,10 +1,10 @@
 import firestore from "@react-native-firebase/firestore";
 import {
-  Pesagem,
-  MovimentacaoBovino,
   Bovino,
-  ResultadoPesagem,
-  SessaoPesagem,
+  EventoSanitario,
+  MovimentacaoBovino,
+  Pesagem,
+  ResultadoPesagem
 } from "./weighing.types";
 
 /**
@@ -238,10 +238,10 @@ export class PesagemFirestoreService {
 
       return snapshot.docs.map(
         (doc) =>
-          ({
-            id: doc.id,
-            ...doc.data(),
-          } as Bovino)
+        ({
+          id: doc.id,
+          ...doc.data(),
+        } as Bovino)
       );
     } catch (error) {
       console.error("[Firestore] Erro ao buscar bovinos do lote:", error);
@@ -266,10 +266,10 @@ export class PesagemFirestoreService {
 
       return snapshot.docs.map(
         (doc) =>
-          ({
-            id: doc.id,
-            ...doc.data(),
-          } as Bovino)
+        ({
+          id: doc.id,
+          ...doc.data(),
+        } as Bovino)
       );
     } catch (error) {
       console.error("[Firestore] Erro ao buscar bovinos do piquete:", error);
@@ -423,10 +423,10 @@ export class PesagemFirestoreService {
 
       return snapshot.docs.map(
         (doc) =>
-          ({
-            id: doc.id,
-            ...doc.data(),
-          } as Bovino)
+        ({
+          id: doc.id,
+          ...doc.data(),
+        } as Bovino)
       );
     } catch (error) {
       console.error("[Firestore] Erro ao listar bovinos:", error);
@@ -507,5 +507,125 @@ export class PesagemFirestoreService {
       `[Firestore] Sincronização concluída: ${sincronizadas} OK, ${erros} erros`
     );
     return { sincronizadas, erros };
+  }
+
+  // ─── Eventos Sanitários ───────────────────────────────────────────────────
+
+  static async salvarEventoSanitario(
+    evento: EventoSanitario,
+    farmedaId: string
+  ): Promise<string> {
+    const ref = firestore()
+      .collection("fazendas")
+      .doc(farmedaId)
+      .collection("bovinos")
+      .doc(evento.animalId)
+      .collection("eventos_sanitarios");
+
+    if (evento.id) {
+      await ref.doc(evento.id).set({ ...evento, atualizadoEm: new Date() });
+      return evento.id;
+    }
+    const doc = await ref.add({ ...evento, criadoEm: new Date() });
+    return doc.id;
+  }
+
+  static async listarEventosSanitarios(
+    animalId: string,
+    farmedaId: string
+  ): Promise<EventoSanitario[]> {
+    try {
+      const snapshot = await firestore()
+        .collection("fazendas")
+        .doc(farmedaId)
+        .collection("bovinos")
+        .doc(animalId)
+        .collection("eventos_sanitarios")
+        .orderBy("dataAplicacao", "desc")
+        .get();
+
+      return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as EventoSanitario));
+    } catch {
+      return [];
+    }
+  }
+
+  static async excluirEventoSanitario(
+    eventoId: string,
+    animalId: string,
+    farmedaId: string
+  ): Promise<void> {
+    await firestore()
+      .collection("fazendas")
+      .doc(farmedaId)
+      .collection("bovinos")
+      .doc(animalId)
+      .collection("eventos_sanitarios")
+      .doc(eventoId)
+      .delete();
+  }
+
+  // ─── Pesagem rápida (salva peso e atualiza pesoAnterior do bovino) ────────
+
+  static async registrarPesagemRapida(
+    animalId: string,
+    chipId: string,
+    peso: number,
+    farmedaId: string,
+    usuarioId: string,
+    observacoes?: string
+  ): Promise<string> {
+    const agora = new Date().toISOString();
+
+    const pesagem: Omit<Pesagem, "id"> = {
+      animalId,
+      chipId,
+      peso,
+      dataHora: agora,
+      tipoPesagem: "entrada" as any,
+      leituraChip: {
+        chipId,
+        timestamp: agora,
+        sinSinal: 0,
+        dispositivoId: "manual",
+        valido: true,
+      },
+      leituraPeso: {
+        peso,
+        timestamp: agora,
+        status: "estavel" as any,
+        dispositivoId: "manual",
+        valido: true,
+      },
+      farmedaId,
+      usuarioId,
+      observacoes,
+      sincronizado: true,
+      criadoEm: agora,
+      atualizadoEm: agora,
+    };
+
+    const ref = firestore()
+      .collection("fazendas")
+      .doc(farmedaId)
+      .collection("bovinos")
+      .doc(animalId)
+      .collection("pesagens");
+
+    const docRef = await ref.add(pesagem);
+
+    // Atualiza pesoAnterior e dataUltimaPesagem no registro do bovino
+    await firestore()
+      .collection("fazendas")
+      .doc(farmedaId)
+      .collection("bovinos")
+      .doc(animalId)
+      .update({
+        pesoAnterior: peso,
+        dataUltimaPesagem: agora,
+        atualizadoEm: new Date(),
+      });
+
+    return docRef.id;
   }
 }

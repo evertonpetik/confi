@@ -3,6 +3,11 @@ import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { PesagemFirestoreService } from "@/services/pesagemFirestoreService";
+import {
+  Bovino,
+  CategoriaBovino,
+} from "@/services/weighing.types";
 import { Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -17,11 +22,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  CategoriaBovino,
-  Bovino,
-} from "@/services/weighing.types";
-import { PesagemFirestoreService } from "@/services/pesagemFirestoreService";
 
 type FiltroCategoria = "todos" | CategoriaBovino;
 
@@ -41,6 +41,7 @@ export default function Animais() {
   const { primaryColor } = useTheme();
   const { selectedFazendaId } = useAuth();
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
+  const router = useRouter();
 
   const [animais, setAnimais] = useState<Bovino[]>([]);
   const [filtrados, setFiltrados] = useState<Bovino[]>([]);
@@ -195,6 +196,25 @@ export default function Animais() {
               </>
             ) : null}
           </View>
+        </View>
+        {/* Ações rápidas */}
+        <View style={styles.cardAcoes}>
+          <TouchableOpacity
+            style={styles.cardAcaoBtn}
+            onPress={() => router.push({ pathname: "/(app)/animal-detalhe", params: { animalId: item.id } })}
+          >
+            <Feather name="file-text" size={13} color={primaryColor} />
+            <Text style={[styles.cardAcaoText, { color: primaryColor }]}>Ficha</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.cardAcaoBtn}
+            onPress={() =>
+              router.push({ pathname: "/(app)/pesagem-balanca", params: { animalId: item.id, chipId: item.chipId } })
+            }
+          >
+            <Feather name="activity" size={13} color="#E65100" />
+            <Text style={[styles.cardAcaoText, { color: "#E65100" }]}>Pesar</Text>
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
@@ -523,6 +543,27 @@ const styles = StyleSheet.create({
   cardPesoLabel: {
     fontSize: 11,
     color: "#aaa",
+  },
+  cardAcoes: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F0F0F0",
+  },
+  cardAcaoBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "#F5F5F5",
+  },
+  cardAcaoText: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   centro: {
     flex: 1,

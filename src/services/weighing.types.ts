@@ -45,6 +45,39 @@ export enum StatusPeso {
 }
 
 /**
+ * Dados SISBOV do animal (rastreabilidade individual)
+ */
+export interface DadosSisbov {
+  numeroInscricao: string;       // 15 dígitos - número do brinco/chip oficial
+  certificado: boolean;          // Se já foi certificado no SISBOV
+  dataCertificacao?: string;     // ISO 8601
+  numeroOrdemBrinco?: string;    // Ordem do brinco na numeração da propriedade
+  codigoEstabelecimento?: string; // Código do estabelecimento rural no MAPA
+}
+
+/**
+ * Evento sanitário (vacinação, tratamento, exame)
+ */
+export interface EventoSanitario {
+  id?: string;
+  animalId: string;
+  tipo: "vacinacao" | "vermifugacao" | "tratamento" | "exame" | "outro";
+  descricao: string;             // Nome do produto/procedimento
+  dataAplicacao: string;         // ISO 8601
+  dose?: string;                 // Dose aplicada (ex: "5ml")
+  via?: "subcutanea" | "intramuscular" | "oral" | "topica" | "intravenosa";
+  tecnico?: string;              // Nome do médico/técnico
+  crmv?: string;                 // CRMV do médico veterinário
+  lote?: string;                 // Lote do produto
+  validade?: string;             // Validade do produto ISO 8601
+  reentrada?: string;            // Data liberação para abate ISO 8601
+  proxAplicacao?: string;        // Data da próxima aplicação ISO 8601
+  observacoes?: string;
+  farmedaId: string;
+  criadoEm: string;
+}
+
+/**
  * Informações de um bovino individual
  * Vinculado ao SISBOV
  */
@@ -61,8 +94,32 @@ export interface Bovino {
   dataUltimaPesagem?: string;    // Data da última pesagem
   farmedaId: string;             // FK para fazenda
   loteId?: string;               // FK para lote (confinamento)
+  loteNome?: string;             // Nome do lote (desnormalizado)
   piqueteId?: string;            // FK para piquete (pastos)
-  metadados?: Record<string, any>; // Dados adicionais SISBOV
+  ativo: boolean;                // Se o animal está ativo na fazenda
+  dataEntrada?: string;          // Data de entrada na fazenda ISO 8601
+  dataSaida?: string;            // Data de saída (venda/abate) ISO 8601
+  motivoSaida?: "venda" | "abate" | "morte" | "transferencia" | "outro";
+  pelagem?: string;              // Cor/padrão da pelagem
+  pai?: string;                  // Identificação do pai
+  mae?: string;                  // Identificação da mãe
+  propriedadeOrigem?: string;    // CNPJ/CPF de origem
+  municipioOrigem?: string;
+  estadoOrigem?: string;
+  sisbov?: DadosSisbov;
+  metadados?: Record<string, any>;
+}
+
+/**
+ * GMD - Ganho Médio Diário calculado
+ */
+export interface GanhoDiarioPeso {
+  periodo: string;               // Ex: "2025-01 a 2025-03"
+  pesagemInicio: number;         // kg
+  pesagemFim: number;            // kg
+  diasPeriodo: number;
+  gmdKg: number;                 // kg/dia
+  classificacao: "ruim" | "regular" | "bom" | "otimo";
 }
 
 /**

@@ -23,10 +23,10 @@ const MODULES = [
     cor: "#2196F3",
   },
   {
-    route: "pesagem-lista",
+    route: "pesagem-balanca",
     label: "Pesagem",
     icon: "activity" as const,
-    description: "Balança Bluetooth e RFID",
+    description: "Balança + Leitor RFID (Serial/BLE)",
     cor: "#FF9800",
   },
   {
