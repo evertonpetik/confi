@@ -9,6 +9,13 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-nati
 
 const MODULES = [
   {
+    route: "processos",
+    label: "Processos",
+    icon: "layers" as const,
+    description: "Entrada, saída e transferência de animais + GTA",
+    cor: "#E91E63",
+  },
+  {
     route: "animais",
     label: "Rebanho",
     icon: "list" as const,

@@ -437,3 +437,27 @@ export interface ProcessoSisbov {
   farmedaId: string;
   criadoEm: string;
 }
+
+export type TipoProcesso = "entrada" | "saida" | "transferencia";
+export type StatusProcesso = "aberto" | "em_andamento" | "concluido" | "cancelado";
+
+/** Processo de movimentação de animais no mangueiro (entrada/saída/transferência) */
+export interface ProcessoMangueiro {
+  id?: string;
+  nome: string;                  // Ex: "Entrada 50 bezerros - Fazenda São João"
+  tipo: TipoProcesso;
+  status: StatusProcesso;
+  gtaIds: string[];              // GTAs vinculadas ao processo
+  totalAnimaisPrevisto: number;  // Total de animais nas GTAs
+  animaisManejados: number;      // Animais já processados/pesados
+  pedidoBrincoId?: string;       // Para tipo "entrada": pedido de brincos a utilizar
+  fazendaOrigemNome?: string;    // Origem (para saída/transferência)
+  fazendaDestinoId?: string;     // Destino (para transferência)
+  fazendaDestinoNome?: string;
+  dataAbertura: string;
+  dataConclusao?: string;
+  observacoes?: string;
+  farmedaId: string;
+  usuarioId: string;
+  criadoEm: string;
+}

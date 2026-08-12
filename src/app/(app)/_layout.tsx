@@ -39,6 +39,7 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
   { route: "sanidade", label: "Sanidade", icon: "shield" },
   { route: "consulta-gta", label: "Consultas", icon: "search" },
   { route: "pesagem-lista", label: "Pesagem", icon: "activity" },
+  { route: "processos", label: "Processos", icon: "layers" },
   { route: "tanques", label: "Tanques", icon: "database" },
   { route: "veiculos", label: "Veiculos", icon: "navigation" },
   { route: "abastecimento", label: "Abastecimento", icon: "droplet" },
@@ -49,7 +50,7 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
 
 const MODULO_ROUTES: Record<ModuloId, string[]> = {
   iconfi: ["home", "produtores", "lotes", "leitura", "insumos", "dietas", "roteiros", "mapa-trato", "tratador", "estimativa-peso", "analise-lote"],
-  ifarm: ["home-ifarm", "animais", "movimentacoes", "pesagem-lista", "pesagem-leitura", "pesagem-historico", "pesagem-balanca", "animal-detalhe", "sanidade", "consulta-gta", "brincos", "entrada-animais"],
+  ifarm: ["home-ifarm", "animais", "movimentacoes", "pesagem-lista", "pesagem-leitura", "pesagem-historico", "pesagem-balanca", "animal-detalhe", "sanidade", "consulta-gta", "brincos", "entrada-animais", "processos"],
   abastecimento: ["home-abastecimento", "tanques", "veiculos", "abastecimento", "historico-combustivel"],
 };
 

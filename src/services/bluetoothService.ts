@@ -1,12 +1,20 @@
-import { BleManager, Device, Characteristic } from "react-native-ble-plx";
 import { Platform } from "react-native";
+import { BleManager, Characteristic, Device } from "react-native-ble-plx";
 import {
   DispositivoBluetooth,
+  ErroBluetooth,
   LeituraChip,
   LeituraPeso,
   StatusPeso,
-  ErroBluetooth,
 } from "./weighing.types";
+
+// ─── UUIDs Nordic UART Service (NUS) — mesmo usado pela BPB 085 e pelo XRS2i ──
+const NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const NUS_TX_WRITE = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"; // app escreve → balança
+const NUS_RX_NOTIFY = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"; // balança envia → app
+
+// Intervalo de polling de peso (ms) — BPB 085 não envia espontaneamente
+const POLLING_INTERVALO_MS = 700;
 
 /**
  * Serviço de gerenciamento de dispositivos Bluetooth
@@ -17,6 +25,8 @@ export class BluetoothService {
   private bleManager: BleManager | undefined;
   private dispositivosConectados: Map<string, Device> = new Map();
   private subscricoes: Map<string, any> = new Map();
+  private txCharacteristics: Map<string, Characteristic> = new Map(); // TX write por device
+  private pollingIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
   private listeners: {
     onPeso?: (leitura: LeituraPeso) => void;
     onChip?: (leitura: LeituraChip) => void;
@@ -227,6 +237,16 @@ export class BluetoothService {
     try {
       console.log(`[BLE] Desconectando do dispositivo: ${dispositivoId}`);
 
+      // Para polling de peso se ativo
+      const polling = this.pollingIntervals.get(dispositivoId);
+      if (polling) {
+        clearInterval(polling);
+        this.pollingIntervals.delete(dispositivoId);
+      }
+
+      // Remove TX characteristic
+      this.txCharacteristics.delete(dispositivoId);
+
       // Remove subscrições
       const subscricao = this.subscricoes.get(dispositivoId);
       if (subscricao) {
@@ -257,59 +277,49 @@ export class BluetoothService {
   }
 
   /**
-   * Subscreve às notificações de peso da balança ACR
-   * Processa dados no formato: [STX] [PESO] [STATUS] [ETX]
+   * Subscreve às notificações de peso da BPB 085 (NUS UART).
+   * IMPORTANTE: a BPB 085 não envia peso espontaneamente.
+   * É preciso escrever ';peso' na TX e ela responde na RX.
+   * Resposta: '+0000.0;Z;1;'  (+ peso em kg ; status Z/U/O ; ok 1)
    */
   public async subscritoPeso(dispositivoId: string): Promise<boolean> {
     try {
-      console.log(`[BLE] Iniciando subscrição de peso: ${dispositivoId}`);
+      console.log(`[BLE] Iniciando subscrição de peso (BPB085): ${dispositivoId}`);
 
       const device = this.dispositivosConectados.get(dispositivoId);
-      if (!device) {
-        throw new Error(`Dispositivo ${dispositivoId} não conectado`);
-      }
+      if (!device) throw new Error(`Dispositivo ${dispositivoId} não conectado`);
 
       const services = await device.services();
 
-      // Procura por serviço UART ou genérico
-      let service = services.find((s) =>
-        // Nordic UART Service (comum em muitos dispositivos)
-        s.uuid === "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-      );
+      // Prefere o NUS padrão; fallback no primeiro serviço não-genérico
+      const service =
+        services.find((s) => s.uuid.toLowerCase() === NUS_SERVICE) ??
+        services.find((s) => !s.uuid.startsWith("0000"));
 
-      // Se não encontrar, tenta serviço genérico
-      if (!service) {
-        // Tenta o primeiro serviço não-padrão
-        service = services.find((s) => !s.uuid.startsWith("0000"));
+      if (!service) throw new Error("Serviço UART não encontrado no dispositivo");
+
+      const chars = await service.characteristics();
+
+      // RX — recebe dados do dispositivo
+      const rxChar =
+        chars.find((c) => c.uuid.toLowerCase() === NUS_RX_NOTIFY) ??
+        chars.find((c) => c.isNotifiable);
+
+      // TX — envia comandos para o dispositivo
+      const txChar =
+        chars.find((c) => c.uuid.toLowerCase() === NUS_TX_WRITE) ??
+        chars.find((c) => c.isWritableWithResponse || c.isWritableWithoutResponse);
+
+      if (!rxChar) throw new Error("Característica RX (notify) não encontrada");
+      if (!txChar) {
+        console.warn("[BLE] Característica TX não encontrada — balança passiva");
+      } else {
+        this.txCharacteristics.set(dispositivoId, txChar);
+        console.log(`[BLE] TX armazenado: ${txChar.uuid}`);
       }
 
-      if (!service) {
-        throw new Error("Serviço de dados não encontrado no dispositivo");
-      }
-
-      const characteristics = await service.characteristics();
-
-      // Procura por característica de notificação (RX - Nordic UART)
-      let characteristic = characteristics.find(
-        (c) => c.uuid === "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
-      );
-
-      if (!characteristic) {
-        // Tenta a primeira característica que suporta notify
-        characteristic = characteristics.find(
-          (c) =>
-            c.isNotifiable ||
-            c.uuid.includes("0003") ||
-            c.uuid.includes("0001")
-        );
-      }
-
-      if (!characteristic) {
-        throw new Error("Característica de notificação não encontrada");
-      }
-
-      // Subscreve a notificações
-      const subscription = characteristic.monitor((error, char) => {
+      // Subscreve notificações da RX
+      const subscription = rxChar.monitor((error, char) => {
         if (error) {
           this.emitirErro({
             codigo: "BLE_MONITOR_ERROR",
@@ -320,14 +330,26 @@ export class BluetoothService {
           });
           return;
         }
-
-        if (char?.value) {
-          this.processarDadosPeso(char.value, dispositivoId);
-        }
+        if (char?.value) this.processarDadosPeso(char.value, dispositivoId);
       });
 
       this.subscricoes.set(dispositivoId, subscription);
-      console.log(`[BLE] Subscrição de peso iniciada`);
+
+      // Polling: envia ';peso' periodicamente para a BPB 085
+      if (txChar) {
+        const intervalId = setInterval(async () => {
+          try {
+            await this.enviarComando(dispositivoId, ";peso");
+          } catch {
+            // Dispositivo pode ter desconectado; o monitor notificará erro
+          }
+        }, POLLING_INTERVALO_MS);
+        this.pollingIntervals.set(dispositivoId, intervalId);
+        // Primeira leitura imediata
+        this.enviarComando(dispositivoId, ";peso").catch(() => { });
+      }
+
+      console.log(`[BLE] Subscrição de peso BPB085 iniciada`);
       return true;
     } catch (error) {
       const mensagem = error instanceof Error ? error.message : String(error);
@@ -340,6 +362,31 @@ export class BluetoothService {
       });
       return false;
     }
+  }
+
+  /**
+   * Escreve um comando texto na característica TX do dispositivo.
+   * O texto é codificado em base64 antes de ser enviado.
+   */
+  public async enviarComando(dispositivoId: string, comando: string): Promise<void> {
+    const txChar = this.txCharacteristics.get(dispositivoId);
+    if (!txChar) return;
+    const encoded = Buffer.from(comando + "\n").toString("base64");
+    if (txChar.isWritableWithResponse) {
+      await txChar.writeWithResponse(encoded);
+    } else {
+      await txChar.writeWithoutResponse(encoded);
+    }
+  }
+
+  /** Envia comando de tara para a BPB 085 */
+  public async tara(dispositivoId: string): Promise<void> {
+    await this.enviarComando(dispositivoId, ";tara");
+  }
+
+  /** Consulta nível de bateria da BPB 085 */
+  public async batt(dispositivoId: string): Promise<void> {
+    await this.enviarComando(dispositivoId, ";batt");
   }
 
   /**
@@ -543,25 +590,23 @@ export class BluetoothService {
    */
   public async limpar(): Promise<void> {
     try {
+      // Para todos os pollings
+      this.pollingIntervals.forEach((id) => clearInterval(id));
+      this.pollingIntervals.clear();
+      this.txCharacteristics.clear();
+
       // Remove todas as subscrições
       this.subscricoes.forEach((sub) => {
-        try {
-          sub.remove?.();
-        } catch (e) {
-          console.warn("Erro ao remover subscrição:", e);
-        }
+        try { sub.remove?.(); } catch { }
       });
       this.subscricoes.clear();
 
       // Desconecta de todos os dispositivos
       const ids = Array.from(this.dispositivosConectados.keys());
-      for (const id of ids) {
-        await this.desconectar(id);
-      }
+      for (const id of ids) await this.desconectar(id);
 
       this.dispositivosConectados.clear();
       this.listeners = {};
-
       console.log("[BLE] Limpeza concluída");
     } catch (error) {
       console.error("[BLE] Erro ao limpar:", error);
