@@ -52,7 +52,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     // Then try Firestore for logo (may be updated from another device)
     getDocument(["config"], "app")
       .then((doc) => {
-        if (doc.exists()) {
+        // DocSnapshot.exists é boolean opcional (não função): undefined = não informado
+        if (doc.exists !== false && doc.data()) {
           const data = doc.data() as Record<string, any>;
           if (data.logoUrl) {
             setLogoUrlState(data.logoUrl);

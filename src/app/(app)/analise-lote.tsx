@@ -13,7 +13,6 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { getCollection } from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
@@ -432,7 +431,6 @@ export default function AnaliseLote() {
                 hideRules
                 yAxisOffset={0}
                 isAnimated
-                LinearGradient={LinearGradient}
               />
             </ScrollView>
           ) : (
@@ -468,7 +466,6 @@ export default function AnaliseLote() {
                 }}
                 hideRules
                 isAnimated
-                LinearGradient={LinearGradient}
               />
             </ScrollView>
           ) : (

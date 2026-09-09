@@ -233,6 +233,7 @@ export class TesteManualPesagem {
       sexo: "M",
       dataNascimento: new Date().toISOString(),
       farmedaId,
+      ativo: true,
     };
 
     // Salva bovino

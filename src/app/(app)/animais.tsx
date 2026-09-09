@@ -9,6 +9,7 @@ import {
   CategoriaBovino,
 } from "@/services/weighing.types";
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,

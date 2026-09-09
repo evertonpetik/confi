@@ -47,15 +47,15 @@ const RACAS = [
   "Senepol", "Brangus", "Tabapuã", "Canchim", "Limousin", "Outro",
 ];
 
+// Categorias conforme o enum CategoriaBovino — o sexo do animal é guardado
+// separadamente no campo `sexo`, por isso não há entrada plural por sexo aqui.
 const CATEGORIAS: { value: CategoriaBovino; label: string }[] = [
-  { value: CategoriaBovino.BEZERROS, label: "Bezerros (0-6m)" },
-  { value: CategoriaBovino.BEZERRAS, label: "Bezerras (0-6m)" },
-  { value: CategoriaBovino.GARROTES, label: "Garrotes (6-24m)" },
-  { value: CategoriaBovino.NOVILHOS, label: "Novilhos (12-36m)" },
-  { value: CategoriaBovino.NOVILHA, label: "Novilhas (12-24m)" },
-  { value: CategoriaBovino.TOUROS, label: "Touros (>24m)" },
-  { value: CategoriaBovino.VACAS, label: "Vacas (adulta)" },
-  { value: CategoriaBovino.BOIS, label: "Bois castrados" },
+  { value: CategoriaBovino.BEZERRO, label: "Bezerro (0-12m)" },
+  { value: CategoriaBovino.NOVILHO, label: "Novilho (12-24m)" },
+  { value: CategoriaBovino.NOVILHA, label: "Novilha (12-24m)" },
+  { value: CategoriaBovino.TOUROS, label: "Touro (>24m)" },
+  { value: CategoriaBovino.VACAS, label: "Vaca (adulta)" },
+  { value: CategoriaBovino.BOIS, label: "Boi castrado" },
 ];
 
 const REGIMES: { value: RegimeAnimal; label: string }[] = [
@@ -73,7 +73,7 @@ type Etapa = 1 | 2 | 3;
 
 export default function EntradaAnimaisPage() {
   const router = useRouter();
-  const { selectedFazendaId, selectedFazendaNome } = useAuth();
+  const { selectedFazendaId, selectedFazendaNome, user } = useAuth();
   const fazendaId = selectedFazendaId ?? "";
 
   const [etapa, setEtapa] = useState<Etapa>(1);
@@ -248,7 +248,7 @@ export default function EntradaAnimaisPage() {
           gtaId: gtaSelecionada.id!,
           sexo,
           raca: RACAS[0],
-          categoria: sexo === "F" ? CategoriaBovino.NOVILHA : CategoriaBovino.NOVILHOS,
+          categoria: sexo === "F" ? CategoriaBovino.NOVILHA : CategoriaBovino.NOVILHO,
           regime: RegimeAnimal.PASTO,
           pedidoBrincoId: pedidoSelecionado.id,
           status: "pendente",
@@ -322,9 +322,11 @@ export default function EntradaAnimaisPage() {
       if (animal.pesoEntrada && animal.pesoEntrada > 0) {
         await PesagemFirestoreService.registrarPesagemRapida(
           brinco,
+          animal.chipRfid ?? brinco,
           animal.pesoEntrada,
-          "pesagem_entrada",
-          fazendaId
+          fazendaId,
+          user?.uid ?? "sistema",
+          "pesagem_entrada"
         );
       }
 

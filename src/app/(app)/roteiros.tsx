@@ -184,7 +184,7 @@ export default function Roteiros() {
     }
   }
 
-  async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras" | "saidas">) {
+  async function handleInlineInsumoSave(data: Omit<Insumo, "id" | "compras" | "saidas" | "conferencias">) {
     try {
       const docRef = await addDocument(["insumos"], data);
       setInsumoOptions((prev) =>

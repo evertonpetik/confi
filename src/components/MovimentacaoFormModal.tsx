@@ -71,6 +71,9 @@ export function MovimentacaoFormModal({
 
   if (!lote) return null;
 
+  // Captura o id num const: o estreitamento de `lote` não sobrevive
+  // dentro do corpo de handleAdd (o TS não garante que a prop siga não-nula).
+  const loteId = lote.id;
   const qtdAtual = calcularQuantidadeAtual(lote.movimentacoes);
   const pesoMedioAtual = calcularPesoMedio(lote.movimentacoes, lote.gmdEstimado);
 
@@ -97,7 +100,7 @@ export function MovimentacaoFormModal({
       Alert.alert("Atenção", "Peso médio deve ser um número positivo.");
       return;
     }
-    onAddMovimentacao(lote.id, {
+    onAddMovimentacao(loteId, {
       evento: movForm.evento,
       movimentacao: movForm.movimentacao,
       data: dateToISO(movForm.data),

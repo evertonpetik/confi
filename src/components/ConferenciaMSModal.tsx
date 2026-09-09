@@ -53,6 +53,9 @@ export function ConferenciaMSModal({
 
   if (!insumo) return null;
 
+  // Captura o id num const: o estreitamento de `insumo` não sobrevive
+  // dentro do corpo de handleAdd (o TS não garante que a prop siga não-nula).
+  const insumoId = insumo.id;
   const conferenciasOrdenadas = [...insumo.conferencias].sort((a, b) =>
     b.data.localeCompare(a.data)
   );
@@ -70,7 +73,7 @@ export function ConferenciaMSModal({
       );
       return;
     }
-    onAddConferencia(insumo.id, {
+    onAddConferencia(insumoId, {
       data: dateToISO(form.data),
       percentualMS: pms,
     });

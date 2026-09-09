@@ -1,4 +1,4 @@
-import { parseGtaText } from "./gtaPdfParser.web.ts";
+import { parseGtaText } from "./gtaPdfParser.web";
 
 const sample = `
 PROCEDENCIA
@@ -57,8 +57,8 @@ if (parsed.destCpfCnpj !== "80398987149") throw new Error(`destCpfCnpj inválido
 if (parsed.destNome !== "RENATO FELIPE PINHEIRO MARTINS") throw new Error(`destNome inválido: ${parsed.destNome}`);
 if (parsed.destFazenda !== "FAZENDA RINCÃO - GLEBA A / B") throw new Error(`destFazenda inválida: ${parsed.destFazenda}`);
 if (parsed.destMunicipio !== "RIO VERDE DE MATO GROSSO") throw new Error(`destMunicipio inválido: ${parsed.destMunicipio}`);
-if (parsed.animais[0]?.quantidade !== 10) throw new Error(`quantidade inválida: ${parsed.animais[0]?.quantidade}`);
-if (parsed.animais[0]?.sexo !== "F") throw new Error(`sexo inválido: ${parsed.animais[0]?.sexo}`);
+if (parsed.animais?.[0]?.quantidade !== 10) throw new Error(`quantidade inválida: ${parsed.animais?.[0]?.quantidade}`);
+if (parsed.animais?.[0]?.sexo !== "F") throw new Error(`sexo inválido: ${parsed.animais?.[0]?.sexo}`);
 if (parsed.totalFemeas !== 10) throw new Error(`totalFemeas inválido: ${parsed.totalFemeas}`);
 if (parsed.total !== 10) throw new Error(`total inválido: ${parsed.total}`);
 if (parsed.dataEmissao !== "2026-07-24") throw new Error(`dataEmissao inválida: ${parsed.dataEmissao}`);
@@ -70,7 +70,7 @@ if (flattenedParsed.procFazenda !== "FAZENDA SANTA MARIA") throw new Error(`flat
 if (flattenedParsed.destCpfCnpj !== "80398987149") throw new Error(`flattened destCpfCnpj inválido: ${flattenedParsed.destCpfCnpj}`);
 if (flattenedParsed.destNome !== "RENATO FELIPE PINHEIRO MARTINS") throw new Error(`flattened destNome inválido: ${flattenedParsed.destNome}`);
 if (flattenedParsed.destFazenda !== "FAZENDA RINCÃO - GLEBA A / B") throw new Error(`flattened destFazenda inválida: ${flattenedParsed.destFazenda}`);
-if (flattenedParsed.animais[0]?.quantidade !== 10) throw new Error(`flattened quantidade inválida: ${flattenedParsed.animais[0]?.quantidade}`);
+if (flattenedParsed.animais?.[0]?.quantidade !== 10) throw new Error(`flattened quantidade inválida: ${flattenedParsed.animais?.[0]?.quantidade}`);
 if (flattenedParsed.totalFemeas !== 10) throw new Error(`flattened totalFemeas inválido: ${flattenedParsed.totalFemeas}`);
 if (flattenedParsed.total !== 10) throw new Error(`flattened total inválido: ${flattenedParsed.total}`);
 if (flattenedParsed.dataValidade !== "2026-07-31") throw new Error(`flattened dataValidade inválida: ${flattenedParsed.dataValidade}`);
@@ -90,8 +90,8 @@ if (realParsed.procNome !== "OLIVEIRA NANTES COELHO") throw new Error(`real proc
 if (realParsed.procFazenda !== "FAZENDA SANTA MARIA") throw new Error(`real procFazenda inválida: ${realParsed.procFazenda}`);
 if (realParsed.destCpfCnpj !== "80398987149") throw new Error(`real destCpfCnpj inválido: ${realParsed.destCpfCnpj}`);
 if (realParsed.destNome !== "RENATO FELIPE PINHEIRO MARTINS") throw new Error(`real destNome inválido: ${realParsed.destNome}`);
-if (realParsed.animais[0]?.quantidade !== 10) throw new Error(`real quantidade inválida: ${realParsed.animais[0]?.quantidade}`);
-if (realParsed.animais[0]?.sexo !== "F") throw new Error(`real sexo inválido: ${realParsed.animais[0]?.sexo}`);
+if (realParsed.animais?.[0]?.quantidade !== 10) throw new Error(`real quantidade inválida: ${realParsed.animais?.[0]?.quantidade}`);
+if (realParsed.animais?.[0]?.sexo !== "F") throw new Error(`real sexo inválido: ${realParsed.animais?.[0]?.sexo}`);
 if (realParsed.totalFemeas !== 10) throw new Error(`real totalFemeas inválido: ${realParsed.totalFemeas}`);
 if (realParsed.totalMachos !== 0) throw new Error(`real totalMachos inválido: ${realParsed.totalMachos}`);
 if (realParsed.total !== 10) throw new Error(`real total inválido: ${realParsed.total}`);

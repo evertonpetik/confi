@@ -56,6 +56,9 @@ export function CompraFormModal({
 
   if (!insumo) return null;
 
+  // Captura o id num const: o estreitamento de `insumo` não sobrevive
+  // dentro do corpo de handleAdd (o TS não garante que a prop siga não-nula).
+  const insumoId = insumo.id;
   const estoque = calcularEstoque(insumo.compras, insumo.saidas);
   const precoMedio = calcularPrecoMedio(insumo.compras, insumo.saidas);
 
@@ -74,7 +77,7 @@ export function CompraFormModal({
       Alert.alert("Atenção", "Preço/kg deve ser um número positivo.");
       return;
     }
-    onAddCompra(insumo.id, {
+    onAddCompra(insumoId, {
       data: dateToISO(form.data),
       quantidade: qtd,
       precoKg: preco,
