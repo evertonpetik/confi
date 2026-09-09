@@ -18,7 +18,16 @@ export interface SerialReading {
   source: "balanca" | "rfid";
 }
 
+export interface LeituraPesoSerial {
+  peso: number;
+  estavel: boolean | null;
+}
+
 type SerialListener = (reading: SerialReading) => void;
+type WeightListener = (peso: number, estavel: boolean | null) => void;
+
+export const COMANDO_PESO = ";peso\r\n";
+export const POLLING_PESO_MS = 700;
 
 const noop = () => () => { };
 
@@ -26,10 +35,19 @@ const serialService = {
   isSupported: false as const,
   devices: [] as SerialDevice[],
   onReading: noop as (fn: SerialListener) => () => void,
-  onWeight: noop as (fn: (peso: number) => void) => () => void,
+  onRawLine: noop as (fn: (portId: string, portLabel: string, line: string) => void) => () => void,
+  onWeight: noop as (fn: WeightListener) => () => void,
   onRfid: noop as (fn: (chip: string) => void) => () => void,
-  requestPort: async () => null as SerialDevice | null,
-  reconnectGranted: async () => [] as SerialDevice[],
+  requestPort: async (
+    _type: "balanca" | "rfid",
+    _baudRate?: number
+  ) => null as SerialDevice | null,
+  reconnectGranted: async (_baudRate?: number) => [] as SerialDevice[],
+  write: async (_id: string, _data: string) => { },
+  startWeightPolling: (_id: string, _intervaloMs?: number) => { },
+  stopWeightPolling: (_id: string) => { },
+  tara: async (_id: string) => { },
+  assignPortType: (_id: string, _type: "balanca" | "rfid") => { },
   disconnectPort: async (_id: string) => { },
   disconnectAll: async () => { },
 };

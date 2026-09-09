@@ -49,11 +49,26 @@ const LABEL_STATUS: Record<string, string> = {
   cancelado: "Cancelado",
 };
 
+function formatarGrupoAnimal(animal: GTA["animais"][number]) {
+  const sexo = animal.sexo === "F" ? "Fêmea" : animal.sexo === "M" ? "Macho" : "Animais";
+  const faixa = animal.idadeCategoria
+    ? animal.idadeCategoria.replace(/\s+/g, " ").trim()
+    : animal.descricao?.replace(/^BOVINO\s+/i, "").replace(new RegExp(`^${sexo}\\s*`, "i"), "").trim() || "idade não informada";
+
+  const faixaFormatada = faixa
+    .replace(/\s*MESES\b/gi, " meses")
+    .replace(/\s*A\s*/gi, " a ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return `${sexo}: ${animal.quantidade} ${faixaFormatada ? `(${faixaFormatada})` : ""}`.trim();
+}
+
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export default function ProcessosPage() {
   const router = useRouter();
-  const { selectedFazendaId, selectedFazendaNome, userProfile } = useAuth();
+  const { selectedFazendaId, selectedFazendaNome, user, userProfile } = useAuth();
   const { primaryColor } = useTheme();
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const fazendaId = selectedFazendaId ?? "";
@@ -246,7 +261,7 @@ export default function ProcessosPage() {
         dataAbertura: new Date().toISOString(),
         observacoes: observacoes.trim() || undefined,
         farmedaId: fazendaId,
-        usuarioId: userProfile?.uid ?? "sistema",
+        usuarioId: user?.uid ?? "sistema",
       };
       await BrincoService.criarProcessoMangueiro(processo, fazendaId);
       setShowModal(false);
@@ -440,6 +455,18 @@ export default function ProcessosPage() {
                               {gta.procFazenda || gta.procNome} → {gta.destFazenda || gta.destNome}
                             </Text>
                             <Text style={styles.gtaAnimais}>{gta.total} animais · {gta.totalMachos}M / {gta.totalFemeas}F</Text>
+                            {gta.animais?.length > 0 && (
+                              <View style={styles.gtaGruposList}>
+                                {gta.animais.slice(0, 3).map((animal, idx) => (
+                                  <Text key={`${gta.id}-${idx}`} style={styles.gtaGrupoAnimal}>
+                                    • {formatarGrupoAnimal(animal)}
+                                  </Text>
+                                ))}
+                                {gta.animais.length > 3 && (
+                                  <Text style={styles.gtaGrupoAnimal}>• +{gta.animais.length - 3} grupo(s) adicional(is)</Text>
+                                )}
+                              </View>
+                            )}
                           </View>
                           <TouchableOpacity onPress={() => toggleGta(gta)}>
                             <Feather name="x-circle" size={20} color="#F44336" />
@@ -765,6 +792,8 @@ const styles = StyleSheet.create({
   gtaNumero: { fontSize: 14, fontWeight: "700", color: "#1a1a1a" },
   gtaInfo: { fontSize: 12, color: "#666", marginTop: 2 },
   gtaAnimais: { fontSize: 12, color: "#888", marginTop: 1 },
+  gtaGruposList: { marginTop: 8, gap: 3 },
+  gtaGrupoAnimal: { fontSize: 11.5, color: "#475569", lineHeight: 18 },
   totalGtas: { padding: 10, borderRadius: 8, backgroundColor: "#E3F2FD", marginBottom: 8 },
   totalGtasText: { fontSize: 14, fontWeight: "700", color: "#1565C0", textAlign: "center" },
 

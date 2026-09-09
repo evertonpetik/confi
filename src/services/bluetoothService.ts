@@ -27,6 +27,8 @@ export class BluetoothService {
   private subscricoes: Map<string, any> = new Map();
   private txCharacteristics: Map<string, Characteristic> = new Map(); // TX write por device
   private pollingIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
+  private buffersPeso: Map<string, string> = new Map();
+  private buffersChip: Map<string, string> = new Map();
   private listeners: {
     onPeso?: (leitura: LeituraPeso) => void;
     onChip?: (leitura: LeituraChip) => void;
@@ -165,32 +167,24 @@ export class BluetoothService {
     dispositivoId: string,
     timeout: number = 10000
   ): Promise<boolean> {
+    // No web não existe BleManager — a conexão é feita via porta serial (serialService.web.ts)
+    if (!this.bleManager) {
+      this.emitirErro({
+        codigo: "BLE_NAO_DISPONIVEL",
+        mensagem: "Bluetooth BLE não disponível nesta plataforma.",
+        timestamp: new Date().toISOString(),
+        dispositivo: dispositivoId,
+        recuperavel: false,
+      });
+      return false;
+    }
+
     try {
       console.log(`[BLE] Conectando ao dispositivo: ${dispositivoId}`);
 
-      let device = this.dispositivosConectados.get(dispositivoId);
-
-      if (!device) {
-        // Se não temos referência, precisa fazer descoberta novamente
-        const dispositivos = await this.descobrirDispositivos(3000);
-        const encontrado = dispositivos.find((d) => d.id === dispositivoId);
-
-        if (!encontrado) {
-          throw new Error(`Dispositivo ${dispositivoId} não encontrado`);
-        }
-
-        // Reconectar para obter referência atualizada
-        const connectedDevices = await this.bleManager.connectedDevices([]);
-        const scannedDevice = connectedDevices.find((d) => d.id === dispositivoId);
-
-        if (!scannedDevice) {
-          throw new Error(`Não foi possível obter referência do dispositivo`);
-        }
-
-        device = scannedDevice;
-      }
-
-      // Tenta conectar
+      // Tenta conectar diretamente por ID — connectToDevice já resolve a conexão,
+      // não é preciso (nem correto) checar connectedDevices() antes, pois esse
+      // método só retorna dispositivos já conectados no nível do SO.
       await this.bleManager.connectToDevice(dispositivoId, {
         autoConnect: false,
         timeout,
@@ -247,6 +241,10 @@ export class BluetoothService {
       // Remove TX characteristic
       this.txCharacteristics.delete(dispositivoId);
 
+      // Limpa buffers de linha
+      this.buffersPeso.delete(dispositivoId);
+      this.buffersChip.delete(dispositivoId);
+
       // Remove subscrições
       const subscricao = this.subscricoes.get(dispositivoId);
       if (subscricao) {
@@ -254,8 +252,8 @@ export class BluetoothService {
         this.subscricoes.delete(dispositivoId);
       }
 
-      // Desconecta
-      await this.bleManager.cancelDeviceConnection(dispositivoId);
+      // Desconecta (no web não há BleManager; a limpeza local acima ainda vale)
+      await this.bleManager?.cancelDeviceConnection(dispositivoId);
 
       this.dispositivosConectados.delete(dispositivoId);
 
@@ -404,9 +402,7 @@ export class BluetoothService {
       const services = await device.services();
 
       // Procura por serviço UART ou genérico
-      let service = services.find((s) =>
-        s.uuid === "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-      );
+      let service = services.find((s) => s.uuid.toLowerCase() === NUS_SERVICE);
 
       if (!service) {
         service = services.find((s) => !s.uuid.startsWith("0000"));
@@ -419,7 +415,7 @@ export class BluetoothService {
       const characteristics = await service.characteristics();
 
       let characteristic = characteristics.find(
-        (c) => c.uuid === "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+        (c) => c.uuid.toLowerCase() === NUS_RX_NOTIFY
       );
 
       if (!characteristic) {
@@ -467,8 +463,9 @@ export class BluetoothService {
   }
 
   /**
-   * Processa dados brutos de peso vindo da balança ACR
-   * Formato esperado: [0x02][PESO_ASCII][STATUS][0x03]
+   * Processa dados brutos de peso vindo da BPB 085
+   * Formato real (ASCII puro, sem STX/ETX): "+0000.0;Z;1;\r\n"
+   * (+ peso em kg ; status E/Z (estável) ou I/U (instável) ; ok)
    */
   private processarDadosPeso(dataBase64: string, dispositivoId: string): void {
     try {
@@ -477,42 +474,39 @@ export class BluetoothService {
         ? Buffer.from(dataBase64, "base64")
         : Uint8Array.from(dataBase64.split("").map((c) => c.charCodeAt(0)));
 
-      // Valida frame
-      if (bytes[0] !== 0x02 || bytes[bytes.length - 1] !== 0x03) {
-        console.warn("[BLE] Frame inválido: STX/ETX não encontrados");
-        return;
+      const chunk = String.fromCharCode(...bytes);
+
+      // Acumula no buffer do dispositivo e extrai linhas completas (\r\n)
+      const buffer = (this.buffersPeso.get(dispositivoId) ?? "") + chunk;
+      const linhas = buffer.split("\r\n");
+      this.buffersPeso.set(dispositivoId, linhas.pop() ?? "");
+
+      for (const linha of linhas) {
+        const match = linha.match(/^\+(-?\d+(?:\.\d+)?);([A-Za-z])/);
+        if (!match) {
+          if (linha.trim()) console.warn("[BLE] Peso não encontrado na linha:", linha);
+          continue;
+        }
+
+        const peso = parseFloat(match[1]);
+        const statusLetra = match[2].toUpperCase();
+        const status =
+          statusLetra === "I" || statusLetra === "U"
+            ? StatusPeso.INSTAVEL
+            : StatusPeso.ESTAVEL;
+
+        const leitura: LeituraPeso = {
+          peso,
+          timestamp: new Date().toISOString(),
+          status,
+          dispositivoId,
+          valido: true,
+          erro: undefined,
+        };
+
+        console.log(`[BLE] Peso lido: ${peso} kg (${status})`);
+        this.listeners.onPeso?.(leitura);
       }
-
-      // Extrai dados entre STX e ETX
-      const dados = bytes.slice(1, bytes.length - 1);
-      const texto = String.fromCharCode(...dados);
-
-      // Parse do peso (formato: "1250.45" ou "1250.45S" com status)
-      const match = texto.match(/(\d+\.\d+)/);
-      if (!match) {
-        console.warn("[BLE] Peso não encontrado nos dados:", texto);
-        return;
-      }
-
-      const peso = parseFloat(match[1]);
-
-      // Verifica status (segundo o último byte é o status)
-      let status = StatusPeso.ESTAVEL;
-      if (texto.includes("U")) {
-        status = StatusPeso.INSTAVEL;
-      }
-
-      const leitura: LeituraPeso = {
-        peso,
-        timestamp: new Date().toISOString(),
-        status,
-        dispositivoId,
-        valido: true,
-        erro: undefined,
-      };
-
-      console.log(`[BLE] Peso lido: ${peso} kg (${status})`);
-      this.listeners.onPeso?.(leitura);
     } catch (error) {
       console.error("[BLE] Erro ao processar dados de peso:", error);
       this.emitirErro({
@@ -527,7 +521,8 @@ export class BluetoothService {
 
   /**
    * Processa dados brutos de chip vindo do leitor RFID XRS2i
-   * Formato esperado: [CHIP_15_DIGITS][SIGNAL_dBm][TIMESTAMP]
+   * Formato real: EID decimal puro terminado em \r\n (ex.: "963000407264340\r\n")
+   * Não há sinal (dBm) embutido no payload — usamos o RSSI do próprio Device BLE.
    */
   private processarDadosChip(dataBase64: string, dispositivoId: string): void {
     try {
@@ -536,36 +531,40 @@ export class BluetoothService {
         ? Buffer.from(dataBase64, "base64")
         : Uint8Array.from(dataBase64.split("").map((c) => c.charCodeAt(0)));
 
-      const texto = String.fromCharCode(...bytes).trim();
+      const chunk = String.fromCharCode(...bytes);
 
-      // Extrai chip ID (15 dígitos)
-      const chipMatch = texto.match(/(\d{15})/);
-      if (!chipMatch) {
-        console.warn("[BLE] Chip não encontrado nos dados:", texto);
-        return;
+      // Acumula no buffer do dispositivo e extrai linhas completas (\r\n)
+      const buffer = (this.buffersChip.get(dispositivoId) ?? "") + chunk;
+      const linhas = buffer.split("\r\n");
+      this.buffersChip.set(dispositivoId, linhas.pop() ?? "");
+
+      const device = this.dispositivosConectados.get(dispositivoId);
+      const sinSinal = device?.rssi ?? 0;
+
+      for (const linha of linhas) {
+        const texto = linha.trim();
+        if (!texto) continue;
+
+        const chipMatch = texto.match(/(\d{15})/);
+        if (!chipMatch) {
+          console.warn("[BLE] Chip não encontrado na linha:", texto);
+          continue;
+        }
+
+        const chipId = chipMatch[1];
+
+        const leitura: LeituraChip = {
+          chipId,
+          timestamp: new Date().toISOString(),
+          sinSinal,
+          dispositivoId,
+          valido: this.validarChip(chipId),
+          erro: undefined,
+        };
+
+        console.log(`[BLE] Chip lido: ${chipId} (sinal: ${sinSinal})`);
+        this.listeners.onChip?.(leitura);
       }
-
-      const chipId = chipMatch[1];
-
-      // Extrai sinal (dBm) - procura por padrão como "-65" ou "65"
-      let sinSinal = -65; // Valor padrão
-      const sinMatch = texto.match(/-?(\d+)/);
-      if (sinMatch && sinMatch[1]) {
-        const valor = parseInt(sinMatch[1]);
-        sinSinal = valor > 0 ? -valor : valor; // Garante que seja negativo
-      }
-
-      const leitura: LeituraChip = {
-        chipId,
-        timestamp: new Date().toISOString(),
-        sinSinal,
-        dispositivoId,
-        valido: this.validarChip(chipId),
-        erro: undefined,
-      };
-
-      console.log(`[BLE] Chip lido: ${chipId} (sinal: ${sinSinal})`);
-      this.listeners.onChip?.(leitura);
     } catch (error) {
       console.error("[BLE] Erro ao processar dados de chip:", error);
       this.emitirErro({
@@ -594,6 +593,8 @@ export class BluetoothService {
       this.pollingIntervals.forEach((id) => clearInterval(id));
       this.pollingIntervals.clear();
       this.txCharacteristics.clear();
+      this.buffersPeso.clear();
+      this.buffersChip.clear();
 
       // Remove todas as subscrições
       this.subscricoes.forEach((sub) => {

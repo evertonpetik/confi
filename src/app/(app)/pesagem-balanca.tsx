@@ -7,6 +7,7 @@ import BrincoService, { brincoByIndex, controleFromBrinco } from "@/services/bri
 import { PesagemFirestoreService } from "@/services/pesagemFirestoreService";
 import serialService from "@/services/serialService";
 import { Bovino, CategoriaBovino, GTA, PedidoBrinco, ProcessoMangueiro } from "@/services/weighing.types";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -75,6 +76,8 @@ function formatarChip(chip: string): string {
 // Mínimo de leituras estáveis consecutivas antes de aceitar o peso
 const LEITURAS_ESTABILIDADE = 3;
 const VARIACAO_ESTABILIDADE_KG = 0.5;
+// Abaixo disso é plataforma vazia/zerada, não um animal
+const PESO_MINIMO_VALIDO_KG = 10;
 
 type ConexaoEstado = "desconectado" | "conectando" | "conectado" | "erro";
 
@@ -94,7 +97,7 @@ export default function PesagemBalanca() {
     processoId?: string;
   }>();
 
-  const { selectedFazendaId, userProfile } = useAuth();
+  const { selectedFazendaId, user } = useAuth();
   const { primaryColor } = useTheme();
   const {
     isTablet,
@@ -171,6 +174,9 @@ export default function PesagemBalanca() {
   // ─── Animações ─────────────────────────────────────────────────────────────
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const leituras = useRef<number[]>([]);
+  // Guarda os unsubscribes para não acumular listeners a cada reconexão
+  const unsubPeso = useRef<(() => void) | null>(null);
+  const unsubChip = useRef<(() => void) | null>(null);
 
   // Pulso quando peso está estável
   useEffect(() => {
@@ -223,7 +229,9 @@ export default function PesagemBalanca() {
     bleService.current = svc;
 
     // Registra callbacks globais (mesmos usados pelo serial)
-    svc.registrarListener("peso", (leitura: any) => handlePesoRecebido(leitura.peso));
+    svc.registrarListener("peso", (leitura: any) =>
+      handlePesoRecebido(leitura.peso, leitura.status === "estavel")
+    );
     svc.registrarListener("chip", (leitura: any) => handleChipRecebido(leitura.chipId));
 
     // Carrega MACs e baud salvos
@@ -364,8 +372,12 @@ export default function PesagemBalanca() {
   }, [fazendaId]);
 
   // ─── Callback de peso recebido (serial ou BLE) ────────────────────────────
-  const handlePesoRecebido = useCallback((peso: number) => {
-    if (peso < 10 || peso > 2000) return; // fora de range físico
+  // `estavelEquip` vem do próprio equipamento (BPB 085 responde "+0092.0;E;" — E/Z estável,
+  // I/U instável). Quando presente, é a fonte de verdade; senão, a estabilidade é inferida
+  // pela variação das últimas leituras.
+  const handlePesoRecebido = useCallback((peso: number, estavelEquip?: boolean | null) => {
+    // Aceita 0 kg (plataforma zerada) para o operador ver que a balança está respondendo
+    if (peso < 0 || peso > 2000) return; // fora de range físico
 
     leituras.current.push(peso);
     if (leituras.current.length > LEITURAS_ESTABILIDADE * 2) {
@@ -374,8 +386,14 @@ export default function PesagemBalanca() {
 
     setPesoAtual(peso);
 
+    if (estavelEquip != null) {
+      // Plataforma zerada não conta como peso estável pronto para salvar
+      setPesoEstavel(estavelEquip && peso >= PESO_MINIMO_VALIDO_KG);
+      return;
+    }
+
     // Verifica estabilidade: últimas N leituras dentro da variação
-    if (leituras.current.length >= LEITURAS_ESTABILIDADE) {
+    if (leituras.current.length >= LEITURAS_ESTABILIDADE && peso >= PESO_MINIMO_VALIDO_KG) {
       const recentes = leituras.current.slice(-LEITURAS_ESTABILIDADE);
       const max = Math.max(...recentes);
       const min = Math.min(...recentes);
@@ -407,10 +425,10 @@ export default function PesagemBalanca() {
       ]);
       setBalancaConectada(true);
       setBalancaPortId(dev.id);
-      serialService.onWeight(handlePesoRecebido);
-      serialService.onRawLine((_, portLabel, linha) =>
-        setLogBruto((prev) => [{ portLabel, linha, ts: new Date().toLocaleTimeString("pt-BR") }, ...prev.slice(0, 49)])
-      );
+      // requestPort("balanca") já inicia o polling de ";peso" — a balança é passiva.
+      // O log de dados brutos é assinado uma única vez no useEffect de montagem.
+      unsubPeso.current?.();
+      unsubPeso.current = serialService.onWeight(handlePesoRecebido);
     } catch (err: any) {
       Alert.alert("Erro", err.message ?? "Não foi possível conectar a balança.");
     }
@@ -418,6 +436,8 @@ export default function PesagemBalanca() {
 
   const desconectarBalanca = async () => {
     if (balancaPortId) await serialService.disconnectPort(balancaPortId);
+    unsubPeso.current?.();
+    unsubPeso.current = null;
     setBalancaConectada(false);
     setBalancaPortId(null);
     setDispositivos((prev) => prev.filter((d) => d.tipo !== "balanca"));
@@ -436,7 +456,8 @@ export default function PesagemBalanca() {
       ]);
       setRfidConectado(true);
       setRfidPortId(dev.id);
-      serialService.onRfid(handleChipRecebido);
+      unsubChip.current?.();
+      unsubChip.current = serialService.onRfid(handleChipRecebido);
     } catch (err: any) {
       Alert.alert("Erro", err.message ?? "Não foi possível conectar o leitor RFID.");
     }
@@ -444,6 +465,8 @@ export default function PesagemBalanca() {
 
   const desconectarRfid = async () => {
     if (rfidPortId) await serialService.disconnectPort(rfidPortId);
+    unsubChip.current?.();
+    unsubChip.current = null;
     setRfidConectado(false);
     setRfidPortId(null);
     setDispositivos((prev) => prev.filter((d) => d.tipo !== "rfid"));
@@ -498,8 +521,10 @@ export default function PesagemBalanca() {
     serialService.reconnectGranted(9600).then((devs) => {
       if (devs.length === 0) return;
 
-      serialService.onWeight(handlePesoRecebido);
-      serialService.onRfid(handleChipRecebido);
+      unsubPeso.current?.();
+      unsubChip.current?.();
+      unsubPeso.current = serialService.onWeight(handlePesoRecebido);
+      unsubChip.current = serialService.onRfid(handleChipRecebido);
 
       const desconhecidos = devs.filter((d) => d.type === "desconhecido");
       const identificados = devs.filter((d) => d.type !== "desconhecido");
@@ -517,7 +542,12 @@ export default function PesagemBalanca() {
       }
     });
 
-    return () => { unsubRaw(); serialService.disconnectAll(); };
+    return () => {
+      unsubRaw();
+      unsubPeso.current?.();
+      unsubChip.current?.();
+      serialService.disconnectAll();
+    };
   }, []);
 
   // ─── Salvar pesagem ────────────────────────────────────────────────────────
@@ -606,7 +636,7 @@ export default function PesagemBalanca() {
           chipParaSalvar ?? brinco,
           pesoParaSalvar,
           fazendaId,
-          userProfile?.uid ?? "sistema",
+          user?.uid ?? "sistema",
           inputObs || undefined
         );
       }
@@ -646,7 +676,7 @@ export default function PesagemBalanca() {
         chipParaSalvar!,
         pesoParaSalvar!,
         fazendaId,
-        userProfile?.uid ?? "sistema",
+        user?.uid ?? "sistema",
         inputObs || undefined
       );
       setPesagemSalva(true);
@@ -905,6 +935,15 @@ export default function PesagemBalanca() {
                   <Text style={styles.configDica}>
                     Vá para a aba Pesagem para conectar as portas seriais e identificar cada equipamento.
                   </Text>
+
+                  <View style={[styles.configInfo, { borderColor: primaryColor + "30", backgroundColor: primaryColor + "08" }]}>
+                    <Feather name="info" size={13} color={primaryColor} />
+                    <Text style={[styles.configInfoText, { color: primaryColor }]}>
+                      A balança BPB 085 não envia peso sozinha: o app consulta ';peso' na porta a cada
+                      0,7s e interpreta a resposta '+XXXX.X;E;' (E/Z = estável, I/U = instável). O leitor
+                      XRS2i transmite o chip sozinho ao ler um brinco.
+                    </Text>
+                  </View>
                 </View>
               )}
             </View>
