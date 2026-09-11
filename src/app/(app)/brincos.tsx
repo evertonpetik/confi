@@ -1,9 +1,9 @@
 import { useAuth } from "@/contexts/AuthContext";
+import Aviso from "@/services/alerta";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   ScrollView,
@@ -13,11 +13,13 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import BrincoService, {
-  brincoByIndex,
-  calcularTotalBrincos,
-  controleFromBrinco,
-} from "../../services/brincoService";
+import BrincoService from "../../services/brincoService";
+import {
+  manejoFromSisbov,
+  sisbovByIndex,
+  totalSisbov,
+  validarSisbov,
+} from "../../services/sisbov";
 import { LocalAnimal, PedidoBrinco, RegimeAnimal } from "../../services/weighing.types";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
@@ -39,12 +41,6 @@ const REGIMES = [
   { value: RegimeAnimal.SEMI_CONFINAMENTO, label: "Semi-Confinamento" },
 ] as const;
 
-// ─── Utilitários ──────────────────────────────────────────────────────────────
-
-function validarBrinco15(s: string): boolean {
-  return /^\d{15}$/.test(s);
-}
-
 // ─── Tipos internos ───────────────────────────────────────────────────────────
 
 type Tab = "pedidos" | "locais";
@@ -52,8 +48,8 @@ type Tab = "pedidos" | "locais";
 interface FormPedido {
   fabrica: string;
   numeroPedidoMapa: string;
-  brincoInicial: string;
-  brincoFinal: string;
+  sisbovInicial: string;
+  sisbovFinal: string;
 }
 
 interface FormLocal {
@@ -79,8 +75,8 @@ export default function BrincosPage() {
   const [formPedido, setFormPedido] = useState<FormPedido>({
     fabrica: FABRICAS[0],
     numeroPedidoMapa: "",
-    brincoInicial: "",
-    brincoFinal: "",
+    sisbovInicial: "",
+    sisbovFinal: "",
   });
   const [salvandoPedido, setSalvandoPedido] = useState(false);
 
@@ -131,35 +127,37 @@ export default function BrincosPage() {
   // ─── Salvar pedido ────────────────────────────────────────────────────────────
 
   const salvarPedido = async () => {
-    const { fabrica, numeroPedidoMapa, brincoInicial, brincoFinal } = formPedido;
+    const { fabrica, numeroPedidoMapa, sisbovInicial, sisbovFinal } = formPedido;
     if (!numeroPedidoMapa.trim()) {
-      Alert.alert("Campo obrigatório", "Informe o número do pedido MAPA.");
+      Aviso.alert("Campo obrigatório", "Informe o número do pedido MAPA.");
       return;
     }
-    if (!validarBrinco15(brincoInicial)) {
-      Alert.alert("Brinco inválido", "O brinco inicial deve ter exatamente 15 dígitos.");
+    // O dígito verificador pega erro de digitação aqui, antes de a numeração
+    // errada se propagar para todos os animais do pedido.
+    if (!validarSisbov(sisbovInicial)) {
+      Aviso.alert("Brinco inicial inválido", "Confira os 15 dígitos: o dígito verificador não confere.");
       return;
     }
-    if (!validarBrinco15(brincoFinal)) {
-      Alert.alert("Brinco inválido", "O brinco final deve ter exatamente 15 dígitos.");
+    if (!validarSisbov(sisbovFinal)) {
+      Aviso.alert("Brinco final inválido", "Confira os 15 dígitos: o dígito verificador não confere.");
       return;
     }
-    if (BigInt(brincoFinal) <= BigInt(brincoInicial)) {
-      Alert.alert("Intervalo inválido", "O brinco final deve ser maior que o brinco inicial.");
+    if (BigInt(sisbovFinal) <= BigInt(sisbovInicial)) {
+      Aviso.alert("Intervalo inválido", "O brinco final deve ser maior que o brinco inicial.");
       return;
     }
 
     setSalvandoPedido(true);
     try {
-      const total = calcularTotalBrincos(brincoInicial, brincoFinal);
+      const total = totalSisbov(sisbovInicial, sisbovFinal);
       await BrincoService.cadastrarPedido(
         {
           fabrica,
           numeroPedidoMapa: numeroPedidoMapa.trim(),
-          brincoInicial,
-          brincoFinal,
-          controleInicial: controleFromBrinco(brincoInicial),
-          controleFinal: controleFromBrinco(brincoFinal),
+          sisbovInicial,
+          sisbovFinal,
+          manejoInicial: manejoFromSisbov(sisbovInicial),
+          manejoFinal: manejoFromSisbov(sisbovFinal),
           brincosTotal: total,
           proximoIndice: 0,
           ativo: true,
@@ -168,10 +166,10 @@ export default function BrincosPage() {
         fazendaId
       );
       setShowPedidoModal(false);
-      setFormPedido({ fabrica: FABRICAS[0], numeroPedidoMapa: "", brincoInicial: "", brincoFinal: "" });
+      setFormPedido({ fabrica: FABRICAS[0], numeroPedidoMapa: "", sisbovInicial: "", sisbovFinal: "" });
       await carregarPedidos();
     } catch (e) {
-      Alert.alert("Erro", "Não foi possível salvar o pedido.");
+      Aviso.alert("Erro", "Não foi possível salvar o pedido.");
     } finally {
       setSalvandoPedido(false);
     }
@@ -181,7 +179,7 @@ export default function BrincosPage() {
 
   const salvarLocal = async () => {
     if (!formLocal.nome.trim()) {
-      Alert.alert("Campo obrigatório", "Informe o nome do local.");
+      Aviso.alert("Campo obrigatório", "Informe o nome do local.");
       return;
     }
     setSalvandoLocal(true);
@@ -201,7 +199,7 @@ export default function BrincosPage() {
       setFormLocal({ nome: "", tipo: "piquete", regime: RegimeAnimal.PASTO, capacidade: "" });
       await carregarLocais();
     } catch (e) {
-      Alert.alert("Erro", "Não foi possível salvar o local.");
+      Aviso.alert("Erro", "Não foi possível salvar o local.");
     } finally {
       setSalvandoLocal(false);
     }
@@ -219,7 +217,7 @@ export default function BrincosPage() {
   };
 
   const excluirLocal = (local: LocalAnimal) => {
-    Alert.alert(
+    Aviso.alert(
       "Excluir local",
       `Deseja desativar "${local.nome}"?`,
       [
@@ -232,7 +230,7 @@ export default function BrincosPage() {
               await BrincoService.excluirLocal(local.id!, fazendaId);
               await carregarLocais();
             } catch {
-              Alert.alert("Erro", "Não foi possível excluir.");
+              Aviso.alert("Erro", "Não foi possível excluir.");
             }
           },
         },
@@ -243,14 +241,14 @@ export default function BrincosPage() {
   // ─── Renderização auxiliar ───────────────────────────────────────────────────
 
   const brincoPreview = (() => {
-    const { brincoInicial, brincoFinal } = formPedido;
-    if (!validarBrinco15(brincoInicial) || !validarBrinco15(brincoFinal)) return null;
-    if (BigInt(brincoFinal) <= BigInt(brincoInicial)) return null;
-    const total = calcularTotalBrincos(brincoInicial, brincoFinal);
+    const { sisbovInicial, sisbovFinal } = formPedido;
+    if (!validarSisbov(sisbovInicial) || !validarSisbov(sisbovFinal)) return null;
+    if (BigInt(sisbovFinal) <= BigInt(sisbovInicial)) return null;
+    const total = totalSisbov(sisbovInicial, sisbovFinal);
     return {
       total,
-      controleInicial: controleFromBrinco(brincoInicial),
-      controleFinal: controleFromBrinco(brincoFinal),
+      manejoInicial: manejoFromSisbov(sisbovInicial),
+      manejoFinal: manejoFromSisbov(sisbovFinal),
     };
   })();
 
@@ -296,7 +294,7 @@ export default function BrincosPage() {
             const utilizados = p.proximoIndice;
             const disponiveis = p.brincosTotal - utilizados;
             const pct = Math.round((utilizados / p.brincosTotal) * 100);
-            const proximo = brincoByIndex(p.brincoInicial, p.proximoIndice);
+            const proximo = sisbovByIndex(p.sisbovInicial, p.proximoIndice);
 
             return (
               <View key={p.id} style={styles.card}>
@@ -308,7 +306,7 @@ export default function BrincosPage() {
                 </View>
                 <Text style={styles.cardSub}>Pedido MAPA: {p.numeroPedidoMapa}</Text>
                 <Text style={styles.cardSub}>
-                  Brincos: {p.controleInicial} → {p.controleFinal}
+                  Brincos: {p.manejoInicial} → {p.manejoFinal}
                 </Text>
 
                 <View style={styles.statsRow}>
@@ -335,7 +333,7 @@ export default function BrincosPage() {
                 {disponiveis > 0 && (
                   <Text style={styles.proximo}>
                     Próximo brinco: <Text style={styles.proximoNum}>{proximo}</Text>{" "}
-                    (controle: {controleFromBrinco(proximo)})
+                    (controle: {manejoFromSisbov(proximo)})
                   </Text>
                 )}
               </View>
@@ -418,8 +416,8 @@ export default function BrincosPage() {
               <Text style={styles.label}>Brinco Inicial (15 dígitos) *</Text>
               <TextInput
                 style={styles.input}
-                value={formPedido.brincoInicial}
-                onChangeText={(v) => setFormPedido((prev) => ({ ...prev, brincoInicial: v.replace(/\D/g, "") }))}
+                value={formPedido.sisbovInicial}
+                onChangeText={(v) => setFormPedido((prev) => ({ ...prev, sisbovInicial: v.replace(/\D/g, "") }))}
                 placeholder="105500508077691"
                 keyboardType="numeric"
                 maxLength={15}
@@ -428,8 +426,8 @@ export default function BrincosPage() {
               <Text style={styles.label}>Brinco Final (15 dígitos) *</Text>
               <TextInput
                 style={styles.input}
-                value={formPedido.brincoFinal}
-                onChangeText={(v) => setFormPedido((prev) => ({ ...prev, brincoFinal: v.replace(/\D/g, "") }))}
+                value={formPedido.sisbovFinal}
+                onChangeText={(v) => setFormPedido((prev) => ({ ...prev, sisbovFinal: v.replace(/\D/g, "") }))}
                 placeholder="105500508097684"
                 keyboardType="numeric"
                 maxLength={15}
@@ -445,7 +443,7 @@ export default function BrincosPage() {
                   <Text style={styles.previewRow}>
                     Controles:{" "}
                     <Text style={styles.previewVal}>
-                      {brincoPreview.controleInicial} → {brincoPreview.controleFinal}
+                      {brincoPreview.manejoInicial} → {brincoPreview.manejoFinal}
                     </Text>
                   </Text>
                 </View>

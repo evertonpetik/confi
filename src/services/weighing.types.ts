@@ -80,10 +80,18 @@ export interface EventoSanitario {
 /**
  * Informações de um bovino individual
  * Vinculado ao SISBOV
+ *
+ * São três números distintos, nunca intercambiáveis:
+ *   sisbov   105500508091406  15 dígitos, com dígito verificador — chave do animal
+ *   manejo   809140            6 dígitos, o que se lê no brinco visual
+ *   chipRfid 963000408629140  15 dígitos do transponder; termina com os mesmos
+ *                             4 dígitos do manejo (conferência no mangueiro)
  */
 export interface Bovino {
-  id: string;                    // ID único (chipId ou custom)
-  chipId: string;                // Número de inscrição (15 dígitos)
+  id: string;                    // ID único (igual ao sisbov)
+  sisbov: string;                // Número de inscrição SISBOV (15 dígitos)
+  manejo: string;                // Número de manejo (6 dígitos)
+  chipRfid?: string;             // Número do transponder RFID (15 dígitos)
   nome: string;                  // Nome/apelido
   categoria: CategoriaBovino;    // Categoria
   raca: string;                  // Raça (Angus, Nelore, etc)
@@ -106,8 +114,19 @@ export interface Bovino {
   propriedadeOrigem?: string;    // CNPJ/CPF de origem
   municipioOrigem?: string;
   estadoOrigem?: string;
-  sisbov?: DadosSisbov;
+  certificacao?: DadosSisbov;    // Situação do animal no SISBOV
+  proprietario?: ProprietarioAnimal;
   metadados?: Record<string, any>;
+}
+
+/**
+ * Dono do animal. Animais de terceiros (boitel) precisam ser identificáveis em
+ * qualquer tela para não entrarem por engano num embarque.
+ */
+export interface ProprietarioAnimal {
+  tipo: "proprio" | "terceiro";
+  nome: string;                  // Razão social / nome do proprietário
+  cpfCnpj?: string;
 }
 
 /**
@@ -126,7 +145,7 @@ export interface GanhoDiarioPeso {
  * Leitura de chip RFID (XRS2i)
  */
 export interface LeituraChip {
-  chipId: string;                // 15 dígitos
+  chipRfid: string;              // 15 dígitos do transponder
   timestamp: string;             // ISO 8601
   sinSinal: number;              // Força do sinal (-80 a -30 dBm)
   dispositivoId: string;         // ID do leitor XRS2i
@@ -153,7 +172,7 @@ export interface LeituraPeso {
 export interface Pesagem {
   id?: string;                   // ID do Firestore (auto-gerado)
   animalId: string;              // FK para Bovino
-  chipId: string;                // Referência redundante para SISBOV
+  sisbov: string;                // Número SISBOV do animal (redundante, p/ rastreabilidade)
   peso: number;                  // Peso lido (kg)
   pesoPrevisto?: number;         // Peso esperado pelo sistema
   diferencaPeso?: number;        // peso - pesoPrevisto
@@ -188,7 +207,7 @@ export interface Pesagem {
 export interface MovimentacaoBovino {
   id?: string;                   // ID do Firestore
   animalId: string;              // FK para Bovino
-  chipId: string;                // Referência para SISBOV
+  sisbov: string;                // Número SISBOV do animal
   tipo: TipoMovimentacao;        // Tipo de movimentação
 
   // Dados da movimentação
@@ -333,15 +352,33 @@ export interface PedidoBrinco {
   id?: string;
   fabrica: string;               // Ex: "Animalltag", "Zee Tags"
   numeroPedidoMapa: string;      // Número da solicitação no MAPA
-  brincoInicial: string;         // 15 dígitos (ex: 105500508077691)
-  brincoFinal: string;           // 15 dígitos (ex: 105500508097684)
-  controleInicial: string;       // 6 dígitos derivados do brinco (pos 9-14)
-  controleFinal: string;
+  sisbovInicial: string;         // 15 dígitos (ex: 105500508078035)
+  sisbovFinal: string;           // 15 dígitos (ex: 105500508078620)
+  manejoInicial: string;         // 6 dígitos derivados do SISBOV (pos 9-14)
+  manejoFinal: string;
   brincosTotal: number;
   proximoIndice: number;         // quantos já foram utilizados (0-based)
+  /**
+   * Brincos descartados sem chegar em animal — defeito de fábrica, quebra na
+   * aplicação, leitura morta.
+   *
+   * Ficam registrados porque a certificadora cobra explicação por número que
+   * saltou na sequência: sem isso, o brinco aparece como desaparecido.
+   */
+  anulados?: BrincoAnulado[];
   ativo: boolean;
   farmedaId: string;
   criadoEm: string;
+}
+
+/** Brinco que saiu da sequência sem ser aplicado em animal. */
+export interface BrincoAnulado {
+  sisbov: string;
+  manejo: string;
+  motivo: "defeito" | "danificado" | "perdido" | "outro";
+  observacoes?: string;
+  dataHora: string;              // ISO 8601
+  usuarioId: string;
 }
 
 /** Animal transportado em uma GTA */
@@ -390,6 +427,16 @@ export interface GTA {
   // Sistema
   farmedaId: string;
   status: "ativa" | "vencida" | "processada";
+  /**
+   * PDF original da guia, no Storage.
+   *
+   * A certificadora recebe a planilha junto das GTAs originais. Fica no
+   * Storage e não no documento: em base64 aqui, qualquer guia acima de ~750 KB
+   * estoura o limite de 1 MB por documento e derruba o salvamento inteiro.
+   * Guia digitada à mão não tem original e sai sem estes campos.
+   */
+  pdfUrl?: string;
+  pdfPath?: string;
   criadoEm: string;
 }
 
@@ -416,8 +463,8 @@ export interface AnimalEntrada {
   regime: RegimeAnimal;
   localId?: string;
   localNome?: string;
-  brincoNumero?: string;         // 15 dígitos atribuído
-  brincoControle?: string;       // 6 dígitos
+  sisbov?: string;               // 15 dígitos atribuído
+  manejo?: string;               // 6 dígitos
   chipRfid?: string;             // chip lido
   pedidoBrincoId?: string;
   status: "pendente" | "concluido" | "pulado";
@@ -436,6 +483,107 @@ export interface ProcessoSisbov {
   observacoes?: string;
   farmedaId: string;
   criadoEm: string;
+}
+
+// ─── Protocolos sanitários ───────────────────────────────────────────────────
+
+/** Um produto dentro de um protocolo. */
+export interface ItemProtocolo {
+  tipo: EventoSanitario["tipo"];
+  produto: string;               // Ex: "Aftosa", "Ivermectina 1%"
+  dose?: string;                 // Ex: "5ml", "1ml/50kg"
+  via?: EventoSanitario["via"];
+  /** Dias até o animal poder ir para abate. */
+  carenciaDias?: number;
+  /** Dias até a próxima aplicação, quando o produto exige reforço. */
+  repetirEmDias?: number;
+}
+
+/**
+ * Conjunto de aplicações feitas juntas no mangueiro.
+ *
+ * Cadastrado uma vez e aplicado com um toque por animal: digitar produto, dose
+ * e via a cada bicho é o que faz o operador pular o registro sanitário.
+ */
+export interface ProtocoloSanitario {
+  id?: string;
+  nome: string;                  // Ex: "Entrada Padrão"
+  descricao?: string;
+  itens: ItemProtocolo[];
+  ativo: boolean;
+  farmedaId: string;
+  criadoEm: string;
+}
+
+// ─── Eventos: o histórico do animal ──────────────────────────────────────────
+
+/**
+ * Tudo que acontece com um animal vira um evento. A rastreabilidade exigida
+ * pela certificadora é a leitura dos eventos de um animal em ordem de data.
+ *
+ * A coleção é append-only: correções entram como um novo evento de estorno,
+ * nunca alterando o anterior — é isso que sustenta a auditoria.
+ */
+export type TipoEvento =
+  | "cadastro"      // animal identificado e incluído no rebanho
+  | "pesagem"
+  | "movimentacao"  // trocou de regime, piquete ou baia
+  | "sanitario"     // vacina, vermífugo, tratamento
+  | "saida"         // venda, abate, morte, transferência para fora
+  | "certificacao"  // resposta da certificadora
+  | "estorno";      // desfaz um evento anterior
+
+/** Onde o animal estava ou passou a estar. */
+export interface LocalEvento {
+  regime?: RegimeAnimal;
+  localId?: string;
+  localNome?: string;
+}
+
+/** Aplicação sanitária registrada em um evento. */
+export interface AplicacaoSanitaria {
+  protocoloId?: string;
+  protocoloNome?: string;
+  tipo: EventoSanitario["tipo"];
+  produto: string;
+  dose?: string;
+  via?: EventoSanitario["via"];
+  lote?: string;
+  validade?: string;         // ISO 8601
+  carenciaAte?: string;      // ISO 8601 — liberação para abate
+  proximaEm?: string;        // ISO 8601 — próxima dose
+}
+
+export interface Evento {
+  id?: string;
+  animalId: string;
+  sisbov: string;
+  manejo: string;
+  tipo: TipoEvento;
+  dataHora: string;              // ISO 8601 — quando o fato ocorreu
+
+  // Contexto
+  processoId?: string;
+  gtaId?: string;
+  /** Faixa etária da GTA usada no cadastro, ex: "13 a 24 meses". */
+  faixaEtaria?: string;
+  observacoes?: string;
+
+  // Carga específica por tipo
+  peso?: number;                 // pesagem
+  de?: LocalEvento;              // movimentacao / saida
+  para?: LocalEvento;            // movimentacao / cadastro
+  sanitario?: AplicacaoSanitaria;
+  motivoSaida?: Bovino["motivoSaida"];
+  eventoEstornadoId?: string;    // estorno
+
+  // Autoria
+  usuarioId: string;
+  usuarioNome?: string;
+  origem: "mangueiro" | "manual" | "importacao";
+
+  farmedaId: string;
+  criadoEm: string;              // ISO 8601 — quando foi gravado
 }
 
 export type TipoProcesso = "entrada" | "saida" | "transferencia";

@@ -3,7 +3,12 @@ import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import Aviso from "@/services/alerta";
+import EventoService from "@/services/eventoService";
+import { BadgeProprietario, COR_TERCEIRO } from "@/components/TarjaProprietario";
 import { PesagemFirestoreService } from "@/services/pesagemFirestoreService";
+import { ehTerceiro, filtrarPorProprietario, FiltroProprietario } from "@/services/embarque";
+import { chipConfereComManejo, manejoFromSisbov, validarSisbov } from "@/services/sisbov";
 import {
   Bovino,
   CategoriaBovino,
@@ -13,7 +18,6 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Modal,
   ScrollView,
@@ -49,12 +53,14 @@ export default function Animais() {
   const [carregando, setCarregando] = useState(true);
   const [termo, setTermo] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState<FiltroCategoria>("todos");
+  const [filtroProprietario, setFiltroProprietario] = useState<FiltroProprietario>("todos");
   const [modalVisible, setModalVisible] = useState(false);
   const [animalSelecionado, setAnimalSelecionado] = useState<Bovino | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   // Form state
-  const [formChipId, setFormChipId] = useState("");
+  const [formSisbov, setFormSisbov] = useState("");
+  const [formChipRfid, setFormChipRfid] = useState("");
   const [formNome, setFormNome] = useState("");
   const [formCategoria, setFormCategoria] = useState<CategoriaBovino>(CategoriaBovino.NOVILHO);
   const [formRaca, setFormRaca] = useState("Nelore");
@@ -72,7 +78,7 @@ export default function Animais() {
       setAnimais(lista);
       setFiltrados(lista);
     } catch (e) {
-      Alert.alert("Erro", "Não foi possível carregar os animais.");
+      Aviso.alert("Erro", "Não foi possível carregar os animais.");
     } finally {
       setCarregando(false);
     }
@@ -85,21 +91,27 @@ export default function Animais() {
     if (filtroCategoria !== "todos") {
       lista = lista.filter((a) => a.categoria === filtroCategoria);
     }
+    lista = filtrarPorProprietario(lista, filtroProprietario);
     if (termo) {
       const t = termo.toLowerCase();
       lista = lista.filter(
         (a) =>
           a.nome.toLowerCase().includes(t) ||
-          a.chipId.includes(termo) ||
+          a.sisbov.includes(termo) ||
+          a.manejo.includes(termo) ||
+          (a.chipRfid?.includes(termo) ?? false) ||
           a.raca.toLowerCase().includes(t)
       );
     }
     setFiltrados(lista);
-  }, [animais, filtroCategoria, termo]);
+  }, [animais, filtroCategoria, filtroProprietario, termo]);
+
+  const totalTerceiros = animais.filter((a) => ehTerceiro(a.proprietario)).length;
 
   function abrirNovoAnimal() {
     setAnimalSelecionado(null);
-    setFormChipId("");
+    setFormSisbov("");
+    setFormChipRfid("");
     setFormNome("");
     setFormCategoria(CategoriaBovino.NOVILHO);
     setFormRaca("Nelore");
@@ -111,7 +123,8 @@ export default function Animais() {
 
   function abrirEditar(animal: Bovino) {
     setAnimalSelecionado(animal);
-    setFormChipId(animal.chipId);
+    setFormSisbov(animal.sisbov);
+    setFormChipRfid(animal.chipRfid ?? "");
     setFormNome(animal.nome);
     setFormCategoria(animal.categoria);
     setFormRaca(animal.raca);
@@ -122,18 +135,31 @@ export default function Animais() {
   }
 
   async function salvar() {
-    if (!formChipId || formChipId.length !== 15 || !/^\d+$/.test(formChipId)) {
-      Alert.alert("Atenção", "O número SISBOV deve ter exatamente 15 dígitos numéricos.");
+    if (!validarSisbov(formSisbov)) {
+      Aviso.alert(
+        "Número SISBOV inválido",
+        "Confira os 15 dígitos: o último é o dígito verificador e não confere."
+      );
+      return;
+    }
+    const manejo = manejoFromSisbov(formSisbov);
+    if (formChipRfid && !chipConfereComManejo(formChipRfid, manejo)) {
+      Aviso.alert(
+        "Chip não confere",
+        `O chip informado deveria terminar em ${manejo.slice(-4)}, como o número de manejo ${manejo}.`
+      );
       return;
     }
     if (!formNome.trim()) {
-      Alert.alert("Atenção", "Informe um nome ou identificação para o animal.");
+      Aviso.alert("Atenção", "Informe um nome ou identificação para o animal.");
       return;
     }
     setSalvando(true);
     try {
       const dados: Omit<Bovino, "id"> = {
-        chipId: formChipId,
+        sisbov: formSisbov,
+        manejo,
+        chipRfid: formChipRfid || undefined,
         nome: formNome.trim(),
         categoria: formCategoria,
         raca: formRaca,
@@ -147,13 +173,26 @@ export default function Animais() {
       if (animalSelecionado?.id) {
         await PesagemFirestoreService.atualizarBovino({ ...dados, id: animalSelecionado.id }, fazendaId);
       } else {
-        await PesagemFirestoreService.salvarBovino({ ...dados, id: `bovino_${Date.now()}` }, fazendaId);
+        // O SISBOV é a identidade do animal, então serve de id do documento e
+        // impede que o mesmo brinco seja cadastrado duas vezes.
+        const novo: Bovino = { ...dados, id: formSisbov };
+        await PesagemFirestoreService.salvarBovino(novo, fazendaId);
+        await EventoService.registrar(
+          novo,
+          {
+            tipo: "cadastro",
+            dataHora: new Date().toISOString(),
+            usuarioId: "manual",
+            origem: "manual",
+          },
+          fazendaId
+        );
       }
 
       setModalVisible(false);
       carregar();
     } catch (e) {
-      Alert.alert("Erro", "Não foi possível salvar o animal.");
+      Aviso.alert("Erro", "Não foi possível salvar o animal.");
     } finally {
       setSalvando(false);
     }
@@ -181,9 +220,10 @@ export default function Animais() {
           <View style={{ flex: 1 }}>
             <Text style={styles.cardNome}>{item.nome}</Text>
             <Text style={styles.cardChip}>
-              <Feather name="radio" size={12} color="#888" /> {item.chipId}
+              <Feather name="tag" size={12} color="#888" /> {item.manejo} · {item.sisbov}
             </Text>
             <Text style={styles.cardInfo}>{item.raca} · {item.sexo === "M" ? "Macho" : "Fêmea"}</Text>
+            <BadgeProprietario proprietario={item.proprietario} />
           </View>
           <View style={styles.cardRight}>
             {item.pesoAnterior ? (
@@ -211,7 +251,7 @@ export default function Animais() {
           <TouchableOpacity
             style={styles.cardAcaoBtn}
             onPress={() =>
-              router.push({ pathname: "/(app)/pesagem-balanca", params: { animalId: item.id, chipId: item.chipId } })
+              router.push({ pathname: "/(app)/pesagem-balanca", params: { animalId: item.id, sisbov: item.sisbov } })
             }
           >
             <Feather name="activity" size={13} color="#E65100" />
@@ -270,6 +310,31 @@ export default function Animais() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        {/* Próprios × terceiros — só aparece quando há animal de terceiro */}
+        {totalTerceiros > 0 && (
+          <View style={[styles.propRow, { marginHorizontal: containerPadding }]}>
+            {([
+              { valor: "todos", rotulo: `Todos (${animais.length})` },
+              { valor: "proprios", rotulo: `Próprios (${animais.length - totalTerceiros})` },
+              { valor: "terceiros", rotulo: `Terceiros (${totalTerceiros})` },
+            ] as const).map((opcao) => {
+              const ativo = filtroProprietario === opcao.valor;
+              const cor = opcao.valor === "terceiros" ? COR_TERCEIRO : primaryColor;
+              return (
+                <TouchableOpacity
+                  key={opcao.valor}
+                  style={[styles.propChip, ativo && { backgroundColor: cor, borderColor: cor }]}
+                  onPress={() => setFiltroProprietario(opcao.valor)}
+                >
+                  <Text style={[styles.propChipText, ativo && { color: "#fff" }]}>
+                    {opcao.rotulo}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Busca */}
         <View style={[styles.busca, { marginHorizontal: containerPadding }]}>
@@ -335,9 +400,26 @@ export default function Animais() {
             <Text style={styles.label}>Número SISBOV (15 dígitos) *</Text>
             <TextInput
               style={styles.input}
-              value={formChipId}
-              onChangeText={setFormChipId}
+              value={formSisbov}
+              onChangeText={setFormSisbov}
               placeholder="000000000000000"
+              keyboardType="numeric"
+              maxLength={15}
+            />
+            {formSisbov.length === 15 && (
+              <Text style={validarSisbov(formSisbov) ? styles.dica : styles.dicaErro}>
+                {validarSisbov(formSisbov)
+                  ? `Manejo ${manejoFromSisbov(formSisbov)} · dígito verificador confere`
+                  : "Dígito verificador não confere — revise o número"}
+              </Text>
+            )}
+
+            <Text style={styles.label}>Chip RFID (15 dígitos)</Text>
+            <TextInput
+              style={styles.input}
+              value={formChipRfid}
+              onChangeText={setFormChipRfid}
+              placeholder="Opcional — termina igual ao manejo"
               keyboardType="numeric"
               maxLength={15}
             />
@@ -599,6 +681,29 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#555",
     marginBottom: 6,
+  },
+  propRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
+  propChip: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    alignItems: "center",
+  },
+  propChipText: { fontSize: 12, fontWeight: "600", color: "#666" },
+  dica: {
+    fontSize: 12,
+    color: "#2E7D32",
+    marginTop: -8,
+    marginBottom: 12,
+  },
+  dicaErro: {
+    fontSize: 12,
+    color: "#C62828",
+    fontWeight: "600",
+    marginTop: -8,
+    marginBottom: 12,
   },
   input: {
     borderWidth: 1,

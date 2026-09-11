@@ -1,32 +1,30 @@
 import { Platform } from "react-native";
 import {
   addDocument,
+  deleteDocument,
   fsOrderBy,
-  fsWhere,
+  getCollection,
   getDocument,
   queryCollection,
   setDocument,
   updateDocument,
 } from "./firestoreService";
-import { Bovino, GTA, LocalAnimal, PedidoBrinco, ProcessoMangueiro, ProcessoSisbov } from "./weighing.types";
+import { gerarCsvPlanilhaCampo } from "./planilhaCampo";
+import { manejoFromSisbov, sisbovByIndex, totalSisbov } from "./sisbov";
+import { Bovino, BrincoAnulado, GTA, LocalAnimal, PedidoBrinco, ProcessoMangueiro, ProcessoSisbov } from "./weighing.types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Extrai o número de controle (6 dígitos) do brinco de 15 dígitos (posições 9-14, base-1) */
-export function controleFromBrinco(brinco: string): string {
-  return brinco.slice(8, 14);
-}
-
-/** Calcula o brinco de 15 dígitos a partir do brinco inicial + índice (0-based) */
-export function brincoByIndex(brincoInicial: string, index: number): string {
-  const num = BigInt(brincoInicial) + BigInt(index);
-  return num.toString().padStart(15, "0");
-}
-
-/** Calcula o total de brincos em um intervalo (inclusive) */
-export function calcularTotalBrincos(inicial: string, final: string): number {
-  return Number(BigInt(final) - BigInt(inicial)) + 1;
-}
+// As regras de numeração vivem em ./sisbov. Reexportadas aqui para quem já
+// importa deste módulo.
+export {
+  chipConfereComManejo,
+  dvSisbov,
+  manejoFromSisbov,
+  sisbovByIndex,
+  totalSisbov,
+  validarSisbov,
+} from "./sisbov";
 
 // ─── PedidoBrinco ─────────────────────────────────────────────────────────────
 
@@ -62,9 +60,9 @@ export class BrincoService {
       if (!snap.exists) return null;
       const pedido = snap.data() as PedidoBrinco;
       if (pedido.proximoIndice >= pedido.brincosTotal) return null;
-      const brinco = brincoByIndex(pedido.brincoInicial, pedido.proximoIndice);
+      const brinco = sisbovByIndex(pedido.sisbovInicial, pedido.proximoIndice);
       await updateDocument(col(fazendaId, "pedidos_brinco"), pedidoId, { proximoIndice: pedido.proximoIndice + 1 });
-      return { brinco, controle: controleFromBrinco(brinco) };
+      return { brinco, controle: manejoFromSisbov(brinco) };
     }
 
     // Native: transação atômica
@@ -75,10 +73,67 @@ export class BrincoService {
       if (!snap.exists) return null;
       const pedido = snap.data() as PedidoBrinco;
       if (pedido.proximoIndice >= pedido.brincosTotal) return null;
-      const brinco = brincoByIndex(pedido.brincoInicial, pedido.proximoIndice);
+      const brinco = sisbovByIndex(pedido.sisbovInicial, pedido.proximoIndice);
       tx.update(ref, { proximoIndice: pedido.proximoIndice + 1 });
-      return { brinco, controle: controleFromBrinco(brinco) };
+      return { brinco, controle: manejoFromSisbov(brinco) };
     });
+  }
+
+  /**
+   * Devolve o último brinco reservado ao pedido.
+   *
+   * Só faz sentido logo após a reserva (desfazer no mangueiro): se outro
+   * animal já consumiu um brinco depois deste, decrementar reaproveitaria um
+   * número já aplicado. Por isso nunca desce abaixo de zero e o desfazer é
+   * oferecido apenas para a última gravação.
+   */
+  static async devolverBrinco(pedidoId: string, fazendaId: string): Promise<void> {
+    const snap = await getDocument(col(fazendaId, "pedidos_brinco"), pedidoId);
+    if (!snap.exists) return;
+    const pedido = snap.data() as PedidoBrinco;
+    await updateDocument(col(fazendaId, "pedidos_brinco"), pedidoId, {
+      proximoIndice: Math.max(0, (pedido.proximoIndice ?? 0) - 1),
+    });
+  }
+
+  /**
+   * Descarta o próximo brinco da sequência sem aplicá-lo em animal.
+   *
+   * Brinco vem com defeito de fábrica, quebra na hora de aplicar ou o chip
+   * nasce morto — nesses casos o número precisa sair da fila. Fica registrado
+   * em `anulados` porque a certificadora cobra explicação por número que
+   * saltou: sem o registro, o brinco parece ter desaparecido.
+   */
+  static async anularBrinco(
+    pedidoId: string,
+    motivo: BrincoAnulado["motivo"],
+    usuarioId: string,
+    fazendaId: string,
+    observacoes?: string
+  ): Promise<BrincoAnulado | null> {
+    const snap = await getDocument(col(fazendaId, "pedidos_brinco"), pedidoId);
+    if (!snap.exists) return null;
+
+    const pedido = snap.data() as PedidoBrinco;
+    if (pedido.proximoIndice >= pedido.brincosTotal) return null;
+
+    const sisbov = sisbovByIndex(pedido.sisbovInicial, pedido.proximoIndice);
+    const anulado: BrincoAnulado = {
+      sisbov,
+      manejo: manejoFromSisbov(sisbov),
+      motivo,
+      observacoes,
+      dataHora: new Date().toISOString(),
+      usuarioId,
+    };
+
+    await updateDocument(col(fazendaId, "pedidos_brinco"), pedidoId, {
+      proximoIndice: pedido.proximoIndice + 1,
+      anulados: [...(pedido.anulados ?? []), anulado],
+      atualizadoEm: new Date().toISOString(),
+    });
+
+    return anulado;
   }
 
   // ─── GTA ────────────────────────────────────────────────────────────────────
@@ -110,6 +165,26 @@ export class BrincoService {
     await updateDocument(col(fazendaId, "gtas"), gtaId, { status, atualizadoEm: new Date().toISOString() });
   }
 
+  /**
+   * Exclui uma GTA importada errado, junto do PDF arquivado.
+   *
+   * Só faz sentido para guia ainda não vinculada a processo: se já houver
+   * animais manejados contra ela, apagar deixaria o processo sem a origem que
+   * a certificadora vai pedir. Quem chama garante isso.
+   */
+  static async excluirGta(gta: GTA, fazendaId: string): Promise<void> {
+    await deleteDocument(col(fazendaId, "gtas"), gta.id!);
+    if (gta.pdfPath) {
+      try {
+        const { deleteFile } = await import("./storageService");
+        await deleteFile(gta.pdfPath);
+      } catch (e) {
+        // O documento já saiu; PDF órfão no bucket não atrapalha o uso.
+        console.warn("[GTA] documento excluído, mas o PDF permaneceu:", e);
+      }
+    }
+  }
+
   // ─── LocalAnimal ────────────────────────────────────────────────────────────
 
   static async salvarLocal(local: LocalAnimal, fazendaId: string): Promise<string> {
@@ -121,9 +196,19 @@ export class BrincoService {
     return doc.id;
   }
 
+  /**
+   * Locais ativos da fazenda.
+   *
+   * Filtra e ordena em memória: `where + orderBy` exigiria índice composto, e
+   * são dezenas de piquetes e baias — não vale fazer a tela depender de um
+   * índice publicado.
+   */
   static async listarLocais(fazendaId: string): Promise<LocalAnimal[]> {
-    const snap = await queryCollection(col(fazendaId, "locais"), [fsWhere("ativo", "==", true), fsOrderBy("nome")]);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LocalAnimal));
+    const snap = await getCollection(...col(fazendaId, "locais"));
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as LocalAnimal))
+      .filter((l) => l.ativo !== false)
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   }
 
   static async excluirLocal(localId: string, fazendaId: string): Promise<void> {
@@ -155,61 +240,9 @@ export class BrincoService {
 
   // ─── Planilha de Campo ────────────────────────────────────────────────────────
 
-  /**
-   * Gera o CSV da planilha de campo no formato esperado pela certificadora.
-   * Inclui cabeçalho compatível com Excel (UTF-8 BOM).
-   */
-  static gerarCsvPlanilhaCampo(
-    animais: Bovino[],
-    gtas: GTA[],
-    fazendaNome: string
-  ): string {
-    const now = new Date().toLocaleDateString("pt-BR");
-    const gtaMap = new Map(gtas.map((g) => [g.id, `${g.serie} ${g.numero}`]));
-
-    const header = [
-      "Nº",
-      "Brinco SISBOV (15 dígitos)",
-      "Nº Controle",
-      "Nome / Ident.",
-      "Raça",
-      "Sexo",
-      "Categoria",
-      "Regime",
-      "Local",
-      "Peso Entrada (kg)",
-      "Data Entrada",
-      "GTA",
-      "Chip RFID",
-      "SISBOV Certificado",
-    ].join(";");
-
-    const linhas = animais.map((a, i) => {
-      const controle = a.chipId.length === 15 ? controleFromBrinco(a.chipId) : "";
-      const gta = a.metadados?.gtaId ? (gtaMap.get(a.metadados.gtaId) ?? "") : "";
-      const regime = a.metadados?.regime ?? "";
-      const local = a.metadados?.localNome ?? a.piqueteId ?? "";
-
-      return [
-        i + 1,
-        a.chipId,
-        controle,
-        a.nome,
-        a.raca,
-        a.sexo === "M" ? "Macho" : "Fêmea",
-        a.categoria,
-        regime,
-        local,
-        a.pesoEntrada?.toFixed(1) ?? "",
-        a.dataEntrada ? new Date(a.dataEntrada).toLocaleDateString("pt-BR") : "",
-        gta,
-        a.metadados?.chipRfid ?? "",
-        a.sisbov?.certificado ? "Sim" : "Não",
-      ].join(";");
-    });
-
-    // UTF-8 BOM para que Excel abra com acentos corretos
-    return "\uFEFF" + `Planilha de Campo - ${fazendaNome} - ${now}\n` + header + "\n" + linhas.join("\n");
+  /** Planilha de campo da certificadora. Implementação em ./planilhaCampo. */
+  static gerarCsvPlanilhaCampo(animais: Bovino[]): string {
+    return gerarCsvPlanilhaCampo(animais);
   }
 
   // ─── ProcessoMangueiro ───────────────────────────────────────────────────────
@@ -242,6 +275,20 @@ export class BrincoService {
   }
 
   /** Incrementa animaisManejados — transação atômica no native, seq no web. */
+  /** Reverte um animal do contador do processo (desfazer no mangueiro). */
+  static async decrementarManejados(processoId: string, fazendaId: string): Promise<void> {
+    const snap = await getDocument(col(fazendaId, "processos_mangueiro"), processoId);
+    if (!snap.exists) return;
+    const p = snap.data() as ProcessoMangueiro;
+    const manejados = Math.max(0, (p.animaisManejados ?? 0) - 1);
+    await updateDocument(col(fazendaId, "processos_mangueiro"), processoId, {
+      animaisManejados: manejados,
+      // Voltar abaixo do previsto reabre o processo que tinha sido concluído
+      status: manejados >= (p.totalAnimaisPrevisto ?? 0) ? "concluido" : "em_andamento",
+      atualizadoEm: new Date().toISOString(),
+    });
+  }
+
   static async incrementarManejados(processoId: string, fazendaId: string): Promise<void> {
     if (Platform.OS === "web") {
       const snap = await getDocument(col(fazendaId, "processos_mangueiro"), processoId);

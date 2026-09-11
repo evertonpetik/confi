@@ -29,6 +29,11 @@ if (Platform.OS === "web") {
     localCache: persistentLocalCache({
       tabManager: persistentMultipleTabManager(),
     }),
+    // Sem isto, qualquer objeto com um campo `undefined` é rejeitado inteiro
+    // ("Unsupported field value: undefined"). Campos opcionais são a regra
+    // nos nossos modelos — GTA sem rota, protocolo sem descrição, processo
+    // sem pedido de brinco — e a gravação falhava por causa deles.
+    ignoreUndefinedProperties: true,
   });
   auth = getAuth(app);
   storage = getStorage(app);

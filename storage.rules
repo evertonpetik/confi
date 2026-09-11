@@ -1,0 +1,37 @@
+rules_version = '2';
+
+// Regras do Storage.
+//
+// Guarda os PDFs das GTAs (fazendas/{id}/gtas/) e os anexos enviados pelo app.
+// A permissão acompanha a do Firestore: o usuário só alcança as fazendas da
+// sua lista em /usuarios/{uid}.
+//
+// Publicar com:  firebase deploy --only storage
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function perfil() {
+      return firestore.get(/databases/(default)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function temAcessoAFazenda(fazendaId) {
+      return autenticado() && (perfil().tipo == 'admin' || fazendaId in perfil().fazendas);
+    }
+
+    match /fazendas/{fazendaId}/{caminho=**} {
+      allow read: if temAcessoAFazenda(fazendaId);
+      // Teto de 20 MB: uma GTA em PDF não passa de alguns megabytes, e o
+      // limite evita que um upload errado encha o bucket.
+      allow write: if temAcessoAFazenda(fazendaId) && request.resource.size < 20 * 1024 * 1024;
+    }
+
+    match /{caminho=**} {
+      allow read, write: if false;
+    }
+  }
+}

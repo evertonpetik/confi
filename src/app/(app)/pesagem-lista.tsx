@@ -59,7 +59,9 @@ export const TelaListaPesagem: React.FC<TelaListaPesagemProps> = ({
         bovinos.filter(
           (b) =>
             b.nome.toLowerCase().includes(termo_lower) ||
-            b.chipId.includes(termo) ||
+            b.sisbov.includes(termo) ||
+            b.manejo.includes(termo) ||
+            (b.chipRfid?.includes(termo) ?? false) ||
             b.categoria.toLowerCase().includes(termo_lower)
         )
       );
@@ -114,7 +116,7 @@ export const TelaListaPesagem: React.FC<TelaListaPesagemProps> = ({
       <View style={styles.itemConteudo}>
         <Text style={styles.nomeAnimal}>{item.nome}</Text>
         <View style={styles.detalhes}>
-          <Text style={styles.detalheTxt}>Chip: {item.chipId}</Text>
+          <Text style={styles.detalheTxt}>Manejo: {item.manejo}</Text>
           <Text style={styles.detalheTxt}>
             {item.categoria} • {item.sexo === "M" ? "Macho" : "Fêmea"}
           </Text>
@@ -178,7 +180,7 @@ export const TelaListaPesagem: React.FC<TelaListaPesagemProps> = ({
         <FlatList
           data={filtrados}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id || item.chipId}
+          keyExtractor={(item) => item.id || item.sisbov}
           style={styles.lista}
           contentContainerStyle={styles.listaConteudo}
         />

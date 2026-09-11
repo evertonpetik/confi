@@ -337,3 +337,140 @@ exports.consultarGTA = onRequest(
     }
   }
 );
+
+// ─── Extração de texto de PDF de e-GTA ───────────────────────────────────────
+//
+// Só converte PDF em texto. A leitura dos campos fica no cliente
+// (src/services/gtaParser.ts), num lugar só, testada contra GTAs reais.
+//
+// Existe porque o navegador extrai via DecompressionStream, API que não há em
+// React Native — sem isto, importar GTA no celular seria impossível.
+
+const zlib = require("zlib");
+
+/** Descomprime um stream FlateDecode, tolerando lixo antes do cabeçalho zlib. */
+function inflatePdfStream(buf) {
+  for (const offset of [0, 1, 2, 3]) {
+    if (offset >= buf.length) break;
+    const slice = offset === 0 ? buf : buf.subarray(offset);
+    for (const fn of [zlib.inflateSync, zlib.inflateRawSync]) {
+      try {
+        return fn(slice);
+      } catch {
+        /* tenta a próxima combinação */
+      }
+    }
+  }
+  return null;
+}
+
+/** Concatena as strings desenhadas pelos operadores Tj e TJ, na ordem do stream. */
+function extrairTextoDesenhado(content) {
+  const partes = [];
+  const opRe = /\(((?:\\.|[^()\\])*)\)\s*Tj|\[((?:[^[\]])*)\]\s*TJ/g;
+  const desescapar = (s) =>
+    s
+      .replace(/\\([0-7]{1,3})/g, (_, o) => String.fromCharCode(parseInt(o, 8)))
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, " ")
+      .replace(/\\t/g, " ")
+      .replace(/\\(.)/g, "$1");
+
+  let m;
+  while ((m = opRe.exec(content)) !== null) {
+    if (m[1] !== undefined) {
+      partes.push(desescapar(m[1]));
+    } else if (m[2] !== undefined) {
+      const pRe = /\(((?:\\.|[^()\\])*)\)/g;
+      let p;
+      while ((p = pRe.exec(m[2])) !== null) partes.push(desescapar(p[1]));
+    }
+    partes.push(" ");
+  }
+  return partes.join("");
+}
+
+function extrairTextoPdf(buffer) {
+  const conteudos = [];
+  let pos = 0;
+
+  while (pos < buffer.length) {
+    const match = buffer.indexOf("stream", pos);
+    if (match === -1) break;
+
+    // "endstream" contém "stream": ignora essa ocorrência
+    if (match >= 3 && buffer.toString("latin1", match - 3, match) === "end") {
+      pos = match + 1;
+      continue;
+    }
+
+    let dataStart = match + "stream".length;
+    if (buffer[dataStart] === 0x0d) dataStart++;
+    if (buffer[dataStart] === 0x0a) dataStart++;
+
+    const hdr = buffer.toString("latin1", Math.max(0, match - 1024), match);
+    const fim = buffer.indexOf("endstream", dataStart);
+    if (fim === -1) break;
+
+    if (hdr.includes("/FlateDecode")) {
+      let dataEnd = fim;
+      while (dataEnd > dataStart && (buffer[dataEnd - 1] === 0x0a || buffer[dataEnd - 1] === 0x0d)) {
+        dataEnd--;
+      }
+      const inflado = inflatePdfStream(buffer.subarray(dataStart, dataEnd));
+      if (inflado) conteudos.push(inflado.toString("latin1"));
+    }
+
+    pos = fim + "endstream".length;
+  }
+
+  return conteudos
+    .map(extrairTextoDesenhado)
+    .join("\n")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+
+exports.extrairTextoGta = onRequest(
+  {
+    region: "southamerica-east1",
+    timeoutSeconds: 60,
+    memory: "512MiB",
+    cors: true,
+  },
+  async (req, res) => {
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
+    try {
+      // Um envio pode trazer várias GTAs: o operador joga os PDFs do lote de
+      // uma vez em vez de importar guia por guia.
+      const pdfs = Array.isArray(req.body?.pdfs) ? req.body.pdfs : [req.body?.pdf];
+      if (!pdfs.length || !pdfs[0]) {
+        res.status(400).json({ error: "Envie 'pdf' (base64) ou 'pdfs' (lista de base64)" });
+        return;
+      }
+      if (pdfs.length > 20) {
+        res.status(400).json({ error: "Máximo de 20 PDFs por requisição" });
+        return;
+      }
+
+      const resultados = pdfs.map((b64, i) => {
+        try {
+          const texto = extrairTextoPdf(Buffer.from(b64, "base64"));
+          if (!texto) return { indice: i, erro: "Não foi possível extrair texto do PDF" };
+          return { indice: i, texto };
+        } catch (e) {
+          return { indice: i, erro: e.message || "Falha na extração" };
+        }
+      });
+
+      res.json({ resultados });
+    } catch (error) {
+      console.error("Erro ao extrair texto da GTA:", error);
+      res.status(500).json({ error: error.message || "Erro interno" });
+    }
+  }
+);

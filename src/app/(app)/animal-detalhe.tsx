@@ -1,11 +1,17 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LinhaDoTempo } from "@/components/LinhaDoTempo";
+import { TarjaProprietario } from "@/components/TarjaProprietario";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import Aviso from "@/services/alerta";
+import { ehTerceiro, nomeProprietario } from "@/services/embarque";
+import EventoService, { semEstornados } from "@/services/eventoService";
 import { PesagemFirestoreService } from "@/services/pesagemFirestoreService";
 import {
   Bovino,
+  Evento,
   EventoSanitario,
   GanhoDiarioPeso,
   Pesagem,
@@ -15,7 +21,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   ScrollView,
@@ -107,7 +112,8 @@ export default function AnimalDetalhe() {
   const [pesagens, setPesagens] = useState<Pesagem[]>([]);
   const [eventos, setEventos] = useState<EventoSanitario[]>([]);
   const [carregando, setCarregando] = useState(true);
-  const [abaAtiva, setAbaAtiva] = useState<"info" | "pesagens" | "sanidade">("info");
+  const [abaAtiva, setAbaAtiva] = useState<"info" | "historico" | "pesagens" | "sanidade">("info");
+  const [historico, setHistorico] = useState<Evento[]>([]);
 
   // Modal de evento sanitário
   const [modalEvento, setModalEvento] = useState(false);
@@ -125,15 +131,17 @@ export default function AnimalDetalhe() {
     if (!animalId || !fazendaId) return;
     setCarregando(true);
     try {
-      const [lista, pesagensData, eventosData] = await Promise.all([
+      const [lista, pesagensData, eventosData, historicoData] = await Promise.all([
         PesagemFirestoreService.listarBovinos(fazendaId),
         PesagemFirestoreService.obterPesagensAnimal(animalId, fazendaId, 50),
         PesagemFirestoreService.listarEventosSanitarios(animalId, fazendaId),
+        EventoService.listarDoAnimal(animalId, fazendaId),
       ]);
       const found = lista.find((b) => b.id === animalId) ?? null;
       setAnimal(found);
       setPesagens(pesagensData);
       setEventos(eventosData);
+      setHistorico(semEstornados(historicoData));
     } finally {
       setCarregando(false);
     }
@@ -167,7 +175,7 @@ export default function AnimalDetalhe() {
 
   async function salvarEvento() {
     if (!formEvDesc.trim() || !formEvData) {
-      Alert.alert("Atenção", "Informe a descrição e a data do evento.");
+      Aviso.alert("Atenção", "Informe a descrição e a data do evento.");
       return;
     }
     setSalvandoEvento(true);
@@ -187,17 +195,41 @@ export default function AnimalDetalhe() {
         criadoEm: eventoSelecionado?.criadoEm ?? new Date().toISOString(),
       };
       await PesagemFirestoreService.salvarEventoSanitario(ev, fazendaId);
+
+      // Só a primeira gravação entra na linha do tempo; uma edição corrige o
+      // registro sanitário sem inventar uma segunda aplicação no histórico.
+      if (!eventoSelecionado && animal) {
+        await EventoService.registrar(
+          animal,
+          {
+            tipo: "sanitario",
+            dataHora: ev.dataAplicacao,
+            sanitario: {
+              tipo: ev.tipo,
+              produto: ev.descricao,
+              dose: ev.dose,
+              via: ev.via,
+              proximaEm: ev.proxAplicacao,
+            },
+            observacoes: ev.observacoes,
+            usuarioId: ev.tecnico || "sistema",
+            origem: "manual",
+          },
+          fazendaId
+        );
+      }
+
       setModalEvento(false);
       carregar();
     } catch {
-      Alert.alert("Erro", "Não foi possível salvar o evento.");
+      Aviso.alert("Erro", "Não foi possível salvar o evento.");
     } finally {
       setSalvandoEvento(false);
     }
   }
 
   async function excluirEvento(ev: EventoSanitario) {
-    Alert.alert("Confirmar", `Excluir "${ev.descricao}"?`, [
+    Aviso.alert("Confirmar", `Excluir "${ev.descricao}"?`, [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Excluir",
@@ -255,11 +287,14 @@ export default function AnimalDetalhe() {
                 {animal.nome}
               </Text>
               <Text style={styles.subtitulo}>
-                {animal.chipId} · {animal.raca} · {animal.sexo === "M" ? "Macho" : "Fêmea"}
+                {animal.manejo} · {animal.raca} · {animal.sexo === "M" ? "Macho" : "Fêmea"}
               </Text>
             </View>
             {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
           </View>
+
+          {/* De quem é o animal — logo abaixo do nome, antes de qualquer dado */}
+          <TarjaProprietario proprietario={animal.proprietario} />
 
           {/* Status badges */}
           <View style={styles.badgeRow}>
@@ -271,7 +306,7 @@ export default function AnimalDetalhe() {
             <View style={[styles.badge, { backgroundColor: primaryColor + "18" }]}>
               <Text style={[styles.badgeText, { color: primaryColor }]}>{animal.categoria}</Text>
             </View>
-            {animal.sisbov?.certificado && (
+            {animal.certificacao?.certificado && (
               <View style={[styles.badge, { backgroundColor: "#E3F2FD" }]}>
                 <Feather name="check-circle" size={12} color="#1565C0" />
                 <Text style={[styles.badgeText, { color: "#1565C0", marginLeft: 4 }]}>SISBOV</Text>
@@ -313,7 +348,7 @@ export default function AnimalDetalhe() {
             onPress={() =>
               router.push({
                 pathname: "/(app)/pesagem-balanca",
-                params: { animalId: animal.id, chipId: animal.chipId },
+                params: { animalId: animal.id, sisbov: animal.sisbov },
               })
             }
           >
@@ -323,25 +358,45 @@ export default function AnimalDetalhe() {
 
           {/* Abas */}
           <View style={styles.tabs}>
-            {(["info", "pesagens", "sanidade"] as const).map((aba) => (
+            {(["info", "historico", "pesagens", "sanidade"] as const).map((aba) => (
               <TouchableOpacity
                 key={aba}
                 style={[styles.tab, abaAtiva === aba && { borderBottomColor: primaryColor, borderBottomWidth: 2 }]}
                 onPress={() => setAbaAtiva(aba)}
               >
                 <Text style={[styles.tabText, abaAtiva === aba && { color: primaryColor, fontWeight: "700" }]}>
-                  {aba === "info" ? "Informações" : aba === "pesagens" ? "Pesagens" : "Sanidade"}
+                  {aba === "info"
+                    ? "Informações"
+                    : aba === "historico"
+                    ? "Histórico"
+                    : aba === "pesagens"
+                    ? "Pesagens"
+                    : "Sanidade"}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* ABA: Histórico — a linha do tempo que a certificadora audita */}
+          {abaAtiva === "historico" && (
+            <View style={styles.abaConteudo}>
+              <LinhaDoTempo eventos={historico} />
+            </View>
+          )}
 
           {/* ABA: Informações / SISBOV */}
           {abaAtiva === "info" && (
             <View style={styles.abaConteudo}>
               <View style={styles.secao}>
                 <Text style={[styles.secaoTitulo, { color: primaryColor }]}>Identificação</Text>
-                <InfoRow label="Nº Inscrição (SISBOV)" value={animal.chipId} />
+                <InfoRow label="Nº Inscrição (SISBOV)" value={animal.sisbov} />
+                <InfoRow label="Nº de Manejo" value={animal.manejo} />
+                {animal.chipRfid && <InfoRow label="Chip RFID" value={animal.chipRfid} />}
+                <InfoRow
+                  label="Proprietário"
+                  value={nomeProprietario(animal)}
+                  destaque={ehTerceiro(animal.proprietario)}
+                />
                 <InfoRow label="Nome / Apelido" value={animal.nome} />
                 <InfoRow label="Raça" value={animal.raca} />
                 <InfoRow label="Sexo" value={animal.sexo === "M" ? "Macho" : "Fêmea"} />
@@ -357,17 +412,17 @@ export default function AnimalDetalhe() {
                 <Text style={[styles.secaoTitulo, { color: primaryColor }]}>Rastreabilidade SISBOV</Text>
                 <InfoRow
                   label="Certificado"
-                  value={animal.sisbov?.certificado ? "Sim" : "Não"}
-                  destaque={animal.sisbov?.certificado}
+                  value={animal.certificacao?.certificado ? "Sim" : "Não"}
+                  destaque={animal.certificacao?.certificado}
                 />
-                {animal.sisbov?.dataCertificacao && (
+                {animal.certificacao?.dataCertificacao && (
                   <InfoRow
                     label="Data de certificação"
-                    value={new Date(animal.sisbov.dataCertificacao).toLocaleDateString("pt-BR")}
+                    value={new Date(animal.certificacao.dataCertificacao).toLocaleDateString("pt-BR")}
                   />
                 )}
-                {animal.sisbov?.codigoEstabelecimento && (
-                  <InfoRow label="Estabelecimento (MAPA)" value={animal.sisbov.codigoEstabelecimento} />
+                {animal.certificacao?.codigoEstabelecimento && (
+                  <InfoRow label="Estabelecimento (MAPA)" value={animal.certificacao.codigoEstabelecimento} />
                 )}
                 <InfoRow label="Propriedade de origem" value={animal.propriedadeOrigem ?? "—"} />
                 <InfoRow
@@ -424,7 +479,7 @@ export default function AnimalDetalhe() {
                     onPress={() =>
                       router.push({
                         pathname: "/(app)/pesagem-balanca",
-                        params: { animalId: animal.id, chipId: animal.chipId },
+                        params: { animalId: animal.id, sisbov: animal.sisbov },
                       })
                     }
                   >

@@ -6,7 +6,12 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "verificar:sisbov": "npx --yes tsx scripts/verificar-sisbov.ts",
+    "verificar:gta": "npx --yes tsx scripts/verificar-gta.ts",
+    "verificar:pdf": "node scripts/verificar-extracao-pdf.js",
+    "verificar": "npm run verificar:sisbov && npm run verificar:gta && npm run verificar:pdf && npm run verificar:planilha && npx tsc --noEmit",
+    "verificar:planilha": "npx --yes tsx scripts/verificar-planilha.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

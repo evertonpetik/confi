@@ -1,0 +1,37 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "eventos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "animalId", "order": "ASCENDING" },
+        { "fieldPath": "dataHora", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "eventos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "processoId", "order": "ASCENDING" },
+        { "fieldPath": "dataHora", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "eventos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tipo", "order": "ASCENDING" },
+        { "fieldPath": "dataHora", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "movimentacoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "animalId", "order": "ASCENDING" },
+        { "fieldPath": "dataHora", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

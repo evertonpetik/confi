@@ -105,7 +105,7 @@ export const TelaLeituraPesagem: React.FC<TelaLeituraPesagemProps> = ({
         <View>
           <Text style={styles.titulo}>Pesando...</Text>
           <Text style={styles.animal}>{bovino.nome}</Text>
-          <Text style={styles.chip}>{bovino.chipId}</Text>
+          <Text style={styles.chip}>{bovino.manejo} · {bovino.sisbov}</Text>
         </View>
         <TouchableOpacity onPress={handleCancelar} style={styles.btnFechar}>
           <Text style={styles.textoBtnFechar}>✕</Text>
@@ -122,7 +122,7 @@ export const TelaLeituraPesagem: React.FC<TelaLeituraPesagemProps> = ({
 
           {leituraChipAtual ? (
             <View>
-              <Text style={styles.chipValor}>{leituraChipAtual.chipId}</Text>
+              <Text style={styles.chipValor}>{leituraChipAtual.chipRfid}</Text>
               <Text style={styles.chipStatus}>
                 {leituraChipAtual.valido ? "✓ Válido" : "✗ Inválido"}
               </Text>

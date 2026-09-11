@@ -6,6 +6,7 @@
 import { Alert } from "react-native";
 import { obterBluetoothService } from "./bluetoothService";
 import { PesagemFirestoreService } from "./pesagemFirestoreService";
+import { manejoFromSisbov, sisbovByIndex } from "./sisbov";
 import { PesagemLogger } from "./pesagemLogger";
 import {
   Bovino,
@@ -116,7 +117,7 @@ export class TesteManualPesagem {
     // Registra listener de chip
     bluetoothService.registrarListener("chip", (leitura: LeituraChip) => {
       PesagemLogger.info("TESTE_3", "Chip recebido!", {
-        chipId: leitura.chipId,
+        chipRfid: leitura.chipRfid,
         sinal: leitura.sinSinal,
         valido: leitura.valido,
         timestamp: leitura.timestamp,
@@ -176,7 +177,7 @@ export class TesteManualPesagem {
     // Setup listeners
     bluetoothService.registrarListener("chip", (leitura: LeituraChip) => {
       if (leitura.valido) {
-        chipLido = leitura.chipId;
+        chipLido = leitura.chipRfid;
         PesagemLogger.info("TESTE_4", "Chip validado", { chip: chipLido });
       }
     });
@@ -223,10 +224,14 @@ export class TesteManualPesagem {
       return false;
     }
 
-    // Cria bovino de teste
+    // Cria bovino de teste. Não há brinco reservado num teste de hardware, então
+    // o SISBOV é sintético e o único número real é o chip lido do transponder.
+    const sisbovTeste = sisbovByIndex("10550050999999", 0);
     const bovinoTeste: Bovino = {
       id: `teste_${Date.now()}`,
-      chipId: chipLido,
+      sisbov: sisbovTeste,
+      manejo: manejoFromSisbov(sisbovTeste),
+      chipRfid: chipLido ?? undefined,
       nome: "Animal de Teste",
       categoria: CategoriaBovino.BOIS,
       raca: "Nelore",
@@ -246,12 +251,12 @@ export class TesteManualPesagem {
     // Cria pesagem
     const pesagem: Pesagem = {
       animalId: bovinoTeste.id!,
-      chipId: chipLido!,
+      sisbov: bovinoTeste.sisbov,
       peso: pesoLido,
       dataHora: new Date().toISOString(),
       tipoPesagem: TipoMovimentacao.ENTRADA,
       leituraChip: {
-        chipId: chipLido!,
+        chipRfid: chipLido!,
         timestamp: new Date().toISOString(),
         sinSinal: -65,
         dispositivoId: rfidId,

@@ -8,7 +8,10 @@ import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import Aviso from "@/services/alerta";
 import BrincoService from "@/services/brincoService";
+import { ArquivoPdf, conferirLoteDeGtas, importarGtas } from "@/services/gtaImportService";
+import { uploadBase64 } from "@/services/storageService";
 import { GTA, PedidoBrinco, ProcessoMangueiro, TipoProcesso } from "@/services/weighing.types";
 import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
@@ -16,7 +19,6 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   ScrollView,
@@ -62,6 +64,27 @@ function formatarGrupoAnimal(animal: GTA["animais"][number]) {
     .trim();
 
   return `${sexo}: ${animal.quantidade} ${faixaFormatada ? `(${faixaFormatada})` : ""}`.trim();
+}
+
+/**
+ * Arquiva o PDF da guia no Storage e devolve a referência para o documento.
+ *
+ * Falha no upload não derruba a importação: perder o anexo é contornável
+ * (dá para juntar o PDF na mão), perder os dados lidos não é.
+ */
+async function arquivarPdf(
+  item: { gta?: Partial<GTA>; pdfBase64?: string },
+  fazendaId: string
+): Promise<{ pdfUrl?: string; pdfPath?: string }> {
+  if (!item.pdfBase64) return {};
+  const nome = `${item.gta?.serie ?? ""}${item.gta?.numero ?? Date.now()}`.replace(/[^\w-]+/g, "");
+  const caminho = `fazendas/${fazendaId}/gtas/${nome}.pdf`;
+  try {
+    return { pdfUrl: await uploadBase64(caminho, item.pdfBase64), pdfPath: caminho };
+  } catch (e) {
+    console.warn("[GTA] não foi possível arquivar o PDF:", e);
+    return {};
+  }
 }
 
 // ─── Componente principal ────────────────────────────────────────────────────
@@ -115,11 +138,24 @@ export default function ProcessosPage() {
 
   const carregarGtasEPedidos = useCallback(async () => {
     if (!fazendaId) return;
-    const [listaGtas, listaPedidos] = await Promise.all([
+    const [listaGtas, listaPedidos, listaProcessos] = await Promise.all([
       BrincoService.listarGtas(fazendaId),
       BrincoService.listarPedidos(fazendaId),
+      BrincoService.listarProcessosMangueiro(fazendaId),
     ]);
-    setGtasExistentes(listaGtas.filter((g) => g.status === "ativa"));
+
+    // Uma GTA pertence a um processo só. Oferecer de novo uma guia já vinculada
+    // levaria a contar os mesmos animais duas vezes e a divergir da
+    // certificadora no fechamento dos dois processos.
+    const jaVinculadas = new Set(
+      listaProcessos
+        .filter((p) => p.status !== "cancelado")
+        .flatMap((p) => p.gtaIds ?? [])
+    );
+
+    setGtasExistentes(
+      listaGtas.filter((g) => g.status === "ativa" && g.id && !jaVinculadas.has(g.id))
+    );
     setPedidos(listaPedidos.filter((p) => p.ativo && p.proximoIndice < p.brincosTotal));
   }, [fazendaId]);
 
@@ -129,34 +165,112 @@ export default function ProcessosPage() {
 
   // ─── Importar PDF da GTA ──────────────────────────────────────────────────
 
+  /**
+   * Importa as GTAs do embarque a partir dos PDFs.
+   *
+   * Aceita vários de uma vez porque um lote costuma vir em mais de uma guia, e
+   * conferir guia por guia na mão é onde entra erro de digitação. Guias que o
+   * parser leu por completo são salvas direto; as que ficaram incompletas
+   * abrem o formulário para conferência.
+   */
   const importarPdf = async () => {
-    if (Platform.OS !== "web") {
-      Alert.alert("Indisponível", "A importação de PDF só está disponível no navegador.");
-      return;
-    }
     setImportandoPdf(true);
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: "application/pdf" });
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "application/pdf",
+        multiple: true,
+      });
       if (result.canceled || !result.assets?.length) return;
-      const file = (result.assets[0] as any).file as File | undefined;
-      if (!file) {
-        Alert.alert("Erro", "Não foi possível acessar o PDF.");
+
+      const arquivos: ArquivoPdf[] = [];
+      for (const asset of result.assets) {
+        const resposta = await fetch(asset.uri);
+        arquivos.push({
+          nome: asset.name ?? "GTA.pdf",
+          bytes: new Uint8Array(await resposta.arrayBuffer()),
+        });
+      }
+
+      const importadas = await importarGtas(arquivos);
+      const lidas = importadas.filter((i) => i.gta?.numero);
+      const falhas = importadas.filter((i) => !i.gta?.numero);
+
+      // Um PDF só continua abrindo o formulário: é o caso em que o operador
+      // quer conferir campo a campo antes de gravar.
+      if (importadas.length === 1) {
+        const unica = importadas[0];
+        if (!unica.gta?.numero) {
+          Aviso.alert("Não foi possível ler", unica.erro ?? "PDF ilegível.");
+          return;
+        }
+        const refPdf = await arquivarPdf(unica, fazendaId);
+        setGtaForm({ ...unica.gta, ...refPdf, status: "ativa", farmedaId: fazendaId });
+        setShowGtaForm(true);
         return;
       }
-      const { parseGtaFromFile } = await import("../../services/gtaPdfParser.web");
-      const parcial = await parseGtaFromFile(file);
-      setGtaForm({ ...parcial, status: "ativa", farmedaId: fazendaId });
-      setShowGtaForm(true);
-    } catch {
-      Alert.alert("Erro", "Não foi possível processar o PDF.");
+
+      const salvas: GTA[] = [];
+      for (const item of lidas) {
+        const gta = {
+          ...item.gta,
+          // O PDF original acompanha a guia: a certificadora recebe os dois.
+          ...(await arquivarPdf(item, fazendaId)),
+          status: "ativa",
+          farmedaId: fazendaId,
+        } as Omit<GTA, "id" | "criadoEm">;
+        const id = await BrincoService.cadastrarGta(gta, fazendaId);
+        salvas.push({ ...gta, id, criadoEm: new Date().toISOString() });
+      }
+
+      setGtasSelecionadas((prev) => [...prev, ...salvas]);
+      setGtasExistentes((prev) => [...salvas, ...prev]);
+
+      const avisos = conferirLoteDeGtas(salvas);
+      const totalAnimais = salvas.reduce((s, g) => s + (g.total ?? 0), 0);
+      const resumo = [
+        `${salvas.length} GTA(s) importada(s) · ${totalAnimais} animais`,
+        ...falhas.map((f) => `${f.arquivo}: ${f.erro}`),
+        ...avisos,
+      ].join("\n");
+
+      Aviso.alert(falhas.length || avisos.length ? "Importado com avisos" : "Importado", resumo);
+    } catch (e) {
+      console.error(e);
+      Aviso.alert("Erro", "Não foi possível processar os PDFs.");
     } finally {
       setImportandoPdf(false);
     }
   };
 
+  const excluirGta = (gta: GTA) => {
+    Aviso.alert(
+      "Excluir GTA",
+      `GTA ${gta.serie}/${gta.numero} · ${gta.total} animais
+
+` +
+        "A guia e o PDF arquivado serão apagados. Use quando a importação leu os dados errado.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await BrincoService.excluirGta(gta, fazendaId);
+              setGtasSelecionadas((prev) => prev.filter((g) => g.id !== gta.id));
+              await carregarGtasEPedidos();
+            } catch {
+              Aviso.alert("Erro", "Não foi possível excluir a GTA.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const salvarGta = async () => {
     if (!gtaForm.numero?.trim()) {
-      Alert.alert("Campo obrigatório", "Informe o número da GTA.");
+      Aviso.alert("Campo obrigatório", "Informe o número da GTA.");
       return;
     }
     setSalvandoGta(true);
@@ -191,6 +305,9 @@ export default function ProcessosPage() {
         dataEmissao: gtaForm.dataEmissao ?? new Date().toISOString().split("T")[0],
         dataValidade: gtaForm.dataValidade ?? "",
         unidadeExpedidora: gtaForm.unidadeExpedidora,
+        // Preservados quando a guia veio de PDF: guia digitada à mão não tem.
+        pdfUrl: gtaForm.pdfUrl,
+        pdfPath: gtaForm.pdfPath,
         farmedaId: fazendaId,
         status: "ativa",
       };
@@ -201,7 +318,7 @@ export default function ProcessosPage() {
       setShowGtaForm(false);
       setGtaForm({});
     } catch {
-      Alert.alert("Erro", "Não foi possível salvar a GTA.");
+      Aviso.alert("Erro", "Não foi possível salvar a GTA.");
     } finally {
       setSalvandoGta(false);
     }
@@ -232,15 +349,15 @@ export default function ProcessosPage() {
 
   const criarProcesso = async () => {
     if (!nomeProcesso.trim()) {
-      Alert.alert("Campo obrigatório", "Informe o nome do processo.");
+      Aviso.alert("Campo obrigatório", "Informe o nome do processo.");
       return;
     }
     if (gtasSelecionadas.length === 0) {
-      Alert.alert("GTAs necessárias", "Adicione pelo menos uma GTA ao processo.");
+      Aviso.alert("GTAs necessárias", "Adicione pelo menos uma GTA ao processo.");
       return;
     }
     if (tipoSelecionado === "entrada" && !pedidoSelecionado) {
-      Alert.alert("Pedido de brincos", "Selecione um pedido de brincos para processos de entrada.");
+      Aviso.alert("Pedido de brincos", "Selecione um pedido de brincos para processos de entrada.");
       return;
     }
 
@@ -266,9 +383,9 @@ export default function ProcessosPage() {
       await BrincoService.criarProcessoMangueiro(processo, fazendaId);
       setShowModal(false);
       await carregarProcessos();
-      Alert.alert("Sucesso", "Processo criado! Agora vá para Pesagem e selecione este processo.");
+      Aviso.alert("Sucesso", "Processo criado! Agora vá para Pesagem e selecione este processo.");
     } catch {
-      Alert.alert("Erro", "Não foi possível criar o processo.");
+      Aviso.alert("Erro", "Não foi possível criar o processo.");
     } finally {
       setSalvando(false);
     }
@@ -431,7 +548,7 @@ export default function ProcessosPage() {
                         ? <ActivityIndicator size="small" color={primaryColor} />
                         : <Feather name="upload" size={16} color={primaryColor} />}
                       <Text style={[styles.btnGtaAcaoText, { color: primaryColor }]}>
-                        {Platform.OS === "web" ? "Importar PDF" : "Nova GTA"}
+                        {importandoPdf ? "Lendo PDFs…" : "Importar PDF"}
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -488,14 +605,24 @@ export default function ProcessosPage() {
                       {gtasExistentes
                         .filter((g) => !gtasSelecionadas.find((s) => s.id === g.id))
                         .map((gta) => (
-                          <TouchableOpacity key={gta.id} style={styles.gtaCardExistente} onPress={() => toggleGta(gta)}>
-                            <View style={{ flex: 1 }}>
+                          <View key={gta.id} style={styles.gtaCardExistente}>
+                            <TouchableOpacity style={{ flex: 1 }} onPress={() => toggleGta(gta)}>
                               <Text style={styles.gtaNumero}>GTA {gta.serie}/{gta.numero}</Text>
                               <Text style={styles.gtaInfo}>{gta.procFazenda || gta.procNome}</Text>
-                              <Text style={styles.gtaAnimais}>{gta.total} animais · {new Date(gta.dataEmissao).toLocaleDateString("pt-BR")}</Text>
-                            </View>
-                            <Feather name="plus-circle" size={20} color={primaryColor} />
-                          </TouchableOpacity>
+                              <Text style={styles.gtaAnimais}>
+                                {gta.total} animais · {gta.totalMachos}M / {gta.totalFemeas}F ·{" "}
+                                {new Date(gta.dataEmissao).toLocaleDateString("pt-BR")}
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => toggleGta(gta)} style={styles.gtaAcaoIcone}>
+                              <Feather name="plus-circle" size={20} color={primaryColor} />
+                            </TouchableOpacity>
+                            {/* Guia importada errado: só aparece aqui porque a
+                                lista já exclui as vinculadas a algum processo. */}
+                            <TouchableOpacity onPress={() => excluirGta(gta)} style={styles.gtaAcaoIcone}>
+                              <Feather name="trash-2" size={18} color="#C62828" />
+                            </TouchableOpacity>
+                          </View>
                         ))}
                     </>
                   )}
@@ -539,7 +666,7 @@ export default function ProcessosPage() {
                             <View style={{ flex: 1 }}>
                               <Text style={styles.pedidoNumero}>Pedido {p.numeroPedidoMapa}</Text>
                               <Text style={styles.pedidoInfo}>{p.fabrica} · {p.brincosTotal - p.proximoIndice} brincos disponíveis</Text>
-                              <Text style={styles.pedidoRange}>{p.brincoInicial} → {p.brincoFinal}</Text>
+                              <Text style={styles.pedidoRange}>{p.sisbovInicial} → {p.sisbovFinal}</Text>
                             </View>
                             {pedidoSelecionado?.id === p.id && <Feather name="check-circle" size={18} color={primaryColor} />}
                           </TouchableOpacity>
@@ -690,16 +817,33 @@ function ProcessoCard({ processo, primaryColor }: { processo: ProcessoMangueiro;
       {/* GTAs */}
       <Text style={cardStyles.gtaInfo}>{processo.gtaIds.length} GTA(s) · Aberto em {new Date(processo.dataAbertura).toLocaleDateString("pt-BR")}</Text>
 
-      {/* Botão ir para pesagem */}
-      {(processo.status === "aberto" || processo.status === "em_andamento") && (
-        <TouchableOpacity
-          style={[cardStyles.btnPesagem, { borderColor: primaryColor }]}
-          onPress={() => router.push({ pathname: "/pesagem-balanca", params: { processoId: processo.id } })}
-        >
-          <Feather name="activity" size={14} color={primaryColor} />
-          <Text style={[cardStyles.btnPesagemText, { color: primaryColor }]}>Ir para Pesagem</Text>
-        </TouchableOpacity>
-      )}
+      <View style={cardStyles.acoesRow}>
+        {(processo.status === "aberto" || processo.status === "em_andamento") && (
+          <TouchableOpacity
+            style={[cardStyles.btnPesagem, { borderColor: primaryColor }]}
+            onPress={() => router.push({ pathname: "/pesagem-balanca", params: { processoId: processo.id } })}
+          >
+            <Feather name="activity" size={14} color={primaryColor} />
+            <Text style={[cardStyles.btnPesagemText, { color: primaryColor }]}>Ir para Pesagem</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Fechamento fica disponível assim que houver animal manejado: é lá
+            que se confere o lote e se gera o que vai à certificadora. */}
+        {processo.animaisManejados > 0 && (
+          <TouchableOpacity
+            style={[cardStyles.btnPesagem, { borderColor: "#2E7D32" }]}
+            // `as any`: os tipos de rota do expo-router só são regerados ao
+            // subir o dev server, e esta tela é nova.
+            onPress={() => router.push({ pathname: "/fechar-processo" as any, params: { processoId: processo.id } })}
+          >
+            <Feather name="check-square" size={14} color="#2E7D32" />
+            <Text style={[cardStyles.btnPesagemText, { color: "#2E7D32" }]}>
+              {processo.status === "concluido" ? "Ver fechamento" : "Fechar"}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
@@ -788,6 +932,7 @@ const styles = StyleSheet.create({
   btnGtaAcaoText: { fontWeight: "600", fontSize: 14 },
 
   gtaCardSelecionada: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 10, backgroundColor: "#E8F5E9", marginBottom: 8 },
+  gtaAcaoIcone: { padding: 6 },
   gtaCardExistente: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 10, backgroundColor: "#F8F8F8", borderWidth: 1, borderColor: "#E0E0E0", marginBottom: 8 },
   gtaNumero: { fontSize: 14, fontWeight: "700", color: "#1a1a1a" },
   gtaInfo: { fontSize: 12, color: "#666", marginTop: 2 },
@@ -830,6 +975,7 @@ const cardStyles = StyleSheet.create({
   progressoBar: { height: 6, borderRadius: 3, backgroundColor: "#F0F0F0", marginBottom: 8, overflow: "hidden" },
   progressoFill: { height: 6, borderRadius: 3 },
   gtaInfo: { fontSize: 12, color: "#999", marginBottom: 10 },
+  acoesRow: { flexDirection: "row", gap: 8, marginTop: 10 },
   btnPesagem: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5 },
   btnPesagemText: { fontWeight: "600", fontSize: 13 },
 });

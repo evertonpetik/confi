@@ -291,7 +291,7 @@ export const WeighingProvider: React.FC<WeighingProviderProps> = ({ children }) 
    * Identifica um animal na sessão
    */
   const identificarAnimal = useCallback((bovino: Bovino) => {
-    console.log("[Context] Animal identificado:", bovino.chipId);
+    console.log("[Context] Animal identificado:", bovino.sisbov);
     setAnimalIdentificado(bovino);
 
     setSessaoAtiva((prev) => {

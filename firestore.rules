@@ -1,0 +1,57 @@
+rules_version = '2';
+
+// Regras de acesso ao Firestore.
+//
+// Modelo: /usuarios/{uid} guarda `fazendas: string[]` e `tipo`. O usuário só
+// enxerga as fazendas da sua lista; `admin` enxerga todas.
+//
+// Publicar com:  firebase deploy --only firestore:rules
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function perfil() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function ehAdmin() {
+      return autenticado() && perfil().tipo == 'admin';
+    }
+
+    function temAcessoAFazenda(fazendaId) {
+      return autenticado() && (ehAdmin() || fazendaId in perfil().fazendas);
+    }
+
+    // Cada um lê e edita o próprio perfil; admin administra todos.
+    match /usuarios/{uid} {
+      allow read: if autenticado() && (request.auth.uid == uid || ehAdmin());
+      allow create: if autenticado() && request.auth.uid == uid;
+      allow update, delete: if ehAdmin() || (autenticado() && request.auth.uid == uid);
+    }
+
+    // A fazenda e tudo que está debaixo dela — bovinos, eventos, protocolos,
+    // gtas, processos, pedidos de brinco, locais — seguem a mesma permissão.
+    match /fazendas/{fazendaId} {
+      allow read: if temAcessoAFazenda(fazendaId);
+      allow write: if ehAdmin();
+
+      match /{documento=**} {
+        allow read, write: if temAcessoAFazenda(fazendaId);
+      }
+    }
+
+    // Coleções legadas na raiz, anteriores ao modelo multi-fazenda.
+    match /lotes/{documento=**} {
+      allow read, write: if autenticado();
+    }
+
+    // Nada fora do que está declarado acima.
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}

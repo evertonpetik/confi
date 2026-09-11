@@ -1,19 +1,25 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { COR_TERCEIRO, TarjaProprietario } from "@/components/TarjaProprietario";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
-import BrincoService, { brincoByIndex, controleFromBrinco } from "@/services/brincoService";
+import Aviso from "@/services/alerta";
+import BrincoService from "@/services/brincoService";
+import { ehTerceiro } from "@/services/embarque";
+import EventoService, { NovoEvento, semEstornados } from "@/services/eventoService";
+import { faixasDoProcesso, FaixaProcesso, saldoDasFaixas } from "@/services/faixasProcesso";
+import { chipConfereComManejo, manejoFromSisbov, sisbovByIndex } from "@/services/sisbov";
 import { PesagemFirestoreService } from "@/services/pesagemFirestoreService";
+import ProtocoloService, { aplicacoesDosProtocolos, eventoSanitarioDaAplicacao } from "@/services/protocoloService";
 import serialService from "@/services/serialService";
-import { Bovino, CategoriaBovino, GTA, PedidoBrinco, ProcessoMangueiro } from "@/services/weighing.types";
+import { Bovino, CategoriaBovino, GTA, LeituraChip, LeituraPeso, LocalAnimal, PedidoBrinco, ProcessoMangueiro, ProtocoloSanitario, RegimeAnimal, StatusPeso } from "@/services/weighing.types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated, Modal, Platform,
   ScrollView,
   StyleSheet,
@@ -35,6 +41,13 @@ const CATEGORIAS_BOVINO: { value: CategoriaBovino; label: string }[] = [
   { value: CategoriaBovino.TOUROS, label: "Touro (>24m)" },
   { value: CategoriaBovino.VACAS, label: "Vaca (adulta)" },
   { value: CategoriaBovino.BOIS, label: "Boi castrado" },
+];
+
+const REGIMES: { value: RegimeAnimal; label: string }[] = [
+  { value: RegimeAnimal.PASTO, label: "Pasto" },
+  { value: RegimeAnimal.CONFINAMENTO, label: "Confinam." },
+  { value: RegimeAnimal.BOITEL, label: "Boitel" },
+  { value: RegimeAnimal.SEMI_CONFINAMENTO, label: "Semi-conf." },
 ];
 
 const TIPO_LABEL: Record<string, string> = {
@@ -78,6 +91,8 @@ const LEITURAS_ESTABILIDADE = 3;
 const VARIACAO_ESTABILIDADE_KG = 0.5;
 // Abaixo disso é plataforma vazia/zerada, não um animal
 const PESO_MINIMO_VALIDO_KG = 10;
+// Janela para conferir o número na tela antes da gravação automática
+const SEGUNDOS_RAJADA = 3;
 
 type ConexaoEstado = "desconectado" | "conectando" | "conectado" | "erro";
 
@@ -91,13 +106,13 @@ interface DispositivoInfo {
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function PesagemBalanca() {
-  const { animalId: paramAnimalId, chipId: paramChipId, processoId: paramProcessoId } = useLocalSearchParams<{
+  const { animalId: paramAnimalId, sisbov: paramSisbov, processoId: paramProcessoId } = useLocalSearchParams<{
     animalId?: string;
-    chipId?: string;
+    sisbov?: string;
     processoId?: string;
   }>();
 
-  const { selectedFazendaId, user } = useAuth();
+  const { selectedFazendaId, selectedFazendaNome, user } = useAuth();
   const { primaryColor } = useTheme();
   const {
     isTablet,
@@ -146,24 +161,54 @@ export default function PesagemBalanca() {
   const [pedidoBrinco, setPedidoBrinco] = useState<PedidoBrinco | null>(null);
   const [proximoBrinco, setProximoBrinco] = useState<{ brinco: string; controle: string } | null>(null);
   const [carregandoProcessos, setCarregandoProcessos] = useState(false);
+  /** Compras de brinco disponíveis, trocáveis no meio do lote. */
+  const [pedidosDisponiveis, setPedidosDisponiveis] = useState<PedidoBrinco[]>([]);
+  const [showSelecionarPedido, setShowSelecionarPedido] = useState(false);
+  const [anulando, setAnulando] = useState(false);
 
   // ─── Campos extras para processo de entrada ───────────────────────────────
+  // Estes valores são o "padrão do lote": ficam entre animais e só mudam
+  // quando o bicho foge do padrão. Num lote uniforme não se toca em nada.
   const [sexoAnimal, setSexoAnimal] = useState<"M" | "F">("M");
   const [racaAnimal, setRacaAnimal] = useState(RACAS_BOVINOS[0]);
   const [corAnimal, setCorAnimal] = useState("");
-  const [idadeMeses, setIdadeMeses] = useState("");
   const [categoriaAnimal, setCategoriaAnimal] = useState<CategoriaBovino>(CategoriaBovino.NOVILHO);
+  const [faixaSelecionada, setFaixaSelecionada] = useState<FaixaProcesso | null>(null);
+  const [regimeAnimal, setRegimeAnimal] = useState<RegimeAnimal>(RegimeAnimal.PASTO);
+  const [localSelecionado, setLocalSelecionado] = useState<LocalAnimal | null>(null);
+  const [protocolos, setProtocolos] = useState<ProtocoloSanitario[]>([]);
+  const [protocolosAtivos, setProtocolosAtivos] = useState<string[]>([]);
+  const [tipoProprietario, setTipoProprietario] = useState<"proprio" | "terceiro">("proprio");
+  const [nomeTerceiro, setNomeTerceiro] = useState("");
+  const [cpfCnpjTerceiro, setCpfCnpjTerceiro] = useState("");
+
+  // ─── Faixas etárias e locais ──────────────────────────────────────────────
+  const [locais, setLocais] = useState<LocalAnimal[]>([]);
+  /** Quantos animais já foram cadastrados em cada faixa neste processo. */
+  const [manejadosPorFaixa, setManejadosPorFaixa] = useState<Record<string, number>>({});
+
+  /** Último animal gravado, para permitir desfazer logo após a gravação. */
+  const [ultimoGravado, setUltimoGravado] = useState<{
+    bovino: Bovino;
+    faixaLabel?: string;
+    pedidoBrincoId?: string;
+  } | null>(null);
+  const [desfazendo, setDesfazendo] = useState(false);
+
+  /** Grava sozinho após a contagem quando peso e chip já estão prontos. */
+  const [modoRajada, setModoRajada] = useState(false);
+  const [contagemRajada, setContagemRajada] = useState<number | null>(null);
 
   // ─── Estado de leitura ─────────────────────────────────────────────────────
   const [pesoAtual, setPesoAtual] = useState<number | null>(null);
   const [pesoEstavel, setPesoEstavel] = useState(false);
-  const [chipLido, setChipLido] = useState<string | null>(paramChipId ?? null);
+  const [chipLido, setChipLido] = useState<string | null>(paramSisbov ?? null);
   const [animal, setAnimal] = useState<Bovino | null>(null);
   const [buscandoAnimal, setBuscandoAnimal] = useState(false);
 
   // ─── Entrada manual ────────────────────────────────────────────────────────
   const [modoManual, setModoManual] = useState(false);
-  const [inputChip, setInputChip] = useState(paramChipId ?? "");
+  const [inputChip, setInputChip] = useState(paramSisbov ?? "");
   const [inputPeso, setInputPeso] = useState("");
   const [inputObs, setInputObs] = useState("");
 
@@ -198,7 +243,7 @@ export default function PesagemBalanca() {
       if (!fazendaId || chip.length !== 15) return;
       setBuscandoAnimal(true);
       try {
-        const found = await PesagemFirestoreService.obterBovinoPorChip(chip, fazendaId);
+        const found = await PesagemFirestoreService.obterBovinoPorNumero(chip, fazendaId);
         setAnimal(found);
         if (!found) {
           // Chip lido mas não cadastrado — avisa sem bloquear
@@ -217,7 +262,7 @@ export default function PesagemBalanca() {
       PesagemFirestoreService.listarBovinos(fazendaId).then((lista) => {
         const found = lista.find((b) => b.id === paramAnimalId) ?? null;
         setAnimal(found);
-        if (found) setChipLido(found.chipId);
+        if (found) setChipLido(found.chipRfid ?? null);
       });
     }
   }, [paramAnimalId, fazendaId]);
@@ -228,11 +273,13 @@ export default function PesagemBalanca() {
     const svc = obterBluetoothSvc();
     bleService.current = svc;
 
-    // Registra callbacks globais (mesmos usados pelo serial)
-    svc.registrarListener("peso", (leitura: any) =>
-      handlePesoRecebido(leitura.peso, leitura.status === "estavel")
+    // Registra callbacks globais (mesmos usados pelo serial).
+    // Tipados explicitamente: com `any` uma renomeação de campo passa batido
+    // pelo compilador e o chip chega como undefined em silêncio.
+    svc.registrarListener("peso", (leitura: LeituraPeso) =>
+      handlePesoRecebido(leitura.peso, leitura.status === StatusPeso.ESTAVEL)
     );
-    svc.registrarListener("chip", (leitura: any) => handleChipRecebido(leitura.chipId));
+    svc.registrarListener("chip", (leitura: LeituraChip) => handleChipRecebido(leitura.chipRfid));
 
     // Carrega MACs e baud salvos
     Promise.all([
@@ -261,7 +308,7 @@ export default function PesagemBalanca() {
         setMacBalanca(mac);
         await AsyncStorage.setItem(STORAGE_MAC_BALANCA, mac);
       } else {
-        Alert.alert("BLE", "Não foi possível conectar à balança. Verifique se está ligada e próxima.");
+        Aviso.alert("BLE", "Não foi possível conectar à balança. Verifique se está ligada e próxima.");
       }
     } finally {
       setBleBalancaConectando(false);
@@ -281,7 +328,7 @@ export default function PesagemBalanca() {
         setMacRfid(mac);
         await AsyncStorage.setItem(STORAGE_MAC_RFID, mac);
       } else {
-        Alert.alert("BLE", "Não foi possível conectar ao leitor RFID.");
+        Aviso.alert("BLE", "Não foi possível conectar ao leitor RFID.");
       }
     } finally {
       setBleRfidConectando(false);
@@ -355,8 +402,8 @@ export default function PesagemBalanca() {
       const ped = pedidos.find((p) => p.id === proc.pedidoBrincoId) ?? null;
       setPedidoBrinco(ped);
       if (ped) {
-        const nb = brincoByIndex(ped.brincoInicial, ped.proximoIndice);
-        setProximoBrinco({ brinco: nb, controle: controleFromBrinco(nb) });
+        const nb = sisbovByIndex(ped.sisbovInicial, ped.proximoIndice);
+        setProximoBrinco({ brinco: nb, controle: manejoFromSisbov(nb) });
       }
     } else {
       setPedidoBrinco(null);
@@ -369,7 +416,57 @@ export default function PesagemBalanca() {
       const sexoGta = primeiraGta.animais[0].sexo;
       if (sexoGta === "M" || sexoGta === "F") setSexoAnimal(sexoGta);
     }
+
+    // Locais e protocolos disponíveis no manejo
+    const [listaLocais, listaProtocolos] = await Promise.all([
+      BrincoService.listarLocais(fazendaId),
+      ProtocoloService.listar(fazendaId),
+    ]);
+    setLocais(listaLocais);
+    setProtocolos(listaProtocolos);
+
+    // Reconstrói a contagem por faixa a partir dos eventos já gravados, para o
+    // contador sobreviver a recarregar a página no meio do lote.
+    if (proc.id) {
+      const eventos = await EventoService.listarDoProcesso(proc.id, fazendaId);
+      const contagem: Record<string, number> = {};
+      for (const ev of semEstornados(eventos)) {
+        if (ev.tipo === "cadastro" && ev.faixaEtaria) {
+          contagem[ev.faixaEtaria] = (contagem[ev.faixaEtaria] ?? 0) + 1;
+        }
+      }
+      setManejadosPorFaixa(contagem);
+    }
   }, [fazendaId]);
+
+  // ─── Faixas consolidadas das GTAs do processo ─────────────────────────────
+  const faixas = useMemo(() => faixasDoProcesso(gtasProcesso), [gtasProcesso]);
+  const saldoFaixas = useMemo(
+    () => saldoDasFaixas(faixas, manejadosPorFaixa),
+    [faixas, manejadosPorFaixa]
+  );
+  const locaisDoRegime = useMemo(
+    () => locais.filter((l) => l.regime === regimeAnimal),
+    [locais, regimeAnimal]
+  );
+
+  // Seleciona sozinho a primeira faixa que ainda tem saldo: no caso comum de
+  // uma faixa só, o operador não precisa tocar em nada.
+  useEffect(() => {
+    if (faixaSelecionada && saldoFaixas.some((s) => s.faixa.label === faixaSelecionada.label)) return;
+    const disponivel = saldoFaixas.find((s) => !s.completa) ?? saldoFaixas[0];
+    setFaixaSelecionada(disponivel?.faixa ?? null);
+  }, [saldoFaixas, faixaSelecionada]);
+
+  // Trocar de regime invalida o local escolhido (uma baia não é um piquete).
+  useEffect(() => {
+    if (localSelecionado && localSelecionado.regime !== regimeAnimal) {
+      setLocalSelecionado(null);
+    }
+    if (!localSelecionado && locaisDoRegime.length === 1) {
+      setLocalSelecionado(locaisDoRegime[0]);
+    }
+  }, [regimeAnimal, locaisDoRegime, localSelecionado]);
 
   // ─── Callback de peso recebido (serial ou BLE) ────────────────────────────
   // `estavelEquip` vem do próprio equipamento (BPB 085 responde "+0092.0;E;" — E/Z estável,
@@ -430,7 +527,7 @@ export default function PesagemBalanca() {
       unsubPeso.current?.();
       unsubPeso.current = serialService.onWeight(handlePesoRecebido);
     } catch (err: any) {
-      Alert.alert("Erro", err.message ?? "Não foi possível conectar a balança.");
+      Aviso.alert("Erro", err.message ?? "Não foi possível conectar a balança.");
     }
   };
 
@@ -459,7 +556,7 @@ export default function PesagemBalanca() {
       unsubChip.current?.();
       unsubChip.current = serialService.onRfid(handleChipRecebido);
     } catch (err: any) {
-      Alert.alert("Erro", err.message ?? "Não foi possível conectar o leitor RFID.");
+      Aviso.alert("Erro", err.message ?? "Não foi possível conectar o leitor RFID.");
     }
   };
 
@@ -556,24 +653,77 @@ export default function PesagemBalanca() {
     : pesoAtual;
   const chipParaSalvar = modoManual ? inputChip : chipLido;
 
+  /**
+   * Conferência do chip contra o brinco que será aplicado.
+   *
+   * `null` quando não há o que comparar. `false` sinaliza que o transponder
+   * lido é de outro animal — quase sempre um bicho da baia ao lado passando
+   * perto do leitor.
+   */
+  const chipConfere: boolean | null =
+    chipParaSalvar && proximoBrinco
+      ? chipConfereComManejo(chipParaSalvar, proximoBrinco.controle)
+      : null;
+
   const salvarPesagem = async () => {
     if (!pesoParaSalvar || isNaN(pesoParaSalvar) || pesoParaSalvar <= 0) {
-      Alert.alert("Atenção", "Peso inválido. Verifique a leitura da balança.");
+      Aviso.alert("Atenção", "Peso inválido. Verifique a leitura da balança.");
       return;
     }
 
     // Fluxo especial para processo de entrada
     if (processoSelecionado?.tipo === "entrada") {
+      if (!faixaSelecionada && faixas.length > 0) {
+        Aviso.alert("Faixa etária", "Escolha a faixa de idade declarada na GTA para este animal.");
+        return;
+      }
+
+      // Animal de terceiro sem dono identificado é o cenário que leva a
+      // embarque indevido: sem o nome, ninguém consegue conferir depois.
+      if (tipoProprietario === "terceiro" && !nomeTerceiro.trim()) {
+        Aviso.alert("Proprietário", "Informe o nome do proprietário do animal de terceiro.");
+        return;
+      }
+
+      // Gravar além do declarado na GTA é a divergência que a certificadora
+      // acusa depois. Avisa aqui, quando ainda dá para conferir o animal.
+      const saldo = saldoFaixas.find((s) => s.faixa.label === faixaSelecionada?.label);
+      if (saldo?.completa) {
+        Aviso.alert(
+          "Faixa já completa",
+          `A GTA declara ${saldo.faixa.previsto} animais de ${saldo.faixa.label} e todos já foram manejados.\n\n` +
+            "Confira se a faixa deste animal é outra.",
+          [
+            { text: "Trocar faixa", style: "cancel" },
+            { text: "Gravar assim mesmo", style: "destructive", onPress: () => _persistirEntrada() },
+          ]
+        );
+        return;
+      }
+
+      if (chipConfere === false) {
+        Aviso.alert(
+          "Chip não confere com o brinco",
+          `O chip ${chipParaSalvar} deveria terminar em ${proximoBrinco!.controle.slice(-4)}, ` +
+            `como o manejo ${proximoBrinco!.controle}.\n\n` +
+            "Confira se o leitor não pegou o animal errado.",
+          [
+            { text: "Reler chip", style: "cancel" },
+            { text: "Gravar assim mesmo", style: "destructive", onPress: () => _persistirEntrada() },
+          ]
+        );
+        return;
+      }
       await _persistirEntrada();
       return;
     }
 
     if (!chipParaSalvar || chipParaSalvar.length !== 15) {
-      Alert.alert("Atenção", "Chip inválido. O número SISBOV deve ter 15 dígitos.");
+      Aviso.alert("Atenção", "Chip inválido. O número deve ter 15 dígitos.");
       return;
     }
     if (!animal) {
-      Alert.alert(
+      Aviso.alert(
         "Animal não cadastrado",
         "O chip lido não está cadastrado. Deseja registrar a pesagem assim mesmo?",
         [
@@ -583,32 +733,55 @@ export default function PesagemBalanca() {
       );
       return;
     }
+
+    // Trava de embarque: passar boi de terceiro numa saída exige confirmação
+    // com o nome do dono na tela. É o último ponto em que dá para parar o
+    // animal antes de ele subir no caminhão.
+    if (processoSelecionado?.tipo === "saida" && ehTerceiro(animal.proprietario)) {
+      Aviso.alert(
+        "Animal de terceiro no embarque",
+        `${animal.manejo} pertence a ${animal.proprietario!.nome}` +
+          `${animal.proprietario!.cpfCnpj ? ` (${animal.proprietario!.cpfCnpj})` : ""}.\n\n` +
+          "Confirme que esta saída foi combinada com o proprietário.",
+        [
+          { text: "Não embarcar", style: "cancel" },
+          { text: "Confirmar saída", style: "destructive", onPress: () => _persistir() },
+        ]
+      );
+      return;
+    }
+
     await _persistir();
   };
 
   /** Salva pesagem em processo de entrada: reserva brinco, cria bovino, registra pesagem */
   const _persistirEntrada = async () => {
     if (!processoSelecionado || !pedidoBrinco) {
-      Alert.alert("Erro", "Processo de entrada sem pedido de brincos configurado.");
+      Aviso.alert("Erro", "Processo de entrada sem pedido de brincos configurado.");
       return;
     }
     setSalvando(true);
     try {
       const reserva = await BrincoService.reservarBrinco(pedidoBrinco.id!, fazendaId);
       if (!reserva) {
-        Alert.alert("Erro", "Não há mais brincos disponíveis neste pedido.");
+        Aviso.alert("Erro", "Não há mais brincos disponíveis neste pedido.");
         return;
       }
 
-      const { brinco, controle } = reserva;
-      const idNascimento = idadeMeses
-        ? new Date(Date.now() - Number(idadeMeses) * 30 * 24 * 3600 * 1000).toISOString().split("T")[0]
-        : new Date().toISOString().split("T")[0];
+      const { brinco: sisbov, controle: manejo } = reserva;
+
+      // A data de nascimento vem do ponto médio da faixa declarada na GTA.
+      // Sem faixa (GTA sem descrição de idade) o operador fica sem base, e a
+      // data do dia é o único valor honesto disponível.
+      const idNascimento =
+        faixaSelecionada?.dataNascimento ?? new Date().toISOString().split("T")[0];
 
       const bovino: Bovino = {
-        id: brinco,
-        chipId: chipParaSalvar ?? brinco,
-        nome: `${racaAnimal} ${controle}`,
+        id: sisbov,
+        sisbov,
+        manejo,
+        chipRfid: chipParaSalvar ?? undefined,
+        nome: `${racaAnimal} ${manejo}`,
         categoria: categoriaAnimal,
         raca: racaAnimal,
         sexo: sexoAnimal,
@@ -618,13 +791,24 @@ export default function PesagemBalanca() {
         ativo: true,
         dataEntrada: new Date().toISOString(),
         pelagem: corAnimal || undefined,
-        sisbov: { numeroInscricao: brinco, certificado: false },
+        piqueteId: localSelecionado?.id,
+        proprietario:
+          tipoProprietario === "terceiro"
+            ? {
+                tipo: "terceiro",
+                nome: nomeTerceiro.trim(),
+                cpfCnpj: cpfCnpjTerceiro.trim() || undefined,
+              }
+            : { tipo: "proprio", nome: selectedFazendaNome ?? "Próprio" },
+        certificacao: { numeroInscricao: sisbov, certificado: false },
         metadados: {
-          controle,
           processoId: processoSelecionado.id,
           gtaIds: processoSelecionado.gtaIds,
-          chipRfid: chipParaSalvar,
           origem: gtasProcesso[0]?.procFazenda,
+          faixaEtaria: faixaSelecionada?.label,
+          regime: regimeAnimal,
+          localId: localSelecionado?.id,
+          localNome: localSelecionado?.nome,
         },
       };
 
@@ -632,14 +816,101 @@ export default function PesagemBalanca() {
 
       if (pesoParaSalvar && pesoParaSalvar > 0) {
         await PesagemFirestoreService.registrarPesagemRapida(
-          brinco,
-          chipParaSalvar ?? brinco,
+          sisbov,
+          sisbov,
           pesoParaSalvar,
           fazendaId,
           user?.uid ?? "sistema",
-          inputObs || undefined
+          inputObs || undefined,
+          chipParaSalvar ?? undefined
         );
       }
+
+      // Histórico: uma passagem pelo mangueiro gera o cadastro e a pesagem no
+      // mesmo instante, gravados em lote para não sobrar meia trilha.
+      const instante = new Date().toISOString();
+      const destino = {
+        regime: regimeAnimal,
+        localId: localSelecionado?.id,
+        localNome: localSelecionado?.nome,
+      };
+      const eventos: NovoEvento[] = [
+        {
+          tipo: "cadastro",
+          dataHora: instante,
+          processoId: processoSelecionado.id,
+          gtaId: faixaSelecionada?.gtaIds[0] ?? processoSelecionado.gtaIds?.[0],
+          faixaEtaria: faixaSelecionada?.label,
+          para: destino,
+          observacoes: gtasProcesso[0]?.procFazenda
+            ? `Origem: ${gtasProcesso[0].procFazenda}`
+            : undefined,
+          usuarioId: user?.uid ?? "sistema",
+          origem: "mangueiro",
+        },
+      ];
+      if (pesoParaSalvar && pesoParaSalvar > 0) {
+        eventos.push({
+          tipo: "pesagem",
+          dataHora: instante,
+          peso: pesoParaSalvar,
+          processoId: processoSelecionado.id,
+          observacoes: inputObs || undefined,
+          usuarioId: user?.uid ?? "sistema",
+          origem: "mangueiro",
+        });
+      }
+      if (localSelecionado) {
+        eventos.push({
+          tipo: "movimentacao",
+          dataHora: instante,
+          processoId: processoSelecionado.id,
+          para: destino,
+          usuarioId: user?.uid ?? "sistema",
+          origem: "mangueiro",
+        });
+      }
+
+      // Cada produto dos protocolos marcados vira um evento sanitário, com
+      // carência e próxima dose já calculadas a partir da data de aplicação.
+      const aplicacoes = aplicacoesDosProtocolos(
+        protocolos.filter((p) => protocolosAtivos.includes(p.id!)),
+        instante
+      );
+      for (const aplicacao of aplicacoes) {
+        eventos.push({
+          tipo: "sanitario",
+          dataHora: instante,
+          processoId: processoSelecionado.id,
+          sanitario: aplicacao,
+          usuarioId: user?.uid ?? "sistema",
+          origem: "mangueiro",
+        });
+      }
+
+      await EventoService.registrarLote(bovino, eventos, fazendaId);
+
+      // A ficha sanitária do animal é o que o veterinário consulta; sem ela a
+      // carência não aparece na tela do animal.
+      for (const aplicacao of aplicacoes) {
+        await PesagemFirestoreService.salvarEventoSanitario(
+          eventoSanitarioDaAplicacao(aplicacao, sisbov, instante, fazendaId, user?.uid),
+          fazendaId
+        );
+      }
+
+      // Contador da faixa e alvo do desfazer
+      if (faixaSelecionada) {
+        setManejadosPorFaixa((prev) => ({
+          ...prev,
+          [faixaSelecionada.label]: (prev[faixaSelecionada.label] ?? 0) + 1,
+        }));
+      }
+      setUltimoGravado({
+        bovino,
+        faixaLabel: faixaSelecionada?.label,
+        pedidoBrincoId: pedidoBrinco.id,
+      });
 
       await BrincoService.incrementarManejados(processoSelecionado.id!, fazendaId);
 
@@ -651,17 +922,17 @@ export default function PesagemBalanca() {
       const pedAtt = pedidosAtt.find((p) => p.id === pedidoBrinco.id) ?? null;
       setPedidoBrinco(pedAtt);
       if (pedAtt) {
-        const nb = brincoByIndex(pedAtt.brincoInicial, pedAtt.proximoIndice);
-        setProximoBrinco({ brinco: nb, controle: controleFromBrinco(nb) });
+        const nb = sisbovByIndex(pedAtt.sisbovInicial, pedAtt.proximoIndice);
+        setProximoBrinco({ brinco: nb, controle: manejoFromSisbov(nb) });
       }
 
-      Alert.alert("Salvo!", `Animal ${brinco} cadastrado com ${pesoParaSalvar?.toFixed(1)} kg.`);
+      Aviso.alert("Salvo!", `Animal ${manejo} (${sisbov}) cadastrado com ${pesoParaSalvar?.toFixed(1)} kg.`);
       setPesagemSalva(true);
       leituras.current = [];
       setTimeout(() => setPesagemSalva(false), 2500);
     } catch (err) {
       console.error(err);
-      Alert.alert("Erro", "Não foi possível salvar o animal/pesagem.");
+      Aviso.alert("Erro", "Não foi possível salvar o animal/pesagem.");
     } finally {
       setSalvando(false);
     }
@@ -670,30 +941,212 @@ export default function PesagemBalanca() {
   const _persistir = async () => {
     setSalvando(true);
     try {
-      const animalAlvo = animal ?? { id: `chip_${chipParaSalvar}` } as Bovino;
+      // O animal pode não estar cadastrado (pesagem registrada mesmo assim):
+      // nesse caso o número lido é tudo que se tem para identificá-lo depois.
+      const animalAlvo: Pick<Bovino, "id" | "sisbov" | "manejo"> = animal ?? {
+        id: `chip_${chipParaSalvar}`,
+        sisbov: chipParaSalvar!,
+        manejo: manejoFromSisbov(chipParaSalvar!),
+      };
+
       await PesagemFirestoreService.registrarPesagemRapida(
         animalAlvo.id,
-        chipParaSalvar!,
+        animalAlvo.sisbov,
         pesoParaSalvar!,
         fazendaId,
         user?.uid ?? "sistema",
-        inputObs || undefined
+        inputObs || undefined,
+        animal?.chipRfid ?? (modoManual ? undefined : chipLido ?? undefined)
       );
+
+      await EventoService.registrar(
+        animalAlvo,
+        {
+          tipo: "pesagem",
+          dataHora: new Date().toISOString(),
+          peso: pesoParaSalvar!,
+          processoId: processoSelecionado?.id,
+          observacoes: inputObs || undefined,
+          usuarioId: user?.uid ?? "sistema",
+          origem: "mangueiro",
+        },
+        fazendaId
+      );
+
       setPesagemSalva(true);
       leituras.current = [];
       setTimeout(() => setPesagemSalva(false), 3000);
     } catch {
-      Alert.alert("Erro", "Não foi possível salvar a pesagem. Verifique a conexão.");
+      Aviso.alert("Erro", "Não foi possível salvar a pesagem. Verifique a conexão.");
     } finally {
       setSalvando(false);
     }
   };
 
+  /** Relê o pedido e mostra o próximo número da fila. */
+  const atualizarProximoBrinco = useCallback(
+    async (pedidoId: string) => {
+      const pedidos = await BrincoService.listarPedidos(fazendaId);
+      const ped = pedidos.find((p) => p.id === pedidoId) ?? null;
+      setPedidoBrinco(ped);
+      if (ped && ped.proximoIndice < ped.brincosTotal) {
+        const nb = sisbovByIndex(ped.sisbovInicial, ped.proximoIndice);
+        setProximoBrinco({ brinco: nb, controle: manejoFromSisbov(nb) });
+      } else {
+        setProximoBrinco(null);
+      }
+    },
+    [fazendaId]
+  );
+
+  /**
+   * Descarta o brinco da vez sem aplicá-lo em animal.
+   *
+   * Brinco que vem com defeito, quebra na aplicação ou tem chip morto precisa
+   * sair da fila. O número fica registrado como anulado porque a certificadora
+   * cobra explicação por salto na sequência.
+   */
+  const anularBrincoAtual = () => {
+    if (!pedidoBrinco?.id || !proximoBrinco) return;
+
+    const registrar = (motivo: "defeito" | "danificado") => async () => {
+      setAnulando(true);
+      try {
+        const anulado = await BrincoService.anularBrinco(
+          pedidoBrinco.id!,
+          motivo,
+          user?.uid ?? "sistema",
+          fazendaId
+        );
+        if (!anulado) {
+          Aviso.alert("Pedido esgotado", "Não há mais brincos nesta compra.");
+          return;
+        }
+        await atualizarProximoBrinco(pedidoBrinco.id!);
+        resetarLeitura();
+      } catch {
+        Aviso.alert("Erro", "Não foi possível anular o brinco.");
+      } finally {
+        setAnulando(false);
+      }
+    };
+
+    Aviso.alert(
+      `Anular brinco ${proximoBrinco.controle}`,
+      `O número ${proximoBrinco.brinco} sai da fila sem ser aplicado em animal e ` +
+        "fica registrado como anulado no pedido.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Danificado ao aplicar", onPress: registrar("danificado") },
+        { text: "Defeito de fábrica", style: "destructive", onPress: registrar("defeito") },
+      ]
+    );
+  };
+
+  /**
+   * Desfaz a última gravação.
+   *
+   * Errar o animal no mangueiro é rotina, e sem volta o operador teria que
+   * corrigir depois no escritório sem lembrar qual bicho era. O brinco volta
+   * para o pedido: um número de brinco queimado é papel jogado fora.
+   */
+  const desfazerUltimo = async () => {
+    if (!ultimoGravado || !processoSelecionado) return;
+    setDesfazendo(true);
+    try {
+      const { bovino, faixaLabel, pedidoBrincoId } = ultimoGravado;
+
+      // Estorna os eventos daquele animal neste processo
+      const eventos = await EventoService.listarDoAnimal(bovino.id, fazendaId);
+      for (const ev of semEstornados(eventos)) {
+        await EventoService.estornar(
+          bovino,
+          ev,
+          user?.uid ?? "sistema",
+          fazendaId,
+          "Desfeito no mangueiro"
+        );
+      }
+
+      await PesagemFirestoreService.atualizarBovino(
+        { ...bovino, ativo: false, metadados: { ...bovino.metadados, desfeito: true } },
+        fazendaId
+      );
+
+      if (pedidoBrincoId) await BrincoService.devolverBrinco(pedidoBrincoId, fazendaId);
+      if (processoSelecionado.id) {
+        await BrincoService.decrementarManejados(processoSelecionado.id, fazendaId);
+      }
+
+      if (faixaLabel) {
+        setManejadosPorFaixa((prev) => ({
+          ...prev,
+          [faixaLabel]: Math.max(0, (prev[faixaLabel] ?? 1) - 1),
+        }));
+      }
+
+      // Recarrega processo e próximo brinco
+      const proc = await BrincoService.obterProcessoMangueiro(processoSelecionado.id!, fazendaId);
+      if (proc) setProcessoSelecionado(proc);
+      const pedidos = await BrincoService.listarPedidos(fazendaId);
+      const ped = pedidos.find((p) => p.id === pedidoBrincoId) ?? null;
+      setPedidoBrinco(ped);
+      if (ped) {
+        const nb = sisbovByIndex(ped.sisbovInicial, ped.proximoIndice);
+        setProximoBrinco({ brinco: nb, controle: manejoFromSisbov(nb) });
+      }
+
+      setUltimoGravado(null);
+      Aviso.alert("Desfeito", `Animal ${bovino.manejo} removido. O brinco voltou para o pedido.`);
+    } catch (err) {
+      console.error(err);
+      Aviso.alert("Erro", "Não foi possível desfazer. Confira o animal no rebanho.");
+    } finally {
+      setDesfazendo(false);
+    }
+  };
+
+  // ─── Modo rajada ──────────────────────────────────────────────────────────
+  // Com o animal na balança e o chip lido, o operador está com as duas mãos
+  // ocupadas. Em vez de exigir um toque para gravar, dispara uma contagem
+  // curta e cancelável — que é o tempo de conferir o número na tela.
+  const salvarRef = useRef(salvarPesagem);
+  salvarRef.current = salvarPesagem;
+
+  const prontoParaRajada =
+    modoRajada &&
+    processoSelecionado?.tipo === "entrada" &&
+    !!pesoParaSalvar &&
+    pesoEstavel &&
+    !!chipParaSalvar &&
+    chipConfere !== false &&
+    !!faixaSelecionada &&
+    !salvando &&
+    !pesagemSalva;
+
+  useEffect(() => {
+    if (!prontoParaRajada) {
+      setContagemRajada(null);
+      return;
+    }
+    setContagemRajada(SEGUNDOS_RAJADA);
+    const timers = [
+      ...Array.from({ length: SEGUNDOS_RAJADA - 1 }, (_, i) =>
+        setTimeout(() => setContagemRajada(SEGUNDOS_RAJADA - 1 - i), (i + 1) * 1000)
+      ),
+      setTimeout(() => {
+        setContagemRajada(null);
+        salvarRef.current();
+      }, SEGUNDOS_RAJADA * 1000),
+    ];
+    return () => timers.forEach(clearTimeout);
+  }, [prontoParaRajada]);
+
   const resetarLeitura = () => {
     setPesoAtual(null);
     setPesoEstavel(false);
-    setChipLido(paramChipId ?? null);
-    setInputChip(paramChipId ?? "");
+    setChipLido(paramSisbov ?? null);
+    setInputChip(paramSisbov ?? "");
     setInputPeso("");
     setInputObs("");
     leituras.current = [];
@@ -946,218 +1399,275 @@ export default function PesagemBalanca() {
                   </View>
                 </View>
               )}
+
+              {/* Painel de conexão de dispositivos */}
+              <View style={styles.conexaoPanel}>
+                <Text style={[styles.secaoTitulo, { color: primaryColor }]}>
+                  {isWeb ? "Conexão via Porta Serial (Bluetooth)" : "Conexão Bluetooth"}
+                </Text>
+                <Text style={styles.conexaoHint}>
+                  {isWeb
+                    ? "Use sempre a porta de Entrada (não Saída). Ex: EASY → COM3, XRS2i → COM7."
+                    : "Certifique-se que Bluetooth está ativo no celular."}
+                </Text>
+
+                <View style={styles.dispositivosRow}>
+                  {/* Balança */}
+                  <View style={[styles.dispositivoCard, balancaConectada && styles.dispositivoOk]}>
+                    <Feather name="activity" size={24} color={balancaConectada ? "#2E7D32" : "#9E9E9E"} />
+                    <Text style={[styles.dispositivoLabel, balancaConectada && { color: "#2E7D32" }]}>
+                      Balança
+                    </Text>
+                    <Text style={styles.dispositivoStatus}>
+                      {balancaConectada ? "Conectada" : "Desconectada"}
+                    </Text>
+                    {isWeb && !balancaConectada && (
+                      <>
+                        {/* Seleção de baud rate antes de conectar */}
+                        <View style={styles.baudRow}>
+                          {([4800, 9600, 19200] as const).map((b) => (
+                            <TouchableOpacity
+                              key={b}
+                              style={[styles.baudChip, balancaBaud === b && styles.baudChipActive]}
+                              onPress={() => setBalancaBaud(b)}
+                            >
+                              <Text style={[styles.baudChipText, balancaBaud === b && styles.baudChipTextActive]}>
+                                {b}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        <TouchableOpacity
+                          style={[styles.btnConectar, { borderColor: primaryColor }]}
+                          onPress={conectarSerialBalanca}
+                        >
+                          <Text style={[styles.btnConectarText, { color: primaryColor }]}>Conectar</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                    {isWeb && balancaConectada && (
+                      <TouchableOpacity style={styles.btnDesconectar} onPress={desconectarBalanca}>
+                        <Text style={styles.btnDesconectarText}>Desconectar</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Leitor RFID */}
+                  <View style={[styles.dispositivoCard, rfidConectado && styles.dispositivoOk]}>
+                    <Feather name="radio" size={24} color={rfidConectado ? "#2E7D32" : "#9E9E9E"} />
+                    <Text style={[styles.dispositivoLabel, rfidConectado && { color: "#2E7D32" }]}>
+                      Leitor RFID
+                    </Text>
+                    <Text style={styles.dispositivoStatus}>
+                      {rfidConectado ? "Conectado" : "Desconectado"}
+                    </Text>
+                    {isWeb && !rfidConectado && (
+                      <TouchableOpacity
+                        style={[styles.btnConectar, { borderColor: primaryColor }]}
+                        onPress={conectarSerialRfid}
+                      >
+                        <Text style={[styles.btnConectarText, { color: primaryColor }]}>Conectar</Text>
+                      </TouchableOpacity>
+                    )}
+                    {isWeb && rfidConectado && (
+                      <TouchableOpacity style={styles.btnDesconectar} onPress={desconectarRfid}>
+                        <Text style={styles.btnDesconectarText}>Desconectar</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+
+                {/* Botão Trocar Portas — aparece quando ambas estão conectadas */}
+                {isWeb && balancaConectada && rfidConectado && (
+                  <TouchableOpacity style={styles.btnTrocar} onPress={trocarPortas}>
+                    <Feather name="repeat" size={14} color="#E65100" />
+                    <Text style={styles.btnTrocarText}>Portas invertidas? Trocar balança ↔ RFID</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Modo manual toggle */}
+                <TouchableOpacity
+                  style={styles.modoManualBtn}
+                  onPress={() => setModoManual((v) => !v)}
+                >
+                  <Feather name={modoManual ? "wifi" : "edit-3"} size={14} color={primaryColor} />
+                  <Text style={[styles.modoManualText, { color: primaryColor }]}>
+                    {modoManual ? "Usar dispositivos" : "Entrada manual"}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Dica de identificação de portas no Windows */}
+                {isWeb && (balancaConectada || rfidConectado || portasParaIdentificar.length > 0) && (
+                  <Text style={styles.portaHint}>
+                    💡 Para saber qual porta é qual: no Windows abra o{" "}
+                    <Text style={{ fontWeight: "700" }}>Gerenciador de Dispositivos → Portas (COM e LPT)</Text>
+                    {" "}e ligue/desligue cada equipamento para ver qual COM aparece/desaparece.
+                  </Text>
+                )}
+              </View>
+
+              {/* ── Painel de identificação de portas desconhecidas ─────────────── */}
+              {isWeb && portasParaIdentificar.length > 0 && (
+                <View style={styles.identificacaoPanel}>
+                  <View style={styles.identificacaoHeader}>
+                    <Feather name="alert-circle" size={18} color="#E65100" />
+                    <Text style={styles.identificacaoTitulo}>
+                      {portasParaIdentificar.length} porta{portasParaIdentificar.length > 1 ? "s" : ""} reconectada{portasParaIdentificar.length > 1 ? "s" : ""} — identifique cada equipamento
+                    </Text>
+                  </View>
+                  <Text style={styles.identificacaoSub}>
+                    Clique no botão correto para cada porta abaixo. Se não souber, use o Gerenciador de Dispositivos do Windows para descobrir qual COM é qual.
+                  </Text>
+                  {portasParaIdentificar.map((porta) => (
+                    <View key={porta.id} style={styles.portaCard}>
+                      <View style={styles.portaCardHeader}>
+                        <Feather name="cpu" size={16} color="#555" />
+                        <Text style={styles.portaCardLabel}>{porta.label}</Text>
+                      </View>
+                      <Text style={styles.portaCardSub}>O que é esta porta?</Text>
+                      <View style={styles.portaCardBtns}>
+                        <TouchableOpacity
+                          style={[styles.portaBtn, { borderColor: "#1565C0", backgroundColor: "#E3F2FD" }]}
+                          onPress={() => atribuirPorta(porta.id, "balanca")}
+                          disabled={balancaConectada}
+                        >
+                          <Feather name="activity" size={14} color={balancaConectada ? "#9E9E9E" : "#1565C0"} />
+                          <Text style={[styles.portaBtnText, { color: balancaConectada ? "#9E9E9E" : "#1565C0" }]}>
+                            {balancaConectada ? "Balança já atribuída" : "É a Balança"}
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.portaBtn, { borderColor: "#1B5E20", backgroundColor: "#E8F5E9" }]}
+                          onPress={() => atribuirPorta(porta.id, "rfid")}
+                          disabled={rfidConectado}
+                        >
+                          <Feather name="radio" size={14} color={rfidConectado ? "#9E9E9E" : "#1B5E20"} />
+                          <Text style={[styles.portaBtnText, { color: rfidConectado ? "#9E9E9E" : "#1B5E20" }]}>
+                            {rfidConectado ? "RFID já atribuído" : "É o Leitor RFID"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* ── Log de dados brutos (diagnóstico da balança) ───────────── */}
+              {isWeb && logBruto.length > 0 && (
+                <View style={styles.logPanel}>
+                  <TouchableOpacity
+                    style={styles.logHeader}
+                    onPress={() => setMostrarLog((v) => !v)}
+                  >
+                    <Feather name="terminal" size={14} color="#546E7A" />
+                    <Text style={styles.logHeaderText}>
+                      Dados brutos recebidos ({logBruto.length})
+                    </Text>
+                    <Feather name={mostrarLog ? "chevron-up" : "chevron-down"} size={14} color="#546E7A" />
+                  </TouchableOpacity>
+                  {mostrarLog && (
+                    <ScrollView style={styles.logScroll} nestedScrollEnabled>
+                      {logBruto.map((entry, i) => (
+                        <View key={i} style={styles.logEntry}>
+                          <Text style={styles.logTs}>{entry.ts} [{entry.portLabel}]</Text>
+                          <Text style={styles.logLinha} selectable>{JSON.stringify(entry.linha)}</Text>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
+              )}
             </View>
           )}
 
           {/* ════════════════════ ABA PESAGEM ════════════════════ */}
           {abaAtiva === "pesagem" && (<>
 
-            {/* Seleção de Processo */}
-            <TouchableOpacity
-              style={[
-                styles.processoPanel,
-                processoSelecionado && { borderColor: TIPO_COR[processoSelecionado.tipo] ?? primaryColor, backgroundColor: (TIPO_COR[processoSelecionado.tipo] ?? primaryColor) + "0D" },
-              ]}
-              onPress={() => setShowSelecionarProcesso(true)}
-            >
-              <View style={{ flex: 1 }}>
-                {processoSelecionado ? (
-                  <>
-                    <Text style={[styles.processoLabel, { color: TIPO_COR[processoSelecionado.tipo] ?? primaryColor }]}>
-                      {TIPO_LABEL[processoSelecionado.tipo] ?? processoSelecionado.tipo}
-                    </Text>
-                    <Text style={styles.processoNome} numberOfLines={1}>{processoSelecionado.nome}</Text>
-                    <Text style={styles.processoProgresso}>
-                      {processoSelecionado.animaisManejados} / {processoSelecionado.totalAnimaisPrevisto} animais · {processoSelecionado.gtaIds.length} GTA(s)
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.processoLabel}>Nenhum processo selecionado</Text>
-                    <Text style={styles.processoNome}>Toque para selecionar um processo ativo</Text>
-                  </>
-                )}
-              </View>
-              <Feather name="chevron-down" size={18} color={processoSelecionado ? TIPO_COR[processoSelecionado.tipo] : "#999"} />
-            </TouchableOpacity>
-
-            {/* Painel de conexão de dispositivos */}
-            <View style={styles.conexaoPanel}>
-              <Text style={[styles.secaoTitulo, { color: primaryColor }]}>
-                {isWeb ? "Conexão via Porta Serial (Bluetooth)" : "Conexão Bluetooth"}
-              </Text>
-              <Text style={styles.conexaoHint}>
-                {isWeb
-                  ? "Use sempre a porta de Entrada (não Saída). Ex: EASY → COM3, XRS2i → COM7."
-                  : "Certifique-se que Bluetooth está ativo no celular."}
-              </Text>
-
-              <View style={styles.dispositivosRow}>
-                {/* Balança */}
-                <View style={[styles.dispositivoCard, balancaConectada && styles.dispositivoOk]}>
-                  <Feather name="activity" size={24} color={balancaConectada ? "#2E7D32" : "#9E9E9E"} />
-                  <Text style={[styles.dispositivoLabel, balancaConectada && { color: "#2E7D32" }]}>
-                    Balança
-                  </Text>
-                  <Text style={styles.dispositivoStatus}>
-                    {balancaConectada ? "Conectada" : "Desconectada"}
-                  </Text>
-                  {isWeb && !balancaConectada && (
+            {/* Barra de status — uma linha com tudo que o operador precisa
+                saber sem sair da tela de trabalho. O detalhe de conexão mora
+                na aba Configuração; aqui só o que está pronto ou não. */}
+            <View style={styles.barraStatus}>
+              <TouchableOpacity
+                style={styles.barraItem}
+                onPress={() => setShowSelecionarProcesso(true)}
+              >
+                <Feather
+                  name="layers"
+                  size={14}
+                  color={processoSelecionado ? TIPO_COR[processoSelecionado.tipo] ?? primaryColor : "#BBB"}
+                />
+                <View style={{ flex: 1 }}>
+                  {processoSelecionado ? (
                     <>
-                      {/* Seleção de baud rate antes de conectar */}
-                      <View style={styles.baudRow}>
-                        {([4800, 9600, 19200] as const).map((b) => (
-                          <TouchableOpacity
-                            key={b}
-                            style={[styles.baudChip, balancaBaud === b && styles.baudChipActive]}
-                            onPress={() => setBalancaBaud(b)}
-                          >
-                            <Text style={[styles.baudChipText, balancaBaud === b && styles.baudChipTextActive]}>
-                              {b}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                      <TouchableOpacity
-                        style={[styles.btnConectar, { borderColor: primaryColor }]}
-                        onPress={conectarSerialBalanca}
-                      >
-                        <Text style={[styles.btnConectarText, { color: primaryColor }]}>Conectar</Text>
-                      </TouchableOpacity>
+                      <Text style={styles.barraValor} numberOfLines={1}>
+                        {processoSelecionado.nome}
+                      </Text>
+                      <Text style={styles.barraLabel}>
+                        {processoSelecionado.animaisManejados} / {processoSelecionado.totalAnimaisPrevisto} animais
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={[styles.barraValor, { color: "#999" }]}>Escolher processo</Text>
+                      <Text style={styles.barraLabel}>nenhum ativo</Text>
                     </>
                   )}
-                  {isWeb && balancaConectada && (
-                    <TouchableOpacity style={styles.btnDesconectar} onPress={desconectarBalanca}>
-                      <Text style={styles.btnDesconectarText}>Desconectar</Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
-
-                {/* Leitor RFID */}
-                <View style={[styles.dispositivoCard, rfidConectado && styles.dispositivoOk]}>
-                  <Feather name="radio" size={24} color={rfidConectado ? "#2E7D32" : "#9E9E9E"} />
-                  <Text style={[styles.dispositivoLabel, rfidConectado && { color: "#2E7D32" }]}>
-                    Leitor RFID
-                  </Text>
-                  <Text style={styles.dispositivoStatus}>
-                    {rfidConectado ? "Conectado" : "Desconectado"}
-                  </Text>
-                  {isWeb && !rfidConectado && (
-                    <TouchableOpacity
-                      style={[styles.btnConectar, { borderColor: primaryColor }]}
-                      onPress={conectarSerialRfid}
-                    >
-                      <Text style={[styles.btnConectarText, { color: primaryColor }]}>Conectar</Text>
-                    </TouchableOpacity>
-                  )}
-                  {isWeb && rfidConectado && (
-                    <TouchableOpacity style={styles.btnDesconectar} onPress={desconectarRfid}>
-                      <Text style={styles.btnDesconectarText}>Desconectar</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
-
-              {/* Botão Trocar Portas — aparece quando ambas estão conectadas */}
-              {isWeb && balancaConectada && rfidConectado && (
-                <TouchableOpacity style={styles.btnTrocar} onPress={trocarPortas}>
-                  <Feather name="repeat" size={14} color="#E65100" />
-                  <Text style={styles.btnTrocarText}>Portas invertidas? Trocar balança ↔ RFID</Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Modo manual toggle */}
-              <TouchableOpacity
-                style={styles.modoManualBtn}
-                onPress={() => setModoManual((v) => !v)}
-              >
-                <Feather name={modoManual ? "wifi" : "edit-3"} size={14} color={primaryColor} />
-                <Text style={[styles.modoManualText, { color: primaryColor }]}>
-                  {modoManual ? "Usar dispositivos" : "Entrada manual"}
-                </Text>
+                <Feather name="chevron-down" size={14} color="#BBB" />
               </TouchableOpacity>
 
-              {/* Dica de identificação de portas no Windows */}
-              {isWeb && (balancaConectada || rfidConectado || portasParaIdentificar.length > 0) && (
-                <Text style={styles.portaHint}>
-                  💡 Para saber qual porta é qual: no Windows abra o{" "}
-                  <Text style={{ fontWeight: "700" }}>Gerenciador de Dispositivos → Portas (COM e LPT)</Text>
-                  {" "}e ligue/desligue cada equipamento para ver qual COM aparece/desaparece.
-                </Text>
-              )}
-            </View>
-
-            {/* ── Painel de identificação de portas desconhecidas ─────────────── */}
-            {isWeb && portasParaIdentificar.length > 0 && (
-              <View style={styles.identificacaoPanel}>
-                <View style={styles.identificacaoHeader}>
-                  <Feather name="alert-circle" size={18} color="#E65100" />
-                  <Text style={styles.identificacaoTitulo}>
-                    {portasParaIdentificar.length} porta{portasParaIdentificar.length > 1 ? "s" : ""} reconectada{portasParaIdentificar.length > 1 ? "s" : ""} — identifique cada equipamento
-                  </Text>
-                </View>
-                <Text style={styles.identificacaoSub}>
-                  Clique no botão correto para cada porta abaixo. Se não souber, use o Gerenciador de Dispositivos do Windows para descobrir qual COM é qual.
-                </Text>
-                {portasParaIdentificar.map((porta) => (
-                  <View key={porta.id} style={styles.portaCard}>
-                    <View style={styles.portaCardHeader}>
-                      <Feather name="cpu" size={16} color="#555" />
-                      <Text style={styles.portaCardLabel}>{porta.label}</Text>
-                    </View>
-                    <Text style={styles.portaCardSub}>O que é esta porta?</Text>
-                    <View style={styles.portaCardBtns}>
-                      <TouchableOpacity
-                        style={[styles.portaBtn, { borderColor: "#1565C0", backgroundColor: "#E3F2FD" }]}
-                        onPress={() => atribuirPorta(porta.id, "balanca")}
-                        disabled={balancaConectada}
-                      >
-                        <Feather name="activity" size={14} color={balancaConectada ? "#9E9E9E" : "#1565C0"} />
-                        <Text style={[styles.portaBtnText, { color: balancaConectada ? "#9E9E9E" : "#1565C0" }]}>
-                          {balancaConectada ? "Balança já atribuída" : "É a Balança"}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.portaBtn, { borderColor: "#1B5E20", backgroundColor: "#E8F5E9" }]}
-                        onPress={() => atribuirPorta(porta.id, "rfid")}
-                        disabled={rfidConectado}
-                      >
-                        <Feather name="radio" size={14} color={rfidConectado ? "#9E9E9E" : "#1B5E20"} />
-                        <Text style={[styles.portaBtnText, { color: rfidConectado ? "#9E9E9E" : "#1B5E20" }]}>
-                          {rfidConectado ? "RFID já atribuído" : "É o Leitor RFID"}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* ── Log de dados brutos (diagnóstico da balança) ───────────── */}
-            {isWeb && logBruto.length > 0 && (
-              <View style={styles.logPanel}>
+              {/* Pedido de brincos: trocado aqui, não no processo — um lote de
+                  15 animais pode consumir duas compras de brinco. */}
+              {processoSelecionado?.tipo === "entrada" && (
                 <TouchableOpacity
-                  style={styles.logHeader}
-                  onPress={() => setMostrarLog((v) => !v)}
+                  style={styles.barraItem}
+                  onPress={() => setShowSelecionarPedido(true)}
                 >
-                  <Feather name="terminal" size={14} color="#546E7A" />
-                  <Text style={styles.logHeaderText}>
-                    Dados brutos recebidos ({logBruto.length})
-                  </Text>
-                  <Feather name={mostrarLog ? "chevron-up" : "chevron-down"} size={14} color="#546E7A" />
+                  <Feather name="tag" size={14} color={pedidoBrinco ? "#009688" : "#E65100"} />
+                  <View style={{ flex: 1 }}>
+                    {pedidoBrinco ? (
+                      <>
+                        <Text style={styles.barraValor} numberOfLines={1}>
+                          {proximoBrinco?.controle ?? "—"}
+                        </Text>
+                        <Text style={styles.barraLabel}>
+                          {pedidoBrinco.brincosTotal - pedidoBrinco.proximoIndice} livres
+                        </Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={[styles.barraValor, { color: "#E65100" }]}>Sem brincos</Text>
+                        <Text style={styles.barraLabel}>escolher compra</Text>
+                      </>
+                    )}
+                  </View>
+                  <Feather name="chevron-down" size={14} color="#BBB" />
                 </TouchableOpacity>
-                {mostrarLog && (
-                  <ScrollView style={styles.logScroll} nestedScrollEnabled>
-                    {logBruto.map((entry, i) => (
-                      <View key={i} style={styles.logEntry}>
-                        <Text style={styles.logTs}>{entry.ts} [{entry.portLabel}]</Text>
-                        <Text style={styles.logLinha} selectable>{JSON.stringify(entry.linha)}</Text>
-                      </View>
-                    ))}
-                  </ScrollView>
-                )}
-              </View>
-            )}
+              )}
+
+              <TouchableOpacity
+                style={styles.barraItem}
+                onPress={() => setAbaAtiva("config")}
+              >
+                <Feather
+                  name={balancaConectada || bleBalancaId ? "check-circle" : "alert-circle"}
+                  size={14}
+                  color={balancaConectada || bleBalancaId ? "#2E7D32" : "#E65100"}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.barraValor}>
+                    {[
+                      balancaConectada || bleBalancaId ? "balança" : null,
+                      rfidConectado || bleRfidId ? "leitor" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "desconectado"}
+                  </Text>
+                  <Text style={styles.barraLabel}>equipamentos</Text>
+                </View>
+                <Feather name="settings" size={14} color="#BBB" />
+              </TouchableOpacity>
+            </View>
 
             {/* Painel principal de leitura */}
             {modoManual ? (
@@ -1255,6 +1765,8 @@ export default function PesagemBalanca() {
                   <ActivityIndicator size="small" color={primaryColor} />
                 ) : animal ? (
                   <>
+                    {/* De quem é o animal, antes de qualquer outro dado dele */}
+                    <TarjaProprietario proprietario={animal.proprietario} />
                     <View style={styles.animalHeader}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.animalNome}>{animal.nome}</Text>
@@ -1263,7 +1775,7 @@ export default function PesagemBalanca() {
                           {animal.sexo === "M" ? "Macho" : "Fêmea"}
                         </Text>
                       </View>
-                      {animal.sisbov?.certificado && (
+                      {animal.certificacao?.certificado && (
                         <View style={styles.sisbovBadge}>
                           <Feather name="check-circle" size={12} color="#1565C0" />
                           <Text style={styles.sisbovBadgeText}>SISBOV</Text>
@@ -1315,13 +1827,52 @@ export default function PesagemBalanca() {
               <View style={[styles.entradaPanel, { borderColor: "#009688" }]}>
                 <Text style={[styles.entradaTitulo, { color: "#009688" }]}>Dados do Animal (Entrada)</Text>
 
+                {/* Fica visível enquanto o padrão do lote for de terceiro */}
+                <TarjaProprietario
+                  proprietario={
+                    tipoProprietario === "terceiro"
+                      ? { tipo: "terceiro", nome: nomeTerceiro.trim() || "sem nome informado", cpfCnpj: cpfCnpjTerceiro.trim() || undefined }
+                      : undefined
+                  }
+                />
+
                 {/* Próximo brinco */}
                 {proximoBrinco && (
                   <View style={styles.brincoBox}>
                     <Feather name="tag" size={14} color="#009688" />
                     <Text style={styles.brincoLabel}>Próximo brinco:</Text>
-                    <Text style={styles.brincoNumero}>{proximoBrinco.brinco}</Text>
-                    <Text style={styles.brincoControle}>Ctrl: {proximoBrinco.controle}</Text>
+                    <Text style={styles.sisbov}>{proximoBrinco.brinco}</Text>
+                    <Text style={styles.manejo}>Manejo: {proximoBrinco.controle}</Text>
+                  </View>
+                )}
+
+                {/* Brinco com defeito sai da fila sem virar animal */}
+                {proximoBrinco && (
+                  <TouchableOpacity
+                    style={[styles.btnAnular, anulando && { opacity: 0.6 }]}
+                    onPress={anularBrincoAtual}
+                    disabled={anulando}
+                  >
+                    <Feather name="slash" size={15} color="#E65100" />
+                    <Text style={styles.btnAnularText}>
+                      {anulando ? "Anulando…" : `Anular brinco ${proximoBrinco.controle}`}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Conferência do chip lido contra o brinco a ser aplicado */}
+                {chipConfere !== null && (
+                  <View style={chipConfere ? styles.chipConfereBox : styles.chipDivergeBox}>
+                    <Feather
+                      name={chipConfere ? "check-circle" : "alert-triangle"}
+                      size={16}
+                      color={chipConfere ? "#2E7D32" : "#C62828"}
+                    />
+                    <Text style={chipConfere ? styles.chipConfereTexto : styles.chipDivergeTexto}>
+                      {chipConfere
+                        ? `Chip ${chipParaSalvar} confere com o manejo ${proximoBrinco!.controle}`
+                        : `Chip ${chipParaSalvar} não confere — deveria terminar em ${proximoBrinco!.controle.slice(-4)}`}
+                    </Text>
                   </View>
                 )}
 
@@ -1386,30 +1937,189 @@ export default function PesagemBalanca() {
                   </View>
                 </ScrollView>
 
-                {/* Cor/Pelagem e Idade */}
-                <View style={{ flexDirection: "row", gap: 8 }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.campoLabel}>Cor / Pelagem</Text>
-                    <TextInput
-                      style={styles.input}
-                      value={corAnimal}
-                      onChangeText={setCorAnimal}
-                      placeholder="Ex: Vermelho, Preto..."
-                      placeholderTextColor="#999"
-                    />
+                {/* Faixa etária — vem das GTAs do processo, não é digitada */}
+                <Text style={styles.campoLabel}>Idade — faixa declarada na GTA *</Text>
+                {saldoFaixas.length === 0 ? (
+                  <Text style={styles.avisoLeve}>
+                    Nenhuma faixa etária encontrada nas GTAs deste processo.
+                  </Text>
+                ) : (
+                  <View style={styles.faixaGrid}>
+                    {saldoFaixas.map(({ faixa, manejados, restam, completa }) => {
+                      const ativa = faixaSelecionada?.label === faixa.label;
+                      return (
+                        <TouchableOpacity
+                          key={faixa.label}
+                          style={[
+                            styles.faixaCard,
+                            ativa && styles.faixaCardAtiva,
+                            completa && !ativa && styles.faixaCardCompleta,
+                          ]}
+                          onPress={() => setFaixaSelecionada(faixa)}
+                        >
+                          <View style={styles.faixaCardTopo}>
+                            <Text style={[styles.faixaLabel, ativa && { color: "#00695C" }]}>
+                              {faixa.label}
+                            </Text>
+                            {completa && <Feather name="check" size={14} color="#2E7D32" />}
+                          </View>
+                          <Text style={[styles.faixaContagem, ativa && { color: "#00695C" }]}>
+                            {manejados} / {faixa.previsto}
+                          </Text>
+                          <Text style={styles.faixaNascimento}>
+                            {completa ? "faixa completa" : `restam ${restam}`} · nasc.{" "}
+                            {new Date(faixa.dataNascimento + "T12:00:00").toLocaleDateString("pt-BR")}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.campoLabel}>Idade (meses)</Text>
+                )}
+
+                {/* Destino */}
+                <Text style={styles.campoLabel}>Destino *</Text>
+                <View style={styles.sexoRow}>
+                  {REGIMES.map((r) => (
+                    <TouchableOpacity
+                      key={r.value}
+                      style={[
+                        styles.regimeChip,
+                        regimeAnimal === r.value && { backgroundColor: "#009688", borderColor: "#009688" },
+                      ]}
+                      onPress={() => setRegimeAnimal(r.value)}
+                    >
+                      <Text style={[styles.sexoChipText, regimeAnimal === r.value && { color: "#fff" }]}>
+                        {r.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {locaisDoRegime.length > 0 ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      {locaisDoRegime.map((l) => (
+                        <TouchableOpacity
+                          key={l.id}
+                          style={[
+                            styles.racaChip,
+                            localSelecionado?.id === l.id && { backgroundColor: "#00968822", borderColor: "#009688" },
+                          ]}
+                          onPress={() => setLocalSelecionado(l)}
+                        >
+                          <Text
+                            style={[
+                              styles.racaChipText,
+                              localSelecionado?.id === l.id && { color: "#009688", fontWeight: "700" },
+                            ]}
+                          >
+                            {l.nome}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
+                ) : (
+                  <Text style={styles.avisoLeve}>
+                    Nenhum local cadastrado para este regime. Cadastre em Brincos › Locais.
+                  </Text>
+                )}
+
+                {/* Proprietário — boitel e animais de terceiros */}
+                <Text style={styles.campoLabel}>Proprietário *</Text>
+                <View style={styles.sexoRow}>
+                  {([
+                    { valor: "proprio", rotulo: "Próprio" },
+                    { valor: "terceiro", rotulo: "De terceiro" },
+                  ] as const).map((opcao) => {
+                    const ativo = tipoProprietario === opcao.valor;
+                    const corAtiva = opcao.valor === "terceiro" ? COR_TERCEIRO : "#009688";
+                    return (
+                      <TouchableOpacity
+                        key={opcao.valor}
+                        style={[
+                          styles.sexoChip,
+                          ativo && { backgroundColor: corAtiva, borderColor: corAtiva },
+                        ]}
+                        onPress={() => setTipoProprietario(opcao.valor)}
+                      >
+                        <Text style={[styles.sexoChipText, ativo && { color: "#fff" }]}>
+                          {opcao.rotulo}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {tipoProprietario === "terceiro" && (
+                  <View style={styles.terceiroBox}>
+                    <Text style={styles.campoLabel}>Nome do proprietário *</Text>
                     <TextInput
                       style={styles.input}
-                      value={idadeMeses}
-                      onChangeText={setIdadeMeses}
-                      placeholder="Ex: 18"
+                      value={nomeTerceiro}
+                      onChangeText={setNomeTerceiro}
+                      placeholder="Quem é o dono do animal"
+                      placeholderTextColor="#999"
+                      autoCapitalize="characters"
+                    />
+                    <Text style={styles.campoLabel}>CPF / CNPJ</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={cpfCnpjTerceiro}
+                      onChangeText={setCpfCnpjTerceiro}
+                      placeholder="Opcional"
                       placeholderTextColor="#999"
                       keyboardType="numeric"
                     />
                   </View>
-                </View>
+                )}
+
+                {/* Protocolos sanitários aplicados junto */}
+                {protocolos.length > 0 && (
+                  <>
+                    <Text style={styles.campoLabel}>Protocolos aplicados</Text>
+                    <View style={styles.protocoloGrid}>
+                      {protocolos.map((p) => {
+                        const ativo = protocolosAtivos.includes(p.id!);
+                        return (
+                          <TouchableOpacity
+                            key={p.id}
+                            style={[styles.protocoloChip, ativo && styles.protocoloChipAtivo]}
+                            onPress={() =>
+                              setProtocolosAtivos((prev) =>
+                                ativo ? prev.filter((id) => id !== p.id) : [...prev, p.id!]
+                              )
+                            }
+                          >
+                            <Feather
+                              name={ativo ? "check-square" : "square"}
+                              size={14}
+                              color={ativo ? "#9C27B0" : "#BBB"}
+                            />
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.protocoloNome, ativo && { color: "#6A1B9A" }]}>
+                                {p.nome}
+                              </Text>
+                              <Text style={styles.protocoloItens}>
+                                {p.itens.map((i) => i.produto).join(" · ")}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
+
+                {/* Cor/Pelagem */}
+                <Text style={styles.campoLabel}>Cor / Pelagem</Text>
+                <TextInput
+                  style={styles.input}
+                  value={corAnimal}
+                  onChangeText={setCorAnimal}
+                  placeholder="Ex: Vermelho, Preto..."
+                  placeholderTextColor="#999"
+                />
               </View>
             )}
 
@@ -1432,15 +2142,33 @@ export default function PesagemBalanca() {
             {pesagemSalva ? (
               <View style={styles.sucessoBox}>
                 <Feather name="check-circle" size={32} color="#2E7D32" />
-                <Text style={styles.sucessoText}>Pesagem salva com sucesso!</Text>
-                <TouchableOpacity
-                  style={[styles.btnNovaPesagem, { borderColor: primaryColor }]}
-                  onPress={resetarLeitura}
-                >
-                  <Text style={[styles.btnNovaPesagemText, { color: primaryColor }]}>
-                    Nova pesagem
-                  </Text>
-                </TouchableOpacity>
+                <Text style={styles.sucessoText}>
+                  {ultimoGravado
+                    ? `Animal ${ultimoGravado.bovino.manejo} gravado`
+                    : "Pesagem salva com sucesso!"}
+                </Text>
+                <View style={styles.sucessoAcoes}>
+                  <TouchableOpacity
+                    style={[styles.btnNovaPesagem, { borderColor: primaryColor }]}
+                    onPress={resetarLeitura}
+                  >
+                    <Text style={[styles.btnNovaPesagemText, { color: primaryColor }]}>
+                      Próximo animal
+                    </Text>
+                  </TouchableOpacity>
+                  {ultimoGravado && (
+                    <TouchableOpacity
+                      style={[styles.btnDesfazer, desfazendo && { opacity: 0.6 }]}
+                      onPress={desfazerUltimo}
+                      disabled={desfazendo}
+                    >
+                      <Feather name="rotate-ccw" size={15} color="#C62828" />
+                      <Text style={styles.btnDesfazerText}>
+                        {desfazendo ? "Desfazendo…" : "Desfazer"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               </View>
             ) : (
               <View style={styles.acoesRow}>
@@ -1459,6 +2187,13 @@ export default function PesagemBalanca() {
                 >
                   {salvando ? (
                     <ActivityIndicator size="small" color="#fff" />
+                  ) : contagemRajada !== null ? (
+                    <>
+                      <Feather name="clock" size={18} color="#fff" />
+                      <Text style={styles.btnSalvarText}>
+                        Gravando em {contagemRajada}…
+                      </Text>
+                    </>
                   ) : (
                     <>
                       <Feather name="save" size={18} color="#fff" />
@@ -1466,6 +2201,34 @@ export default function PesagemBalanca() {
                     </>
                   )}
                 </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Modo rajada: só faz sentido em processo de entrada */}
+            {processoSelecionado?.tipo === "entrada" && !pesagemSalva && (
+              <View style={styles.rajadaBox}>
+                <TouchableOpacity
+                  style={styles.rajadaToggle}
+                  onPress={() => setModoRajada((v) => !v)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.rajadaCheck, modoRajada && { backgroundColor: "#009688", borderColor: "#009688" }]}>
+                    {modoRajada && <Feather name="check" size={13} color="#fff" />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rajadaTitulo}>Modo rajada</Text>
+                    <Text style={styles.rajadaDesc}>
+                      Grava sozinho {SEGUNDOS_RAJADA}s depois que o peso estabiliza e o chip confere
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {contagemRajada !== null && (
+                  <TouchableOpacity style={styles.rajadaCancelar} onPress={resetarLeitura}>
+                    <Feather name="x-circle" size={16} color="#C62828" />
+                    <Text style={styles.rajadaCancelarText}>Cancelar este animal</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
@@ -1484,6 +2247,61 @@ export default function PesagemBalanca() {
       </ScrollView>
 
       {/* Modal: Selecionar Processo */}
+      {/* Compra de brincos — escolhida aqui, e trocável no meio do lote:
+          15 animais podem esgotar uma compra e começar a próxima. */}
+      <Modal
+        visible={showSelecionarPedido}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowSelecionarPedido(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitulo}>Compra de brincos</Text>
+              <TouchableOpacity onPress={() => setShowSelecionarPedido(false)}>
+                <Feather name="x" size={22} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 420 }}>
+              {pedidosDisponiveis.length === 0 ? (
+                <Text style={styles.avisoLeve}>
+                  Nenhuma compra de brincos com número livre. Cadastre em Brincos.
+                </Text>
+              ) : (
+                pedidosDisponiveis.map((p) => {
+                  const livres = p.brincosTotal - p.proximoIndice;
+                  const proximo = sisbovByIndex(p.sisbovInicial, p.proximoIndice);
+                  const ativo = pedidoBrinco?.id === p.id;
+                  return (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={[styles.pedidoOpcao, ativo && styles.pedidoOpcaoAtiva]}
+                      onPress={async () => {
+                        setShowSelecionarPedido(false);
+                        await atualizarProximoBrinco(p.id!);
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.barraValor, ativo && { color: "#00695C" }]}>
+                          {p.fabrica} · pedido {p.numeroPedidoMapa}
+                        </Text>
+                        <Text style={styles.barraLabel}>
+                          próximo {manejoFromSisbov(proximo)} · {livres} de {p.brincosTotal} livres
+                          {p.anulados?.length ? ` · ${p.anulados.length} anulado(s)` : ""}
+                        </Text>
+                      </View>
+                      {ativo && <Feather name="check-circle" size={18} color="#00695C" />}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={showSelecionarProcesso} animationType="slide" transparent onRequestClose={() => setShowSelecionarProcesso(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -1790,8 +2608,145 @@ const styles = StyleSheet.create({
   entradaTitulo: { fontSize: 13, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 },
   brincoBox: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#E0F2F1", padding: 10, borderRadius: 10, marginBottom: 12, flexWrap: "wrap" },
   brincoLabel: { fontSize: 12, color: "#555", fontWeight: "600" },
-  brincoNumero: { fontSize: 14, fontWeight: "900", color: "#00695C", letterSpacing: 1 },
-  brincoControle: { fontSize: 11, color: "#888" },
+  sisbov: { fontSize: 14, fontWeight: "900", color: "#00695C", letterSpacing: 1 },
+  manejo: { fontSize: 11, color: "#888" },
+  chipConfereBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#E8F5E9", padding: 10, borderRadius: 10, marginBottom: 12 },
+  chipConfereTexto: { flex: 1, fontSize: 12, color: "#2E7D32", fontWeight: "600" },
+  chipDivergeBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#FFEBEE", borderWidth: 1.5, borderColor: "#EF9A9A", padding: 10, borderRadius: 10, marginBottom: 12 },
+  chipDivergeTexto: { flex: 1, fontSize: 12, color: "#C62828", fontWeight: "700" },
+  avisoLeve: { fontSize: 12, color: "#999", fontStyle: "italic", marginBottom: 12 },
+
+  // Barra de status: tudo em uma linha, sem competir com o peso pela atenção
+  barraStatus: { flexDirection: "row", gap: 8, marginBottom: 16, flexWrap: "wrap" },
+  barraItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    flexGrow: 1,
+    flexBasis: 150,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#EEE",
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 11,
+  },
+  barraValor: { fontSize: 13, fontWeight: "700", color: "#333" },
+  barraLabel: { fontSize: 10, color: "#AAA", marginTop: 1 },
+
+  btnAnular: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    paddingVertical: 11,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#FFCC80",
+    backgroundColor: "#FFF8E1",
+    marginBottom: 12,
+  },
+  btnAnularText: { fontSize: 13, fontWeight: "700", color: "#E65100" },
+  protocoloGrid: { gap: 8, marginBottom: 14 },
+  protocoloChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1.5,
+    borderColor: "#E0E0E0",
+    borderRadius: 10,
+    padding: 12,
+    backgroundColor: "#fff",
+  },
+  protocoloChipAtivo: { borderColor: "#9C27B0", backgroundColor: "#F3E5F5" },
+  protocoloNome: { fontSize: 13, fontWeight: "700", color: "#555" },
+  protocoloItens: { fontSize: 11, color: "#999", marginTop: 1 },
+  terceiroBox: {
+    borderLeftWidth: 3,
+    borderLeftColor: COR_TERCEIRO,
+    paddingLeft: 10,
+    marginBottom: 4,
+  },
+
+  // Faixas etárias da GTA: alvos grandes, legíveis de longe e com luva
+  faixaGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
+  faixaCard: {
+    minWidth: 150,
+    flexGrow: 1,
+    flexBasis: "45%",
+    borderWidth: 1.5,
+    borderColor: "#E0E0E0",
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: "#FFF",
+  },
+  faixaCardAtiva: { borderColor: "#009688", backgroundColor: "#E0F2F1", borderWidth: 2 },
+  faixaCardCompleta: { borderColor: "#A5D6A7", backgroundColor: "#F1F8E9" },
+  faixaCardTopo: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  faixaLabel: { fontSize: 13, fontWeight: "700", color: "#555" },
+  faixaContagem: { fontSize: 22, fontWeight: "900", color: "#444", marginTop: 2 },
+  faixaNascimento: { fontSize: 10, color: "#999", marginTop: 2 },
+
+  regimeChip: {
+    flexGrow: 1,
+    flexBasis: "22%",
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#E0E0E0",
+    alignItems: "center",
+  },
+
+  rajadaBox: { marginTop: 12, gap: 8 },
+  rajadaToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    backgroundColor: "#FAFAFA",
+  },
+  rajadaCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: "#BDBDBD",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rajadaTitulo: { fontSize: 13, fontWeight: "700", color: "#444" },
+  rajadaDesc: { fontSize: 11, color: "#999", marginTop: 1 },
+  rajadaCancelar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#EF9A9A",
+    backgroundColor: "#FFEBEE",
+  },
+  rajadaCancelarText: { fontSize: 14, fontWeight: "700", color: "#C62828" },
+
+  sucessoAcoes: { flexDirection: "row", gap: 10, alignItems: "center", marginTop: 4 },
+  btnDesfazer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#EF9A9A",
+    backgroundColor: "#FFEBEE",
+  },
+  btnDesfazerText: { fontSize: 13, fontWeight: "700", color: "#C62828" },
+
   gtaInfoBox: { backgroundColor: "#F1F8E9", padding: 10, borderRadius: 10, marginBottom: 12 },
   gtaInfoLabel: { fontSize: 11, fontWeight: "700", color: "#558B2F", marginBottom: 4 },
   gtaInfoValor: { fontSize: 12, color: "#444" },

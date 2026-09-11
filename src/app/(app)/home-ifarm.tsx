@@ -12,8 +12,15 @@ const MODULES = [
     route: "processos",
     label: "Processos",
     icon: "layers" as const,
-    description: "Entrada, saída e transferência de animais + GTA",
+    description: "Entrada, saída e transferência · importa GTA em PDF",
     cor: "#E91E63",
+  },
+  {
+    route: "pesagem-balanca",
+    label: "Mangueiro",
+    icon: "activity" as const,
+    description: "Brinco, peso, destino e protocolos",
+    cor: "#FF9800",
   },
   {
     route: "animais",
@@ -30,17 +37,10 @@ const MODULES = [
     cor: "#2196F3",
   },
   {
-    route: "pesagem-balanca",
-    label: "Pesagem",
-    icon: "activity" as const,
-    description: "Balança + Leitor RFID (Serial/BLE)",
-    cor: "#FF9800",
-  },
-  {
     route: "sanidade",
     label: "Sanidade",
     icon: "shield" as const,
-    description: "Vacinações e vermifugações",
+    description: "Protocolos aplicados no mangueiro",
     cor: "#9C27B0",
   },
   {
@@ -56,13 +56,6 @@ const MODULES = [
     icon: "tag" as const,
     description: "Pedidos MAPA e locais",
     cor: "#795548",
-  },
-  {
-    route: "entrada-animais",
-    label: "Entrada de Animais",
-    icon: "log-in" as const,
-    description: "GTA + brinco + pesagem",
-    cor: "#009688",
   },
 ];
 

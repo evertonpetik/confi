@@ -554,7 +554,7 @@ export class BluetoothService {
         const chipId = chipMatch[1];
 
         const leitura: LeituraChip = {
-          chipId,
+          chipRfid: chipId,
           timestamp: new Date().toISOString(),
           sinSinal,
           dispositivoId,
