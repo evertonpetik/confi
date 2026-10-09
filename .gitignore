@@ -43,3 +43,6 @@ yarn-error.*
 # Firebase Cloud Functions build
 functions/node_modules/
 functions/.env
+
+# Scripts ad-hoc de seed/exportacao (dados de planilha, pode conter credenciais)
+.scratch_planilha/
