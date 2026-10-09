@@ -188,14 +188,18 @@ export default function Home() {
         const hojeMs = new Date().getTime();
         const vencidos: string[] = [];
 
-        for (const insumoDoc of insumosSnap.docs) {
-          const insumoData = insumoDoc.data();
-          if (!insumoData.materiaSecaVariavel) continue;
+        const insumosComMS = insumosSnap.docs.filter((d) => d.data().materiaSecaVariavel);
+        const confSnaps = await Promise.all(
+          insumosComMS.map((insumoDoc) => getCollection("insumos", insumoDoc.id, "conferencias"))
+        );
 
-          const confSnap = await getCollection("insumos", insumoDoc.id, "conferencias");
+        insumosComMS.forEach((insumoDoc, idx) => {
+          const insumoData = insumoDoc.data();
+          const confSnap = confSnaps[idx];
+
           if (confSnap.empty) {
             vencidos.push(insumoData.nome ?? "Sem nome");
-            continue;
+            return;
           }
 
           // Encontrar data mais recente
@@ -212,7 +216,7 @@ export default function Home() {
               vencidos.push(insumoData.nome ?? "Sem nome");
             }
           }
-        }
+        });
 
         setInsumosVencidos(vencidos);
       } else {
@@ -255,6 +259,20 @@ export default function Home() {
         }
       }
 
+      const lotesAtivosDocs = lotesSnap.docs.filter((d) => d.data().ativo === true);
+
+      const [movSnaps, leitSnaps] = await Promise.all([
+        Promise.all(lotesAtivosDocs.map((loteDoc) => getCollection("lotes", loteDoc.id, "movimentacoes"))),
+        Promise.all(
+          lotesAtivosDocs.map((loteDoc) =>
+            queryCollection(
+              ["lotes", loteDoc.id, "leituras"],
+              [fsOrderBy("data", "desc"), fsLimit(1)]
+            ).catch(() => null)
+          )
+        ),
+      ]);
+
       let ativos = 0;
       let animais = 0;
       let mortes = 0;
@@ -262,12 +280,11 @@ export default function Home() {
       let entradas = 0;
       const rows: LoteReportRow[] = [];
 
-      for (const loteDoc of lotesSnap.docs) {
+      lotesAtivosDocs.forEach((loteDoc, idx) => {
         const ld = loteDoc.data();
-        if (ld.ativo !== true) continue;
         ativos++;
 
-        const movSnap = await getCollection("lotes", loteDoc.id, "movimentacoes");
+        const movSnap = movSnaps[idx];
         const movs: Movimentacao[] = movSnap.docs.map((m) => ({
           id: m.id,
           ...(m.data() as Omit<Movimentacao, "id">),
@@ -310,17 +327,12 @@ export default function Home() {
         // Last leitura de cocho
         let leituraCocho = "-";
         let cmsAtual = 0;
-        try {
-          const leitSnap = await queryCollection(
-            ["lotes", loteDoc.id, "leituras"],
-            [fsOrderBy("data", "desc"), fsLimit(1)]
-          );
-          if (!leitSnap.empty) {
-            const l = leitSnap.docs[0].data();
-            leituraCocho = l.nota ?? "-";
-            cmsAtual = l.cmsNovo ?? 0;
-          }
-        } catch { /* no index */ }
+        const leitSnap = leitSnaps[idx];
+        if (leitSnap && !leitSnap.empty) {
+          const l = leitSnap.docs[0].data();
+          leituraCocho = l.nota ?? "-";
+          cmsAtual = l.cmsNovo ?? 0;
+        }
 
         // Consumo do dia (MO e MS por cabeca)
         const totalMOHoje = todayMOByLote.get(loteDoc.id) ?? 0;
@@ -363,7 +375,7 @@ export default function Home() {
           pesoReal,
           cmsPctPVMedio,
         });
-      }
+      });
 
       rows.sort((a, b) => compararPiquetes(a.piquete, b.piquete));
       setReportRows(rows);

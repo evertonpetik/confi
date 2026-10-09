@@ -80,27 +80,31 @@ export default function EstimativaPeso() {
     try {
       setLoadingLotes(true);
       const lotesSnap = await getCollection("lotes");
+      const lotesAtivosDocs = lotesSnap.docs.filter((doc) => doc.data().ativo);
+
+      const movSnaps = await Promise.all(
+        lotesAtivosDocs.map((doc) => getCollection("lotes", doc.id, "movimentacoes"))
+      );
+
       const lotesData: Lote[] = [];
 
-      for (const doc of lotesSnap.docs) {
+      lotesAtivosDocs.forEach((doc, idx) => {
         const d = doc.data();
-        if (!d.ativo) continue;
-
-        const movSnap = await getCollection("lotes", doc.id, "movimentacoes");
+        const movSnap = movSnaps[idx];
         const movimentacoes: Movimentacao[] = movSnap.docs.map((m) => ({
           id: m.id,
           ...m.data(),
         })) as Movimentacao[];
 
         const qtd = calcularQuantidadeAtual(movimentacoes);
-        if (qtd <= 0) continue;
+        if (qtd <= 0) return;
 
         lotesData.push({
           id: doc.id,
           ...d,
           movimentacoes,
         } as Lote);
-      }
+      });
 
       lotesData.sort((a, b) => a.numero - b.numero);
       setLotes(lotesData);

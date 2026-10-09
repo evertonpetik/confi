@@ -88,19 +88,22 @@ export default function Dietas() {
 
   async function fetchInsumos() {
     const insumosSnap = await getCollection("insumos");
-    const data: Insumo[] = [];
 
-    for (const insumoDoc of insumosSnap.docs) {
+    const comprasSnaps = await Promise.all(
+      insumosSnap.docs.map((insumoDoc) =>
+        getCollection("insumos", insumoDoc.id, "compras")
+      )
+    );
+
+    const data: Insumo[] = insumosSnap.docs.map((insumoDoc, idx) => {
       const insumoData = insumoDoc.data();
-      const comprasSnap = await getCollection(
-        "insumos", insumoDoc.id, "compras"
-      );
+      const comprasSnap = comprasSnaps[idx];
       const compras: Compra[] = comprasSnap.docs.map((cDoc) => ({
         id: cDoc.id,
         ...cDoc.data(),
       })) as Compra[];
 
-      data.push({
+      return {
         id: insumoDoc.id,
         nome: insumoData.nome ?? "",
         percentualMateriaSeca: insumoData.percentualMateriaSeca ?? 0,
@@ -108,8 +111,8 @@ export default function Dietas() {
         compras,
         saidas: [],
         conferencias: [],
-      });
-    }
+      };
+    });
 
     data.sort((a, b) => a.nome.localeCompare(b.nome));
     setInsumos(data);

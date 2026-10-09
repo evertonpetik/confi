@@ -150,17 +150,22 @@ export default function Lotes() {
     try {
       setLoading(true);
       const lotesSnap = await getCollection("lotes");
-      const data: Lote[] = [];
 
-      for (const loteDoc of lotesSnap.docs) {
+      const movSnaps = await Promise.all(
+        lotesSnap.docs.map((loteDoc) =>
+          getCollection("lotes", loteDoc.id, "movimentacoes")
+        )
+      );
+
+      const data: Lote[] = lotesSnap.docs.map((loteDoc, idx) => {
         const loteData = loteDoc.data();
-        const movSnap = await getCollection("lotes", loteDoc.id, "movimentacoes");
+        const movSnap = movSnaps[idx];
         const movimentacoes: Movimentacao[] = movSnap.docs.map((mDoc) => ({
           id: mDoc.id,
           ...mDoc.data(),
         })) as Movimentacao[];
 
-        data.push({
+        return {
           id: loteDoc.id,
           numero: loteData.numero ?? 0,
           raca: loteData.raca ?? "",
@@ -175,8 +180,8 @@ export default function Lotes() {
           piqueteId: loteData.piqueteId ?? "",
           piqueteNome: loteData.piqueteNome ?? "",
           movimentacoes,
-        });
-      }
+        };
+      });
 
       data.sort((a, b) => a.numero - b.numero);
       setLotes(data);
