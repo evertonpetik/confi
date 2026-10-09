@@ -592,7 +592,7 @@ export default function AnaliseLote() {
                 placeholder="Selecione um lote"
                 value={selectedLoteId}
                 options={lotes.map((l) => ({
-                  label: `Lote ${l.numero} - ${l.raca || "Sem raca"} (${l.piqueteNome || "Sem piquete"})`,
+                  label: `Lote ${l.numero} - ${l.raca || "Sem raca"} - ${l.produtor || "Sem produtor"} (${l.piqueteNome || "Sem piquete"})`,
                   value: l.id,
                 }))}
                 onSelect={handleSelectLote}
