@@ -9,16 +9,21 @@ import {
   getCollection,
   queryCollection,
 } from "@/services/firestoreService";
+import { compararPiquetes } from "@/utils/piqueteOrdenacao";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 
@@ -46,6 +51,85 @@ type LoteReportRow = {
   cmsPctPVMedio: number;
 };
 
+// ---- Column filter modal ----
+
+type ColumnFilterModalProps = {
+  columnLabel: string;
+  values: string[];
+  selectedValues: Set<string>;
+  onToggleValue: (value: string) => void;
+  onClose: () => void;
+};
+
+function ColumnFilterModal({ columnLabel, values, selectedValues, onToggleValue, onClose }: ColumnFilterModalProps) {
+  const { primaryColor } = useTheme();
+  const [search, setSearch] = useState("");
+
+  const filteredValues = values.filter((v) => v.toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={styles.filterModalOverlay}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.filterModalSheet}>
+          <View style={styles.filterModalHeader}>
+            <Text style={styles.filterModalHeaderTitle}>Filtrar: {columnLabel}</Text>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Feather name="x" size={22} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.filterModalSearchWrapper}>
+            <Feather name="search" size={16} color="#999" style={styles.filterModalSearchIcon} />
+            <TextInput
+              style={styles.filterModalSearchInput}
+              placeholder="Buscar valor..."
+              value={search}
+              onChangeText={setSearch}
+            />
+          </View>
+
+          <FlatList
+            data={filteredValues}
+            keyExtractor={(item) => item}
+            renderItem={({ item }) => {
+              const isSelected = selectedValues.has(item);
+              return (
+                <TouchableOpacity
+                  style={styles.filterModalOption}
+                  onPress={() => onToggleValue(item)}
+                  activeOpacity={0.7}
+                >
+                  <View
+                    style={[
+                      styles.filterModalCheckbox,
+                      isSelected && { backgroundColor: primaryColor, borderColor: primaryColor },
+                    ]}
+                  >
+                    {isSelected && <Feather name="check" size={12} color="#FFF" />}
+                  </View>
+                  <Text style={styles.filterModalOptionText} numberOfLines={1}>{item}</Text>
+                </TouchableOpacity>
+              );
+            }}
+            ListEmptyComponent={<Text style={styles.filterModalEmptyText}>Nenhum valor encontrado</Text>}
+            style={{ maxHeight: 320 }}
+          />
+
+          <TouchableOpacity
+            style={[styles.filterModalConfirmButton, { backgroundColor: primaryColor }]}
+            onPress={onClose}
+          >
+            <Text style={styles.filterModalConfirmButtonText}>Confirmar ({selectedValues.size})</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 // ---- Component ----
 
 export default function Home() {
@@ -59,6 +143,10 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [reportRows, setReportRows] = useState<LoteReportRow[]>([]);
   const [insumosVencidos, setInsumosVencidos] = useState<string[]>([]);
+  const [sortKey, setSortKey] = useState<keyof LoteReportRow | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [columnFilters, setColumnFilters] = useState<Partial<Record<keyof LoteReportRow, Set<string>>>>({});
+  const [filterModalColumn, setFilterModalColumn] = useState<keyof LoteReportRow | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -277,7 +365,7 @@ export default function Home() {
         });
       }
 
-      rows.sort((a, b) => a.loteNumero - b.loteNumero);
+      rows.sort((a, b) => compararPiquetes(a.piquete, b.piquete));
       setReportRows(rows);
       setLotesAtivos(ativos);
       setTotalAnimais(animais);
@@ -321,8 +409,82 @@ export default function Home() {
     return String(row[col.key]);
   }
 
+  function getUniqueColumnValues(col: typeof columns[number]): string[] {
+    const values = new Set(reportRows.map((row) => getCellValue(row, col)));
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }
+
+  function getFilteredRows(rows: LoteReportRow[]): LoteReportRow[] {
+    const activeFilters = Object.entries(columnFilters) as [keyof LoteReportRow, Set<string>][];
+    if (activeFilters.length === 0) return rows;
+    return rows.filter((row) =>
+      activeFilters.every(([key, allowedValues]) => {
+        const col = columns.find((c) => c.key === key);
+        if (!col) return true;
+        return allowedValues.has(getCellValue(row, col));
+      })
+    );
+  }
+
+  function getSortedRows(rows: LoteReportRow[]): LoteReportRow[] {
+    const sorted = [...rows];
+    if (!sortKey) {
+      sorted.sort((a, b) => compararPiquetes(a.piquete, b.piquete));
+      return sorted;
+    }
+    sorted.sort((a, b) => {
+      const valueA = a[sortKey];
+      const valueB = b[sortKey];
+      let comparison = 0;
+      if (typeof valueA === "number" && typeof valueB === "number") {
+        comparison = valueA - valueB;
+      } else {
+        comparison = String(valueA).localeCompare(String(valueB));
+      }
+      return sortDir === "asc" ? comparison : -comparison;
+    });
+    return sorted;
+  }
+
+  function handleSortPress(key: keyof LoteReportRow) {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
+
+  function handleToggleFilterValue(key: keyof LoteReportRow, value: string, allValues: string[]) {
+    setColumnFilters((prev) => {
+      const current = prev[key] ?? new Set(allValues);
+      const next = new Set(current);
+      if (next.has(value)) {
+        next.delete(value);
+      } else {
+        next.add(value);
+      }
+      const updated = { ...prev };
+      if (next.size === allValues.length) {
+        delete updated[key];
+      } else {
+        updated[key] = next;
+      }
+      return updated;
+    });
+  }
+
+  const visibleRows = getSortedRows(getFilteredRows(reportRows));
+
+  const filterModalCol = filterModalColumn ? columns.find((c) => c.key === filterModalColumn) : null;
+  const filterModalValues = filterModalCol ? getUniqueColumnValues(filterModalCol) : [];
+  const filterModalSelected = filterModalColumn
+    ? columnFilters[filterModalColumn] ?? new Set(filterModalValues)
+    : new Set<string>();
+
   return (
     <DrawerSceneWrapper>
+      <>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.select({ ios: "padding", android: "height" })}
@@ -371,14 +533,45 @@ export default function Home() {
                         <View>
                           {/* Header */}
                           <View style={[styles.tableHeaderRow, { backgroundColor: primaryColor }]}>
-                            {columns.map((col) => (
-                              <View key={col.key} style={[styles.tableHeaderCell, { width: col.width }]}>
-                                <Text style={styles.tableHeaderText} numberOfLines={2}>{col.label}</Text>
-                              </View>
-                            ))}
+                            {columns.map((col) => {
+                              const isSorted = sortKey === col.key;
+                              const isFiltered = !!columnFilters[col.key];
+                              return (
+                                <TouchableOpacity
+                                  key={col.key}
+                                  style={[styles.tableHeaderCell, styles.tableHeaderCellTouchable, { width: col.width }]}
+                                  onPress={() => handleSortPress(col.key)}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={styles.tableHeaderText} numberOfLines={2}>{col.label}</Text>
+                                  <View style={styles.tableHeaderIcons}>
+                                    {isSorted && (
+                                      <Feather
+                                        name={sortDir === "asc" ? "chevron-up" : "chevron-down"}
+                                        size={12}
+                                        color="#FFF"
+                                      />
+                                    )}
+                                    <TouchableOpacity
+                                      onPress={(e) => {
+                                        e.stopPropagation();
+                                        setFilterModalColumn(col.key);
+                                      }}
+                                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                    >
+                                      <Feather
+                                        name="filter"
+                                        size={12}
+                                        color={isFiltered ? "#FFD700" : "#FFF"}
+                                      />
+                                    </TouchableOpacity>
+                                  </View>
+                                </TouchableOpacity>
+                              );
+                            })}
                           </View>
                           {/* Rows */}
-                          {reportRows.map((row, i) => (
+                          {visibleRows.map((row, i) => (
                             <View
                               key={row.loteNumero}
                               style={[styles.tableDataRow, i % 2 === 1 && styles.tableDataRowAlt]}
@@ -445,6 +638,16 @@ export default function Home() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      {filterModalCol && (
+        <ColumnFilterModal
+          columnLabel={filterModalCol.label}
+          values={filterModalValues}
+          selectedValues={filterModalSelected}
+          onToggleValue={(value) => handleToggleFilterValue(filterModalCol.key, value, filterModalValues)}
+          onClose={() => setFilterModalColumn(null)}
+        />
+      )}
+      </>
     </DrawerSceneWrapper>
   );
 }
@@ -513,6 +716,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     justifyContent: "center",
   },
+  tableHeaderCellTouchable: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 4,
+  },
+  tableHeaderIcons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   tableHeaderText: {
     fontSize: 11,
     fontWeight: "700",
@@ -533,6 +747,95 @@ const styles = StyleSheet.create({
   tableDataText: {
     fontSize: 11,
     color: "#1a1a1a",
+  },
+  filterModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+    alignItems: "center",
+  },
+  filterModalSheet: {
+    backgroundColor: "#FDFDFD",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "70%",
+    paddingBottom: 24,
+    width: "100%",
+    maxWidth: 560,
+  },
+  filterModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  filterModalHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1a1a1a",
+  },
+  filterModalSearchWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 24,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#DCDCDC",
+    borderRadius: 8,
+    height: 40,
+    paddingHorizontal: 10,
+  },
+  filterModalSearchIcon: {
+    marginRight: 8,
+  },
+  filterModalSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1a1a1a",
+  },
+  filterModalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#ECECEC",
+    gap: 12,
+  },
+  filterModalCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#DCDCDC",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF",
+  },
+  filterModalOptionText: {
+    fontSize: 16,
+    color: "#1a1a1a",
+  },
+  filterModalConfirmButton: {
+    marginHorizontal: 24,
+    marginTop: 12,
+    height: 48,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterModalConfirmButtonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  filterModalEmptyText: {
+    textAlign: "center",
+    padding: 24,
+    fontSize: 15,
+    color: "#999",
   },
   // ---- Dashboard Cards ----
   cardsContainer: {

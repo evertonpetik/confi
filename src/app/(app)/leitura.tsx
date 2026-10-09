@@ -11,6 +11,7 @@ import {
   queryCollection,
 } from "@/services/firestoreService";
 import { getHojeStr } from "@/utils/mapaTratoCalc";
+import { compararPiquetes } from "@/utils/piqueteOrdenacao";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
@@ -28,30 +29,6 @@ import {
 
 const CMS_INICIAL = 1.3;
 const CMS_BASE = 2.6;
-
-const ORDEM_PREFIXO_PIQUETE: Record<string, number> = {
-  piquete: 0,
-  rinc: 1,
-  rn: 2,
-};
-
-function extrairPrefixoNumeroPiquete(nome: string): { prefixo: string; numero: number } {
-  const match = nome.match(/^([A-Za-zÀ-ÿ]+)\s*(\d+)/);
-  if (match) {
-    return { prefixo: match[1].toLowerCase(), numero: parseInt(match[2], 10) };
-  }
-  return { prefixo: nome.toLowerCase(), numero: 0 };
-}
-
-function compararPiquetes(nomeA: string, nomeB: string): number {
-  const a = extrairPrefixoNumeroPiquete(nomeA);
-  const b = extrairPrefixoNumeroPiquete(nomeB);
-  const ordemA = ORDEM_PREFIXO_PIQUETE[a.prefixo] ?? 99;
-  const ordemB = ORDEM_PREFIXO_PIQUETE[b.prefixo] ?? 99;
-  if (ordemA !== ordemB) return ordemA - ordemB;
-  if (a.prefixo !== b.prefixo) return a.prefixo.localeCompare(b.prefixo);
-  return a.numero - b.numero;
-}
 
 type NotaLeitura = {
   descricao: string;
