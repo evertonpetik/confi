@@ -1,6 +1,7 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Movimentacao } from "@/components/LoteCard";
+import { Roteiro, RoteiroPiquete } from "@/components/RoteiroCard";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
@@ -8,6 +9,7 @@ import {
   fsOrderBy,
   getCollection,
   queryCollection,
+  updateDocument,
 } from "@/services/firestoreService";
 import { compararPiquetes } from "@/utils/piqueteOrdenacao";
 import { Feather } from "@expo/vector-icons";
@@ -15,6 +17,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -31,6 +34,7 @@ import {
 
 type LoteReportRow = {
   piquete: string;
+  piqueteId: string;
   loteNumero: number;
   dieta: string;
   quantidade: number;
@@ -130,6 +134,67 @@ function ColumnFilterModal({ columnLabel, values, selectedValues, onToggleValue,
   );
 }
 
+// ---- Trocar roteiro modal ----
+
+type TrocarRoteiroModalProps = {
+  piqueteNome: string;
+  roteiros: Roteiro[];
+  roteiroAtualId: string | undefined;
+  onSelect: (roteiroId: string) => void;
+  onClose: () => void;
+};
+
+function TrocarRoteiroModal({ piqueteNome, roteiros, roteiroAtualId, onSelect, onClose }: TrocarRoteiroModalProps) {
+  const { primaryColor } = useTheme();
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={styles.filterModalOverlay}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.filterModalSheet}>
+          <View style={styles.filterModalHeader}>
+            <Text style={styles.filterModalHeaderTitle} numberOfLines={1}>
+              Trocar roteiro — Piquete {piqueteNome}
+            </Text>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Feather name="x" size={22} color="#333" />
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={roteiros}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => {
+              const isAtual = item.id === roteiroAtualId;
+              return (
+                <TouchableOpacity
+                  style={styles.filterModalOption}
+                  onPress={() => onSelect(item.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.roteiroOptionTitle, isAtual && { color: primaryColor }]} numberOfLines={1}>
+                      Roteiro {item.numero}
+                    </Text>
+                    <Text style={styles.roteiroOptionSubtitle} numberOfLines={1}>
+                      Dieta: {item.dietaNome || "-"}
+                    </Text>
+                  </View>
+                  {isAtual && <Feather name="check" size={18} color={primaryColor} />}
+                </TouchableOpacity>
+              );
+            }}
+            ListEmptyComponent={<Text style={styles.filterModalEmptyText}>Nenhum roteiro encontrado</Text>}
+            style={{ maxHeight: 400 }}
+          />
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 // ---- Component ----
 
 export default function Home() {
@@ -147,6 +212,8 @@ export default function Home() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [columnFilters, setColumnFilters] = useState<Partial<Record<keyof LoteReportRow, Set<string>>>>({});
   const [filterModalColumn, setFilterModalColumn] = useState<keyof LoteReportRow | null>(null);
+  const [roteiros, setRoteiros] = useState<Roteiro[]>([]);
+  const [trocaRoteiroPiquete, setTrocaRoteiroPiquete] = useState<{ piqueteId: string; piqueteNome: string } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -167,16 +234,30 @@ export default function Home() {
 
       // Build piqueteId -> dietaNome map from roteiros
       const piqueteDietaMap = new Map<string, string>();
+      const roteirosAtivos: Roteiro[] = [];
       for (const rDoc of roteirosSnap.docs) {
         const rData = rDoc.data();
         const dietaNome = (rData.dietaNome as string) ?? "";
-        const piquetes = (rData.piquetes ?? []) as { piqueteId: string; piqueteNome: string }[];
+        const piquetes = (rData.piquetes ?? []) as RoteiroPiquete[];
         for (const p of piquetes) {
           if (p.piqueteId && dietaNome) {
             piqueteDietaMap.set(p.piqueteId, dietaNome);
           }
         }
+        if (rData.ativo !== false) {
+          roteirosAtivos.push({
+            id: rDoc.id,
+            numero: rData.numero ?? 0,
+            dietaId: rData.dietaId ?? "",
+            dietaNome,
+            piquetes,
+            minTratos: rData.minTratos ?? 1,
+            ativo: rData.ativo ?? true,
+          });
+        }
       }
+      roteirosAtivos.sort((a, b) => a.numero - b.numero);
+      setRoteiros(roteirosAtivos);
 
       // Verificar conferências de MS vencidas
       const tempoMSParam = parametrosSnap.docs.find(
@@ -356,6 +437,7 @@ export default function Home() {
 
         rows.push({
           piquete: ld.piqueteNome ?? "-",
+          piqueteId: ld.piqueteId ?? "",
           loteNumero: ld.numero ?? 0,
           dieta: (ld.piqueteId ? piqueteDietaMap.get(ld.piqueteId) : undefined) ?? "-",
           quantidade: qtdAtual,
@@ -488,6 +570,44 @@ export default function Home() {
 
   const visibleRows = getSortedRows(getFilteredRows(reportRows));
 
+  async function handleTrocarRoteiro(novoRoteiroId: string) {
+    if (!trocaRoteiroPiquete) return;
+    const { piqueteId, piqueteNome } = trocaRoteiroPiquete;
+
+    const roteiroOrigem = roteiros.find((r) => r.piquetes.some((p) => p.piqueteId === piqueteId));
+    const roteiroDestino = roteiros.find((r) => r.id === novoRoteiroId);
+
+    if (!roteiroDestino || roteiroOrigem?.id === roteiroDestino.id) {
+      setTrocaRoteiroPiquete(null);
+      return;
+    }
+
+    const novosPiquetesDestino = [...roteiroDestino.piquetes, { piqueteId, piqueteNome }].sort((a, b) =>
+      compararPiquetes(a.piqueteNome, b.piqueteNome)
+    );
+    const novosPiquetesOrigem = roteiroOrigem
+      ? roteiroOrigem.piquetes.filter((p) => p.piqueteId !== piqueteId)
+      : null;
+
+    try {
+      await Promise.all([
+        updateDocument(["roteiros"], roteiroDestino.id, { piquetes: novosPiquetesDestino }),
+        ...(roteiroOrigem && novosPiquetesOrigem
+          ? [updateDocument(["roteiros"], roteiroOrigem.id, { piquetes: novosPiquetesOrigem })]
+          : []),
+      ]);
+      setTrocaRoteiroPiquete(null);
+      await fetchDashboard();
+    } catch (error) {
+      console.error("Erro ao trocar roteiro do piquete:", error);
+      Alert.alert("Erro", "Não foi possível trocar o roteiro do piquete.");
+    }
+  }
+
+  const roteiroAtualId = trocaRoteiroPiquete
+    ? roteiros.find((r) => r.piquetes.some((p) => p.piqueteId === trocaRoteiroPiquete.piqueteId))?.id
+    : undefined;
+
   const filterModalCol = filterModalColumn ? columns.find((c) => c.key === filterModalColumn) : null;
   const filterModalValues = filterModalCol ? getUniqueColumnValues(filterModalCol) : [];
   const filterModalSelected = filterModalColumn
@@ -590,9 +710,27 @@ export default function Home() {
                             >
                               {columns.map((col) => (
                                 <View key={col.key} style={[styles.tableDataCell, { width: col.width }]}>
-                                  <Text style={styles.tableDataText} numberOfLines={1}>
-                                    {getCellValue(row, col)}
-                                  </Text>
+                                  {col.key === "dieta" ? (
+                                    <View style={styles.dietaCell}>
+                                      <Text style={[styles.tableDataText, { flex: 1 }]} numberOfLines={1}>
+                                        {getCellValue(row, col)}
+                                      </Text>
+                                      {!!row.piqueteId && (
+                                        <TouchableOpacity
+                                          onPress={() =>
+                                            setTrocaRoteiroPiquete({ piqueteId: row.piqueteId, piqueteNome: row.piquete })
+                                          }
+                                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                        >
+                                          <Feather name="repeat" size={13} color={primaryColor} />
+                                        </TouchableOpacity>
+                                      )}
+                                    </View>
+                                  ) : (
+                                    <Text style={styles.tableDataText} numberOfLines={1}>
+                                      {getCellValue(row, col)}
+                                    </Text>
+                                  )}
                                 </View>
                               ))}
                             </View>
@@ -657,6 +795,15 @@ export default function Home() {
           selectedValues={filterModalSelected}
           onToggleValue={(value) => handleToggleFilterValue(filterModalCol.key, value, filterModalValues)}
           onClose={() => setFilterModalColumn(null)}
+        />
+      )}
+      {trocaRoteiroPiquete && (
+        <TrocarRoteiroModal
+          piqueteNome={trocaRoteiroPiquete.piqueteNome}
+          roteiros={roteiros}
+          roteiroAtualId={roteiroAtualId}
+          onSelect={handleTrocarRoteiro}
+          onClose={() => setTrocaRoteiroPiquete(null)}
         />
       )}
       </>
@@ -759,6 +906,21 @@ const styles = StyleSheet.create({
   tableDataText: {
     fontSize: 11,
     color: "#1a1a1a",
+  },
+  dietaCell: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  roteiroOptionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1a1a1a",
+  },
+  roteiroOptionSubtitle: {
+    fontSize: 13,
+    color: "#888",
+    marginTop: 2,
   },
   filterModalOverlay: {
     flex: 1,
