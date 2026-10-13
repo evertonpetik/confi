@@ -140,7 +140,7 @@ export function InsumoCard({
             activeOpacity={0.7}
             onPress={() => onConferencias(insumo)}
           >
-            <Feather name="clipboard" size={18} color="#E65100" />
+            <Feather name="droplet" size={18} color="#E65100" />
           </TouchableOpacity>
         )}
         <TouchableOpacity

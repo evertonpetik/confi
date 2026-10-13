@@ -192,7 +192,7 @@ export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoe
           activeOpacity={0.7}
           onPress={() => onMovimentacoes(lote)}
         >
-          <Feather name="activity" size={18} color="#2E7D32" />
+          <Feather name="shopping-cart" size={18} color="#2E7D32" />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
