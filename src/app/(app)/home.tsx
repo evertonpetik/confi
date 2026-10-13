@@ -1,5 +1,6 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { calcularEstoque } from "@/components/InsumoCard";
 import { Movimentacao } from "@/components/LoteCard";
 import { Roteiro, RoteiroPiquete } from "@/components/RoteiroCard";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -11,6 +12,11 @@ import {
   queryCollection,
   updateDocument,
 } from "@/services/firestoreService";
+import {
+  calcularAutonomiaDias,
+  calcularConsumoUltimoDia,
+  isEstoqueBaixo,
+} from "@/utils/insumoAutonomia";
 import { compararPiquetes } from "@/utils/piqueteOrdenacao";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -208,6 +214,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [reportRows, setReportRows] = useState<LoteReportRow[]>([]);
   const [insumosVencidos, setInsumosVencidos] = useState<string[]>([]);
+  const [insumosEstoqueBaixo, setInsumosEstoqueBaixo] = useState<
+    { id: string; nome: string; estoque: number; autonomiaDias: number }[]
+  >([]);
   const [sortKey, setSortKey] = useState<keyof LoteReportRow | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [columnFilters, setColumnFilters] = useState<Partial<Record<keyof LoteReportRow, Set<string>>>>({});
@@ -302,6 +311,38 @@ export default function Home() {
         setInsumosVencidos(vencidos);
       } else {
         setInsumosVencidos([]);
+      }
+
+      // Calcular autonomia de estoque de todos os insumos
+      {
+        const [comprasSnaps, saidasSnaps] = await Promise.all([
+          Promise.all(
+            insumosSnap.docs.map((insumoDoc) => getCollection("insumos", insumoDoc.id, "compras"))
+          ),
+          Promise.all(
+            insumosSnap.docs.map((insumoDoc) => getCollection("insumos", insumoDoc.id, "saidas"))
+          ),
+        ]);
+
+        const baixo: { id: string; nome: string; estoque: number; autonomiaDias: number }[] = [];
+        insumosSnap.docs.forEach((insumoDoc, idx) => {
+          const insumoData = insumoDoc.data();
+          const compras = comprasSnaps[idx].docs.map((d) => d.data() as { quantidade: number; precoKg: number; data: string });
+          const saidas = saidasSnaps[idx].docs.map((d) => d.data() as { quantidade: number; precoKg: number; data: string });
+          const estoque = calcularEstoque(compras as any, saidas as any);
+          const consumoUltimoDia = calcularConsumoUltimoDia(saidas as any).quantidade;
+          const autonomiaDias = calcularAutonomiaDias(estoque, consumoUltimoDia);
+          if (isEstoqueBaixo(autonomiaDias, insumoData.autonomiaMinimaDias)) {
+            baixo.push({
+              id: insumoDoc.id,
+              nome: insumoData.nome ?? "Sem nome",
+              estoque,
+              autonomiaDias: autonomiaDias as number,
+            });
+          }
+        });
+        baixo.sort((a, b) => a.autonomiaDias - b.autonomiaDias);
+        setInsumosEstoqueBaixo(baixo);
       }
 
       // Build historico lookups: loteId -> { gmdReal[], msPorLote (today) }
@@ -637,6 +678,23 @@ export default function Home() {
               </View>
             )}
 
+            {insumosEstoqueBaixo.length > 0 && (
+              <View style={styles.estoqueBaixoCard}>
+                <View style={styles.estoqueBaixoHeader}>
+                  <Feather name="alert-triangle" size={18} color="#E65100" />
+                  <Text style={styles.estoqueBaixoTitle}>Insumos com estoque baixo</Text>
+                </View>
+                {insumosEstoqueBaixo.map((item) => (
+                  <View key={item.id} style={styles.estoqueBaixoItem}>
+                    <Text style={styles.estoqueBaixoNome} numberOfLines={1}>{item.nome}</Text>
+                    <Text style={styles.estoqueBaixoDetalhe}>
+                      {item.estoque.toLocaleString("pt-BR")} kg · Autonomia: {Math.floor(item.autonomiaDias)} dias
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
               <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Dashboard</Text>
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
@@ -849,6 +907,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#FFF",
+  },
+  // ---- Estoque Baixo Card ----
+  estoqueBaixoCard: {
+    backgroundColor: "#FFF3E0",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 16,
+    gap: 8,
+  },
+  estoqueBaixoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  estoqueBaixoTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#E65100",
+  },
+  estoqueBaixoItem: {
+    paddingVertical: 4,
+  },
+  estoqueBaixoNome: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1a1a1a",
+  },
+  estoqueBaixoDetalhe: {
+    fontSize: 12,
+    color: "#666",
   },
   // ---- Report Table ----
   tableSection: {

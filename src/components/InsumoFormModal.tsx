@@ -27,12 +27,14 @@ type InsumoForm = {
   nome: string;
   percentualMateriaSeca: string;
   materiaSecaVariavel: boolean;
+  autonomiaMinimaDias: string;
 };
 
 const emptyForm: InsumoForm = {
   nome: "",
   percentualMateriaSeca: "",
   materiaSecaVariavel: false,
+  autonomiaMinimaDias: "",
 };
 
 export function InsumoFormModal({
@@ -53,6 +55,7 @@ export function InsumoFormModal({
           percentualMateriaSeca:
             insumo.percentualMateriaSeca?.toString() ?? "",
           materiaSecaVariavel: insumo.materiaSecaVariavel ?? false,
+          autonomiaMinimaDias: insumo.autonomiaMinimaDias?.toString() ?? "",
         });
       } else {
         setForm(emptyForm);
@@ -73,10 +76,20 @@ export function InsumoFormModal({
       );
       return;
     }
+    const autonomiaMinimaParsed = parseFloat(
+      form.autonomiaMinimaDias.replace(",", ".")
+    );
+    const autonomiaMinimaDias =
+      !form.autonomiaMinimaDias.trim() ||
+      isNaN(autonomiaMinimaParsed) ||
+      autonomiaMinimaParsed <= 0
+        ? undefined
+        : autonomiaMinimaParsed;
     onSave({
       nome: form.nome.trim(),
       percentualMateriaSeca: pms,
       materiaSecaVariavel: form.materiaSecaVariavel,
+      autonomiaMinimaDias,
     });
   }
 
@@ -121,6 +134,16 @@ export function InsumoFormModal({
                   value={form.percentualMateriaSeca}
                   onChangeText={(v) =>
                     setForm((p) => ({ ...p, percentualMateriaSeca: v }))
+                  }
+                  keyboardType="decimal-pad"
+                />
+
+                <Text style={styles.label}>Autonomia Mínima (dias)</Text>
+                <Input
+                  placeholder="Opcional — ex: 7"
+                  value={form.autonomiaMinimaDias}
+                  onChangeText={(v) =>
+                    setForm((p) => ({ ...p, autonomiaMinimaDias: v }))
                   }
                   keyboardType="decimal-pad"
                 />

@@ -1,4 +1,9 @@
 import { useTheme } from "@/contexts/ThemeContext";
+import {
+  calcularAutonomiaDias,
+  calcularConsumoUltimoDia,
+  isEstoqueBaixo,
+} from "@/utils/insumoAutonomia";
 import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -30,6 +35,7 @@ export type Insumo = {
   nome: string;
   percentualMateriaSeca: number;
   materiaSecaVariavel: boolean;
+  autonomiaMinimaDias?: number;
   compras: Compra[];
   saidas: Saida[];
   conferencias: ConferenciaMS[];
@@ -86,6 +92,9 @@ export function InsumoCard({
   const { primaryColor } = useTheme();
   const estoque = calcularEstoque(insumo.compras, insumo.saidas);
   const precoMedio = calcularPrecoMedio(insumo.compras, insumo.saidas);
+  const consumoUltimoDia = calcularConsumoUltimoDia(insumo.saidas).quantidade;
+  const autonomiaDias = calcularAutonomiaDias(estoque, consumoUltimoDia);
+  const estoqueBaixo = isEstoqueBaixo(autonomiaDias, insumo.autonomiaMinimaDias);
 
   return (
     <View style={styles.card}>
@@ -114,6 +123,12 @@ export function InsumoCard({
               {precoMedio > 0
                 ? `R$ ${precoMedio.toFixed(2).replace(".", ",")}`
                 : "-"}
+            </Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={styles.statLabel}>Autonomia</Text>
+            <Text style={[styles.statValue, estoqueBaixo && styles.statValueAlerta]}>
+              {autonomiaDias !== null ? `${Math.floor(autonomiaDias)} dias` : "-"}
             </Text>
           </View>
         </View>
@@ -210,6 +225,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#1a1a1a",
+  },
+  statValueAlerta: {
+    color: "#E53935",
   },
   actions: {
     flexDirection: "column",
