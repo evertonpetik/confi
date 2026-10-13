@@ -697,7 +697,7 @@ export default function MapaTrato() {
       const yyyy = now.getFullYear();
       const hh = String(now.getHours()).padStart(2, "0");
       const mi = String(now.getMinutes()).padStart(2, "0");
-      const fileName = `Metas_de_Trato_${dd}${mmm}${yyyy}_${hh}_${mi}.csv`;
+      const fileName = `Metas de Trato ${dd}${mmm}${yyyy} ${hh} ${mi}.csv`;
 
       if (Platform.OS === "web") {
         const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
