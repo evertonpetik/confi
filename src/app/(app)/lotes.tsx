@@ -236,12 +236,14 @@ export default function Lotes() {
         if (msPorLoteData) {
           for (const ml of msPorLoteData) {
             msLookup.set(ml.loteId, ml.totalMS);
-            // Extract gmdReal per lote per day
-            if (ml.gmdReal != null && ml.gmdReal > 0) {
-              const prev = gmdMap.get(ml.loteId) ?? [];
-              prev.push({ data: h.data as string, gmdReal: ml.gmdReal });
-              gmdMap.set(ml.loteId, prev);
-            }
+            // Todo dia de trato entra na lista (GMD 0 inclusive), para a
+            // média do card diluir pelos dias reais de cocho.
+            const prev = gmdMap.get(ml.loteId) ?? [];
+            prev.push({
+              data: h.data as string,
+              gmdReal: ml.gmdReal != null && ml.gmdReal > 0 ? ml.gmdReal : 0,
+            });
+            gmdMap.set(ml.loteId, prev);
           }
         }
 

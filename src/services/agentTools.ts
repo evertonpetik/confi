@@ -337,7 +337,7 @@ export async function consultarHistoricoGMD(numeroLote: number, dias = 7) {
     .map((d) => d.data())
     .map((h) => {
       const msPorLote = (h.msPorLote ?? []).find((x: any) => x.loteId === loteId);
-      return msPorLote ? { data: h.data, gmdReal: msPorLote.gmdReal } : null;
+      return msPorLote ? { data: h.data, gmdReal: msPorLote.gmdReal ?? 0 } : null;
     })
     .filter(Boolean);
 

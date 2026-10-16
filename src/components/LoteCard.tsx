@@ -95,14 +95,15 @@ export function LoteCard({ lote, gmdRealDiario, embarqueAgendado, onEdit, onDele
   const pesoMedio = calcularPesoMedio(lote.movimentacoes, lote.gmdEstimado);
   const pesoMedioInicial = calcularPesoMedioInicial(lote.movimentacoes);
 
-  // GMD Real medio and Peso Real
+  // GMD Real medio: soma dos ganhos / todos os dias de trato (GMD 0 conta)
+  const somaGmdReal = gmdRealDiario.reduce((acc, g) => acc + g.gmdReal, 0);
   const gmdRealMedio = gmdRealDiario.length > 0
-    ? gmdRealDiario.reduce((acc, g) => acc + g.gmdReal, 0) / gmdRealDiario.length
+    ? somaGmdReal / gmdRealDiario.length
     : null;
 
   // Peso Real = peso medio inicial + soma dos GMD reais diarios
   const pesoReal = gmdRealDiario.length > 0
-    ? pesoMedioInicial + gmdRealDiario.reduce((acc, g) => acc + g.gmdReal, 0)
+    ? pesoMedioInicial + somaGmdReal
     : null;
 
   return (

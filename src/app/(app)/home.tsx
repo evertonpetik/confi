@@ -426,7 +426,9 @@ export default function Home() {
         d.setDate(d.getDate() - 1);
         return formatDateStr(d);
       })();
-      const gmdRealByLote = new Map<string, number[]>();
+      // soma só acumula ganhos > 0, mas todo dia em que o lote passou pelo
+      // trato conta no denominador — dias de GMD zero diluem a média.
+      const gmdRealByLote = new Map<string, { soma: number; dias: Set<string> }>();
       const cmsByLote = new Map<string, number[]>();
       const ontemMOByLote = new Map<string, number>();
       const ontemMSByLote = new Map<string, number>();
@@ -437,10 +439,13 @@ export default function Home() {
         const msPorLote = h.msPorLote as { loteId: string; totalMO?: number; totalMS?: number; gmdReal?: number; cmsRealizado?: number }[] | undefined;
         if (!msPorLote) continue;
         for (const ml of msPorLote) {
-          if (ml.gmdReal != null && ml.gmdReal > 0) {
-            const prev = gmdRealByLote.get(ml.loteId) ?? [];
-            prev.push(ml.gmdReal);
-            gmdRealByLote.set(ml.loteId, prev);
+          if (h.data) {
+            const gmdInfo = gmdRealByLote.get(ml.loteId) ?? { soma: 0, dias: new Set<string>() };
+            gmdInfo.dias.add(h.data as string);
+            if (ml.gmdReal != null && ml.gmdReal > 0) {
+              gmdInfo.soma += ml.gmdReal;
+            }
+            gmdRealByLote.set(ml.loteId, gmdInfo);
           }
           if (ml.cmsRealizado != null && ml.cmsRealizado > 0) {
             const prev = cmsByLote.get(ml.loteId) ?? [];
@@ -593,12 +598,14 @@ export default function Home() {
         const consMOCabPrev = percMSDieta > 0 ? consMSCabPrev / (percMSDieta / 100) : 0;
         const cmsPctPVPrev = consMSCabPrev > 0 ? cmsPrevPct : 0;
 
-        // GMD real medio
-        const gmds = gmdRealByLote.get(loteDoc.id) ?? [];
-        const gmdRealMedio = gmds.length > 0 ? gmds.reduce((a, g) => a + g, 0) / gmds.length : 0;
+        // GMD real medio: soma dos ganhos / dias de trato no historico
+        const gmdInfo = gmdRealByLote.get(loteDoc.id);
+        const somaGmd = gmdInfo?.soma ?? 0;
+        const diasGmd = gmdInfo?.dias.size ?? 0;
+        const gmdRealMedio = diasGmd > 0 ? somaGmd / diasGmd : 0;
 
         // Peso real
-        const pesoReal = gmds.length > 0 ? pesoEntrada + gmds.reduce((a, g) => a + g, 0) : 0;
+        const pesoReal = somaGmd > 0 ? pesoEntrada + somaGmd : 0;
 
         // CMS %PV medio
         const cmsArr = cmsByLote.get(loteDoc.id) ?? [];
