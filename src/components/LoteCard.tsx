@@ -33,6 +33,7 @@ export type Lote = {
 type LoteCardProps = {
   lote: Lote;
   gmdRealDiario: { data: string; gmdReal: number }[];
+  embarqueAgendado?: { data: string; quantidade: number } | null;
   onEdit: (lote: Lote) => void;
   onDelete: (lote: Lote) => void;
   onMovimentacoes: (lote: Lote) => void;
@@ -83,7 +84,12 @@ function calcularPesoMedioInicial(movimentacoes: Movimentacao[]): number {
 
 export { calcularPesoMedio, calcularPesoMedioInicial, calcularQuantidadeAtual };
 
-export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoes, onFaturamento, onAgendarEmbarque }: LoteCardProps) {
+function formatDataBr(data: string): string {
+  const partes = data.split("-");
+  return partes.length === 3 ? `${partes[2]}/${partes[1]}` : data;
+}
+
+export function LoteCard({ lote, gmdRealDiario, embarqueAgendado, onEdit, onDelete, onMovimentacoes, onFaturamento, onAgendarEmbarque }: LoteCardProps) {
   const { primaryColor } = useTheme();
   const qtdAtual = calcularQuantidadeAtual(lote.movimentacoes);
   const pesoMedio = calcularPesoMedio(lote.movimentacoes, lote.gmdEstimado);
@@ -100,7 +106,7 @@ export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoe
     : null;
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, embarqueAgendado ? styles.cardEmbarque : null]}>
       <View style={styles.content}>
         <View style={styles.topRow}>
           <Text style={styles.numero}>Lote {lote.numero}</Text>
@@ -119,6 +125,14 @@ export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoe
               {lote.ativo ? "Ativo" : "Inativo"}
             </Text>
           </View>
+          {embarqueAgendado && (
+            <View style={[styles.badge, styles.badgeEmbarque]}>
+              <Feather name="truck" size={11} color="#E65100" />
+              <Text style={[styles.badgeText, styles.badgeTextEmbarque]}>
+                Embarque {formatDataBr(embarqueAgendado.data)} · {embarqueAgendado.quantidade}
+              </Text>
+            </View>
+          )}
         </View>
         {!!lote.raca && (
           <Text style={styles.detalhe}>
@@ -229,6 +243,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
   },
+  cardEmbarque: {
+    backgroundColor: "#FFF8EF",
+    borderLeftWidth: 4,
+    borderLeftColor: "#E65100",
+  },
   content: {
     flex: 1,
   },
@@ -264,6 +283,15 @@ const styles = StyleSheet.create({
   },
   badgeTextInativo: {
     color: "#C62828",
+  },
+  badgeEmbarque: {
+    backgroundColor: "#FFF3E0",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  badgeTextEmbarque: {
+    color: "#E65100",
   },
   detalhe: {
     fontSize: 13,

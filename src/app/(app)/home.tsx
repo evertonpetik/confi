@@ -10,7 +10,7 @@ import {
 } from "@/components/TransferenciaLoteModal";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
-import { somarEmbarquesAgendadosNaData } from "@/services/embarqueAgendado";
+import { proximoEmbarqueAgendado, somarEmbarquesAgendadosNaData } from "@/services/embarqueAgendado";
 import {
   fsLimit,
   fsOrderBy,
@@ -74,6 +74,7 @@ type LoteReportRow = {
   pesoReal: number;
   cmsPctPVMedio: number;
   pesoPrevistoHoje: number;
+  embarqueAgendadoData: string;
 };
 
 // ---- Heatmap de cores (vermelho -> amarelo -> verde), estilo escala 3 cores do Excel ----
@@ -522,6 +523,7 @@ export default function Home() {
           status: e.data().status as "agendado" | "cancelado",
         }));
         const quantidadeAgendadaHoje = somarEmbarquesAgendadosNaData(embarqueDocs, hoje);
+        const proximoEmbarque = proximoEmbarqueAgendado(embarqueDocs, hoje);
         if (quantidadeAgendadaHoje > 0) {
           embarquesHojeList.push({
             loteId: loteDoc.id,
@@ -628,6 +630,7 @@ export default function Home() {
           pesoReal,
           cmsPctPVMedio,
           pesoPrevistoHoje: pesoMedioAtual,
+          embarqueAgendadoData: proximoEmbarque?.data ?? "",
         });
       });
 
@@ -1056,7 +1059,11 @@ export default function Home() {
                           {visibleRows.map((row, i) => (
                             <View
                               key={row.loteNumero}
-                              style={[styles.tableDataRow, i % 2 === 1 && styles.tableDataRowAlt]}
+                              style={[
+                                styles.tableDataRow,
+                                i % 2 === 1 && styles.tableDataRowAlt,
+                                !!row.embarqueAgendadoData && styles.tableDataRowEmbarque,
+                              ]}
                             >
                               {columns.map((col) => {
                                 const heatmapBg = getCellBackgroundColor(row, col);
@@ -1064,7 +1071,14 @@ export default function Home() {
                                 <View key={col.key} style={[styles.tableDataCell, { width: col.width }, heatmapBg ? { backgroundColor: heatmapBg } : null]}>
                                   {col.key === "loteNumero" ? (
                                     <View style={styles.dietaCell}>
-                                      <Text style={[styles.tableDataText, { flex: 1 }]} numberOfLines={1}>
+                                      <Text
+                                        style={[
+                                          styles.tableDataText,
+                                          { flex: 1 },
+                                          !!row.embarqueAgendadoData && styles.tableDataTextEmbarque,
+                                        ]}
+                                        numberOfLines={1}
+                                      >
                                         {getCellValue(row, col)}
                                       </Text>
                                       <TouchableOpacity
@@ -1201,7 +1215,10 @@ export default function Home() {
       <AgendarEmbarqueModal
         visible={!!embarqueLote}
         lote={embarqueLote}
-        onClose={() => setEmbarqueLote(null)}
+        onClose={() => {
+          setEmbarqueLote(null);
+          fetchDashboard();
+        }}
       />
       {trocaRoteiroPiquete && (
         <TrocarRoteiroModal
@@ -1353,6 +1370,11 @@ const styles = StyleSheet.create({
   tableDataRowAlt: {
     backgroundColor: "#F5F7FA",
   },
+  tableDataRowEmbarque: {
+    backgroundColor: "#FFF3E0",
+    borderLeftWidth: 3,
+    borderLeftColor: "#E65100",
+  },
   tableDataCell: {
     paddingHorizontal: 6,
     paddingVertical: 8,
@@ -1361,6 +1383,10 @@ const styles = StyleSheet.create({
   tableDataText: {
     fontSize: 11,
     color: "#1a1a1a",
+  },
+  tableDataTextEmbarque: {
+    color: "#E65100",
+    fontWeight: "700",
   },
   dietaCell: {
     flexDirection: "row",

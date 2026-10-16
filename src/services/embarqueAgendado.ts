@@ -64,3 +64,17 @@ export function somarEmbarquesAgendadosNaData(
     .filter((d) => d.status === "agendado" && d.data === data)
     .reduce((acc, d) => acc + d.quantidade, 0);
 }
+
+/** Retorna o próximo embarque pendente (data >= hoje), somando as quantidades da mesma data. */
+export function proximoEmbarqueAgendado(
+  docs: Pick<EmbarqueAgendadoDoc, "data" | "quantidade" | "status">[],
+  hoje: string
+): { data: string; quantidade: number } | null {
+  const pendentes = docs.filter((d) => d.status === "agendado" && d.data >= hoje);
+  if (pendentes.length === 0) return null;
+  const dataMin = pendentes.reduce((min, d) => (d.data < min ? d.data : min), pendentes[0].data);
+  return {
+    data: dataMin,
+    quantidade: pendentes.filter((d) => d.data === dataMin).reduce((acc, d) => acc + d.quantidade, 0),
+  };
+}

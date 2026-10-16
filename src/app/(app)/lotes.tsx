@@ -11,6 +11,7 @@ import { ProdutorFormModal } from "@/components/ProdutorFormModal";
 import { SelectOption } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { proximoEmbarqueAgendado } from "@/services/embarqueAgendado";
 import {
   addDocument,
   deleteDocument,
@@ -18,6 +19,7 @@ import {
   updateDocument,
 } from "@/services/firestoreService";
 import { transferirEntreLotes } from "@/services/transferenciaLote";
+import { getHojeStr } from "@/utils/mapaTratoCalc";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
@@ -52,6 +54,9 @@ export default function Lotes() {
   const [fatVisible, setFatVisible] = useState(false);
   const [fatLote, setFatLote] = useState<Lote | null>(null);
   const [embarqueLote, setEmbarqueLote] = useState<Lote | null>(null);
+  const [embarquesAgendadosMap, setEmbarquesAgendadosMap] = useState<
+    Map<string, { data: string; quantidade: number }>
+  >(new Map());
   const [lancamentosMap, setLancamentosMap] = useState<Map<string, LancamentoFinanceiro[]>>(new Map());
   const [gmdRealMap, setGmdRealMap] = useState<Map<string, { data: string; gmdReal: number }[]>>(new Map());
 
@@ -154,11 +159,31 @@ export default function Lotes() {
       setLoading(true);
       const lotesSnap = await getCollection("lotes");
 
-      const movSnaps = await Promise.all(
-        lotesSnap.docs.map((loteDoc) =>
-          getCollection("lotes", loteDoc.id, "movimentacoes")
-        )
-      );
+      const [movSnaps, embarqueSnaps] = await Promise.all([
+        Promise.all(
+          lotesSnap.docs.map((loteDoc) =>
+            getCollection("lotes", loteDoc.id, "movimentacoes")
+          )
+        ),
+        Promise.all(
+          lotesSnap.docs.map((loteDoc) =>
+            getCollection("lotes", loteDoc.id, "embarquesAgendados")
+          )
+        ),
+      ]);
+
+      const hojeStr = getHojeStr();
+      const embarqueMap = new Map<string, { data: string; quantidade: number }>();
+      lotesSnap.docs.forEach((loteDoc, idx) => {
+        const docs = embarqueSnaps[idx].docs.map((e) => ({
+          data: e.data().data as string,
+          quantidade: e.data().quantidade as number,
+          status: e.data().status as "agendado" | "cancelado",
+        }));
+        const proximo = proximoEmbarqueAgendado(docs, hojeStr);
+        if (proximo) embarqueMap.set(loteDoc.id, proximo);
+      });
+      setEmbarquesAgendadosMap(embarqueMap);
 
       const data: Lote[] = lotesSnap.docs.map((loteDoc, idx) => {
         const loteData = loteDoc.data();
@@ -656,6 +681,7 @@ export default function Lotes() {
                     key={lote.id}
                     lote={lote}
                     gmdRealDiario={gmdRealMap.get(lote.id) ?? []}
+                    embarqueAgendado={embarquesAgendadosMap.get(lote.id) ?? null}
                     onEdit={handleEdit}
                     onDelete={handleDeleteRequest}
                     onMovimentacoes={handleMovimentacoes}
@@ -744,7 +770,10 @@ export default function Lotes() {
               }
             : null
         }
-        onClose={() => setEmbarqueLote(null)}
+        onClose={() => {
+          setEmbarqueLote(null);
+          fetchLotes();
+        }}
       />
     </DrawerSceneWrapper>
   );
