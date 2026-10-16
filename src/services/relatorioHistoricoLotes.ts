@@ -1,5 +1,6 @@
 import { calcularPesoMedioInicial, Movimentacao } from "@/components/LoteCard";
 import { getCollection } from "@/services/firestoreService";
+import { gerarXlsx } from "@/services/xlsx";
 
 export type HistoricoLoteRow = {
   loteId: string;
@@ -134,4 +135,50 @@ export async function buscarRelatorioHistoricoLotes(): Promise<HistoricoLoteRow[
   rows.sort((a, b) => a.data.localeCompare(b.data) || a.loteNumero - b.loteNumero);
 
   return rows;
+}
+
+const COLUNAS_RELATORIO_HISTORICO = [
+  "Lote",
+  "Data",
+  "Quantidade",
+  "Dieta",
+  "CMS % PV",
+  "GMD Calculado",
+  "Consumo MS",
+  "Consumo Previsto Ração KG MO",
+  "Consumo Realizado Ração KG MO",
+  "Faturamento",
+  "Evolução de Peso",
+];
+
+function dataBr(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return y && m && d ? `${d}/${m}/${y}` : iso;
+}
+
+/**
+ * Planilha do relatório histórico em .xlsx, pensada para ser consumida pelo
+ * Power BI: números ficam como número (sem "R$"/"%"), não como texto formatado.
+ */
+export function gerarXlsxRelatorioHistoricoLotes(rows: HistoricoLoteRow[]): Uint8Array {
+  const linhas = rows.map((r) => [
+    r.loteNumero,
+    dataBr(r.data),
+    r.quantidade,
+    r.dieta,
+    r.cmsPctPV,
+    r.gmdCalculado,
+    r.consumoMS,
+    r.consumoPrevistoMO,
+    r.consumoRealizadoMO,
+    r.faturamento,
+    r.evolucaoPeso,
+  ]);
+
+  return gerarXlsx({
+    nome: "Relatório Histórico",
+    cabecalho: COLUNAS_RELATORIO_HISTORICO,
+    linhas,
+    larguras: [8, 12, 12, 16, 10, 14, 12, 16, 16, 12, 14],
+  });
 }

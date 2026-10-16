@@ -3,8 +3,11 @@ import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Select } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import Aviso from "@/services/alerta";
+import { salvarArquivo } from "@/services/downloadArquivo";
 import {
   buscarRelatorioHistoricoLotes,
+  gerarXlsxRelatorioHistoricoLotes,
   HistoricoLoteRow,
 } from "@/services/relatorioHistoricoLotes";
 import { Feather } from "@expo/vector-icons";
@@ -65,6 +68,7 @@ export default function RelatorioHistorico() {
   const [loteFiltro, setLoteFiltro] = useState("");
   const [sortKey, setSortKey] = useState<ColumnKey>("data");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [exportando, setExportando] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -98,6 +102,24 @@ export default function RelatorioHistorico() {
     } else {
       setSortKey(key);
       setSortDir("asc");
+    }
+  }
+
+  async function exportarExcel() {
+    if (visibleRows.length === 0) return;
+    setExportando(true);
+    try {
+      const bytes = gerarXlsxRelatorioHistoricoLotes(visibleRows);
+      await salvarArquivo(
+        `relatorio-historico-lotes.xlsx`,
+        bytes,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+    } catch (e) {
+      console.error(e);
+      Aviso.alert("Erro", "Não foi possível gerar a planilha.");
+    } finally {
+      setExportando(false);
     }
   }
 
@@ -183,13 +205,29 @@ export default function RelatorioHistorico() {
           Consumo, custo e evolução de peso de todos os lotes, dia a dia.
         </Text>
 
-        <View style={{ marginTop: 16, maxWidth: 280 }}>
-          <Select
-            placeholder="Filtrar por lote"
-            value={loteFiltro}
-            options={loteOptions}
-            onSelect={setLoteFiltro}
-          />
+        <View style={styles.toolbarRow}>
+          <View style={{ flex: 1, maxWidth: 280 }}>
+            <Select
+              placeholder="Filtrar por lote"
+              value={loteFiltro}
+              options={loteOptions}
+              onSelect={setLoteFiltro}
+            />
+          </View>
+          <TouchableOpacity
+            style={[styles.btnExportar, { borderColor: primaryColor }]}
+            onPress={exportarExcel}
+            disabled={exportando || visibleRows.length === 0}
+          >
+            {exportando ? (
+              <ActivityIndicator size="small" color={primaryColor} />
+            ) : (
+              <Feather name="file-text" size={16} color={primaryColor} />
+            )}
+            <Text style={[styles.btnExportarTexto, { color: primaryColor }]}>
+              Exportar Excel
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {loading ? (
@@ -240,6 +278,25 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: "#666",
+  },
+  toolbarRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 12,
+    marginTop: 16,
+  },
+  btnExportar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+  },
+  btnExportarTexto: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   tableContainer: {
     borderWidth: 1,
