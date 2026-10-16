@@ -34,6 +34,7 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
   { route: "tratador", label: "Tratador", icon: "play-circle" },
   { route: "estimativa-peso", label: "Estimativa Peso", icon: "camera" },
   { route: "analise-lote", label: "Analise Lote", icon: "bar-chart-2" },
+  { route: "relatorio-historico", label: "Relatório Histórico", icon: "clock" },
   { route: "animais", label: "Rebanho", icon: "list" },
   { route: "movimentacoes", label: "Movimentações", icon: "shuffle" },
   { route: "sanidade", label: "Sanidade", icon: "shield" },
@@ -49,7 +50,7 @@ const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typ
 ];
 
 const MODULO_ROUTES: Record<ModuloId, string[]> = {
-  iconfi: ["home", "produtores", "lotes", "leitura", "insumos", "dietas", "roteiros", "mapa-trato", "tratador", "estimativa-peso", "analise-lote"],
+  iconfi: ["home", "produtores", "lotes", "leitura", "insumos", "dietas", "roteiros", "mapa-trato", "tratador", "estimativa-peso", "analise-lote", "relatorio-historico"],
   ifarm: ["home-ifarm", "animais", "movimentacoes", "pesagem-lista", "pesagem-leitura", "pesagem-historico", "pesagem-balanca", "animal-detalhe", "sanidade", "consulta-gta", "brincos", "processos", "fechar-processo"],
   abastecimento: ["home-abastecimento", "tanques", "veiculos", "abastecimento", "historico-combustivel"],
 };
