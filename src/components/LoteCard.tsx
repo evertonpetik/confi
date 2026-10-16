@@ -95,10 +95,18 @@ export function LoteCard({ lote, gmdRealDiario, embarqueAgendado, onEdit, onDele
   const pesoMedio = calcularPesoMedio(lote.movimentacoes, lote.gmdEstimado);
   const pesoMedioInicial = calcularPesoMedioInicial(lote.movimentacoes);
 
-  // GMD Real medio: soma dos ganhos / todos os dias de trato (GMD 0 conta)
+  // GMD Real medio: soma dos ganhos / dias de confinamento — os dias sem
+  // ganho (ex.: adaptação, sem registro no histórico) também diluem a média.
+  const entradasMov = lote.movimentacoes
+    .filter((m) => m.evento === "Entrada")
+    .sort((a, b) => a.data.localeCompare(b.data));
+  const diasConfinamento = entradasMov.length > 0
+    ? Math.max(0, Math.floor((new Date().getTime() - new Date(entradasMov[0].data + "T00:00:00").getTime()) / 86400000))
+    : 0;
+
   const somaGmdReal = gmdRealDiario.reduce((acc, g) => acc + g.gmdReal, 0);
-  const gmdRealMedio = gmdRealDiario.length > 0
-    ? somaGmdReal / gmdRealDiario.length
+  const gmdRealMedio = gmdRealDiario.length > 0 && diasConfinamento > 0
+    ? somaGmdReal / diasConfinamento
     : null;
 
   // Peso Real = peso medio inicial + soma dos GMD reais diarios
