@@ -17,9 +17,12 @@ import {
   calcularConsumoUltimoDia,
   isEstoqueBaixo,
 } from "@/utils/insumoAutonomia";
+import { calcPesoMedio, CMS_INICIAL } from "@/utils/mapaTratoCalc";
 import { compararPiquetes } from "@/utils/piqueteOrdenacao";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -53,6 +56,9 @@ type LoteReportRow = {
   consMOCab: number;
   consMSCab: number;
   cmsPctPV: number;
+  consMOCabPrev: number;
+  consMSCabPrev: number;
+  cmsPctPVPrev: number;
   leituraCocho: string;
   gmdEstimado: number;
   pesoHojeProjetado: number;
@@ -233,24 +239,36 @@ export default function Home() {
   async function fetchDashboard() {
     try {
       setLoading(true);
-      const [lotesSnap, histSnap, insumosSnap, parametrosSnap, roteirosSnap] = await Promise.all([
+      const [lotesSnap, histSnap, insumosSnap, parametrosSnap, roteirosSnap, dietasSnap] = await Promise.all([
         getCollection("lotes"),
         getCollection("historicoMapaTrato"),
         getCollection("insumos"),
         getCollection("parametros"),
         getCollection("roteiros"),
+        getCollection("dietas"),
       ]);
 
-      // Build piqueteId -> dietaNome map from roteiros
+      // dietaId -> percentualMS (para calcular MO previsto a partir da MS prevista)
+      const dietaPercMSMap = new Map<string, number>();
+      for (const dDoc of dietasSnap.docs) {
+        dietaPercMSMap.set(dDoc.id, dDoc.data().percentualMS ?? 50);
+      }
+
+      // Build piqueteId -> dietaNome / percentualMS maps from roteiros
       const piqueteDietaMap = new Map<string, string>();
+      const piquetePercMSMap = new Map<string, number>();
       const roteirosAtivos: Roteiro[] = [];
       for (const rDoc of roteirosSnap.docs) {
         const rData = rDoc.data();
         const dietaNome = (rData.dietaNome as string) ?? "";
+        const percMSDieta = dietaPercMSMap.get(rData.dietaId as string) ?? 0;
         const piquetes = (rData.piquetes ?? []) as RoteiroPiquete[];
         for (const p of piquetes) {
           if (p.piqueteId && dietaNome) {
             piqueteDietaMap.set(p.piqueteId, dietaNome);
+          }
+          if (p.piqueteId && percMSDieta > 0) {
+            piquetePercMSMap.set(p.piqueteId, percMSDieta);
           }
         }
         if (rData.ativo !== false) {
@@ -345,15 +363,20 @@ export default function Home() {
         setInsumosEstoqueBaixo(baixo);
       }
 
-      // Build historico lookups: loteId -> { gmdReal[], msPorLote (today) }
-      const hoje = (() => {
+      // Build historico lookups: loteId -> { gmdReal[], msPorLote (ontem) }
+      const formatDateStr = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const hoje = formatDateStr(new Date());
+      const ontem = (() => {
         const d = new Date();
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        d.setDate(d.getDate() - 1);
+        return formatDateStr(d);
       })();
       const gmdRealByLote = new Map<string, number[]>();
       const cmsByLote = new Map<string, number[]>();
-      const todayMOByLote = new Map<string, number>();
-      const todayMSByLote = new Map<string, number>();
+      const ontemMOByLote = new Map<string, number>();
+      const ontemMSByLote = new Map<string, number>();
+      const cmsRealizadoOntemByLote = new Map<string, number>();
 
       for (const hDoc of histSnap.docs) {
         const h = hDoc.data();
@@ -370,12 +393,16 @@ export default function Home() {
             prev.push(ml.cmsRealizado);
             cmsByLote.set(ml.loteId, prev);
           }
-          if (h.data === hoje) {
+          // Trato de hoje ainda em execucao: consumo exibido e o realizado de ontem
+          if (h.data === ontem) {
             if (ml.totalMO != null && ml.totalMO > 0) {
-              todayMOByLote.set(ml.loteId, (todayMOByLote.get(ml.loteId) ?? 0) + ml.totalMO);
+              ontemMOByLote.set(ml.loteId, (ontemMOByLote.get(ml.loteId) ?? 0) + ml.totalMO);
             }
             if (ml.totalMS != null && ml.totalMS > 0) {
-              todayMSByLote.set(ml.loteId, (todayMSByLote.get(ml.loteId) ?? 0) + ml.totalMS);
+              ontemMSByLote.set(ml.loteId, (ontemMSByLote.get(ml.loteId) ?? 0) + ml.totalMS);
+            }
+            if (ml.cmsRealizado != null && ml.cmsRealizado > 0) {
+              cmsRealizadoOntemByLote.set(ml.loteId, ml.cmsRealizado);
             }
           }
         }
@@ -449,21 +476,40 @@ export default function Home() {
         // Last leitura de cocho
         let leituraCocho = "-";
         let cmsAtual = 0;
+        let leituraData = "";
         const leitSnap = leitSnaps[idx];
         if (leitSnap && !leitSnap.empty) {
           const l = leitSnap.docs[0].data();
           leituraCocho = l.nota ?? "-";
           cmsAtual = l.cmsNovo ?? 0;
+          leituraData = l.data ?? "";
         }
 
-        // Consumo do dia (MO e MS por cabeca)
-        const totalMOHoje = todayMOByLote.get(loteDoc.id) ?? 0;
-        const totalMSHoje = todayMSByLote.get(loteDoc.id) ?? 0;
-        const consMOCab = qtdAtual > 0 ? totalMOHoje / qtdAtual : 0;
-        const consMSCab = qtdAtual > 0 ? totalMSHoje / qtdAtual : 0;
+        // Consumo realizado de ontem (MO e MS por cabeca)
+        const totalMOOntem = ontemMOByLote.get(loteDoc.id) ?? 0;
+        const totalMSOntem = ontemMSByLote.get(loteDoc.id) ?? 0;
+        const consMOCab = qtdAtual > 0 ? totalMOOntem / qtdAtual : 0;
+        const consMSCab = qtdAtual > 0 ? totalMSOntem / qtdAtual : 0;
 
-        // CMS % PV (hoje)
+        // CMS % PV (ontem)
         const cmsPctPV = pesoHojeProjetado > 0 ? (consMSCab / pesoHojeProjetado) * 100 : cmsAtual;
+
+        // Previsto de hoje: mesma logica do mapa de trato
+        // CMS previsto: leitura de hoje > CMS realizado de ontem > ultima leitura > CMS inicial
+        const cmsOntemRealizado = cmsRealizadoOntemByLote.get(loteDoc.id) ?? 0;
+        let cmsPrevPct = CMS_INICIAL;
+        if (leituraData === hoje && cmsAtual > 0) {
+          cmsPrevPct = cmsAtual;
+        } else if (cmsOntemRealizado > 0) {
+          cmsPrevPct = cmsOntemRealizado;
+        } else if (cmsAtual > 0) {
+          cmsPrevPct = cmsAtual;
+        }
+        const pesoMedioAtual = calcPesoMedio(movs, gmdEst);
+        const percMSDieta = ld.piqueteId ? piquetePercMSMap.get(ld.piqueteId) ?? 0 : 0;
+        const consMSCabPrev = pesoMedioAtual > 0 ? pesoMedioAtual * (cmsPrevPct / 100) : 0;
+        const consMOCabPrev = percMSDieta > 0 ? consMSCabPrev / (percMSDieta / 100) : 0;
+        const cmsPctPVPrev = consMSCabPrev > 0 ? cmsPrevPct : 0;
 
         // GMD real medio
         const gmds = gmdRealByLote.get(loteDoc.id) ?? [];
@@ -491,6 +537,9 @@ export default function Home() {
           consMOCab,
           consMSCab,
           cmsPctPV,
+          consMOCabPrev,
+          consMSCabPrev,
+          cmsPctPVPrev,
           leituraCocho,
           gmdEstimado: gmdEst,
           pesoHojeProjetado,
@@ -528,9 +577,12 @@ export default function Home() {
     { key: "pesoEntrada", label: "Peso Ent.", width: 80, format: (r) => r.pesoEntrada > 0 ? r.pesoEntrada.toFixed(1) : "-" },
     { key: "diasTrato", label: "Dias", width: 55, format: (r) => `${r.diasTrato}` },
     { key: "raca", label: "Raca", width: 110 },
-    { key: "consMOCab", label: "MO/cab", width: 75, format: (r) => r.consMOCab > 0 ? r.consMOCab.toFixed(1) : "-" },
-    { key: "consMSCab", label: "MS/cab", width: 75, format: (r) => r.consMSCab > 0 ? r.consMSCab.toFixed(2) : "-" },
-    { key: "cmsPctPV", label: "CMS %PV", width: 75, format: (r) => r.cmsPctPV > 0 ? r.cmsPctPV.toFixed(2) : "-" },
+    { key: "consMOCab", label: "MO/cab Ontem", width: 80, format: (r) => r.consMOCab > 0 ? r.consMOCab.toFixed(1) : "-" },
+    { key: "consMSCab", label: "MS/cab Ontem", width: 80, format: (r) => r.consMSCab > 0 ? r.consMSCab.toFixed(2) : "-" },
+    { key: "cmsPctPV", label: "CMS %PV Ontem", width: 80, format: (r) => r.cmsPctPV > 0 ? r.cmsPctPV.toFixed(2) : "-" },
+    { key: "consMOCabPrev", label: "MO/cab Prev.", width: 80, format: (r) => r.consMOCabPrev > 0 ? r.consMOCabPrev.toFixed(1) : "-" },
+    { key: "consMSCabPrev", label: "MS/cab Prev.", width: 80, format: (r) => r.consMSCabPrev > 0 ? r.consMSCabPrev.toFixed(2) : "-" },
+    { key: "cmsPctPVPrev", label: "CMS %PV Prev.", width: 80, format: (r) => r.cmsPctPVPrev > 0 ? r.cmsPctPVPrev.toFixed(2) : "-" },
     { key: "leituraCocho", label: "Leit. Cocho", width: 80 },
     { key: "gmdEstimado", label: "GMD Est.", width: 75, format: (r) => r.gmdEstimado > 0 ? r.gmdEstimado.toFixed(3) : "-" },
     { key: "pesoHojeProjetado", label: "Peso Proj.", width: 80, format: (r) => r.pesoHojeProjetado > 0 ? r.pesoHojeProjetado.toFixed(1) : "-" },
@@ -610,6 +662,73 @@ export default function Home() {
   }
 
   const visibleRows = getSortedRows(getFilteredRows(reportRows));
+
+  function buildReportHtml(rows: LoteReportRow[]): string {
+    const escapeHtml = (s: string) =>
+      s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const headerCells = columns.map((c) => `<th>${escapeHtml(c.label)}</th>`).join("");
+    const bodyRows = rows
+      .map(
+        (row) =>
+          `<tr>${columns.map((c) => `<td>${escapeHtml(getCellValue(row, c))}</td>`).join("")}</tr>`
+      )
+      .join("");
+    const dataGeracao = new Date().toLocaleDateString("pt-BR");
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  @page { size: A4 landscape; margin: 8mm; }
+  body { font-family: Helvetica, Arial, sans-serif; margin: 0; }
+  h1 { font-size: 13px; margin: 0 0 6px 0; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 0.5px solid #BBB; padding: 2px 3px; font-size: 6.5px; text-align: left; overflow: hidden; word-wrap: break-word; }
+  th { background-color: ${primaryColor}; color: #FFF; font-weight: bold; }
+  tr:nth-child(even) td { background-color: #F5F7FA; }
+</style>
+</head>
+<body>
+<h1>Relatório de Lotes Ativos — ${dataGeracao}</h1>
+<table>
+<thead><tr>${headerCells}</tr></thead>
+<tbody>${bodyRows}</tbody>
+</table>
+</body>
+</html>`;
+  }
+
+  async function handleGerarPdf() {
+    try {
+      const html = buildReportHtml(visibleRows);
+
+      if (Platform.OS === "web") {
+        const win = window.open("", "_blank");
+        if (!win) {
+          Alert.alert("Erro", "Permita pop-ups para gerar o PDF.");
+          return;
+        }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        win.print();
+        return;
+      }
+
+      // A4 paisagem em pontos (72 dpi) para caber todas as colunas em uma pagina
+      const { uri } = await Print.printToFileAsync({ html, width: 842, height: 595 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/pdf",
+          dialogTitle: "Relatório de Lotes Ativos",
+          UTI: "com.adobe.pdf",
+        });
+      }
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      Alert.alert("Erro", "Não foi possível gerar o PDF.");
+    }
+  }
 
   async function handleTrocarRoteiro(novoRoteiroId: string) {
     if (!trocaRoteiroPiquete) return;
@@ -717,7 +836,17 @@ export default function Home() {
                 {/* Report Table */}
                 {reportRows.length > 0 && (
                   <View style={styles.tableSection}>
-                    <Text style={styles.tableTitle}>Relatorio de Lotes Ativos</Text>
+                    <View style={styles.tableTitleRow}>
+                      <Text style={styles.tableTitle}>Relatorio de Lotes Ativos</Text>
+                      <TouchableOpacity
+                        style={[styles.pdfButton, { backgroundColor: primaryColor }]}
+                        onPress={handleGerarPdf}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="file-text" size={14} color="#FFF" />
+                        <Text style={styles.pdfButtonText}>PDF</Text>
+                      </TouchableOpacity>
+                    </View>
                     <View style={styles.tableContainer}>
                       <ScrollView horizontal showsHorizontalScrollIndicator>
                         <View>
@@ -944,11 +1073,29 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 8,
   },
+  tableTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   tableTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#1a1a1a",
-    marginBottom: 12,
+  },
+  pdfButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  pdfButtonText: {
+    color: "#FFF",
+    fontSize: 13,
+    fontWeight: "700",
   },
   tableContainer: {
     borderWidth: 1,
