@@ -74,6 +74,39 @@ type LoteReportRow = {
   pesoPrevistoHoje: number;
 };
 
+// ---- Heatmap de cores (vermelho -> amarelo -> verde), estilo escala 3 cores do Excel ----
+
+const HEATMAP_LOW = { r: 248, g: 105, b: 107 }; // vermelho
+const HEATMAP_MID = { r: 255, g: 235, b: 132 }; // amarelo
+const HEATMAP_HIGH = { r: 99, g: 190, b: 123 }; // verde
+
+const HEATMAP_COLUMNS: (keyof LoteReportRow)[] = ["cmsPctPV", "cmsPctPVPrev", "cmsPctPVMedio"];
+
+function getHeatmapColor(value: number, min: number, max: number): string {
+  if (max <= min) return `rgb(${HEATMAP_MID.r}, ${HEATMAP_MID.g}, ${HEATMAP_MID.b})`;
+  const ratio = Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const [from, to, t] =
+    ratio < 0.5
+      ? ([HEATMAP_LOW, HEATMAP_MID, ratio / 0.5] as const)
+      : ([HEATMAP_MID, HEATMAP_HIGH, (ratio - 0.5) / 0.5] as const);
+  const r = Math.round(from.r + (to.r - from.r) * t);
+  const g = Math.round(from.g + (to.g - from.g) * t);
+  const b = Math.round(from.b + (to.b - from.b) * t);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function getColumnRange(rows: LoteReportRow[], key: keyof LoteReportRow): { min: number; max: number } {
+  const values = rows
+    .map((r) => r[key])
+    .filter((v): v is number => typeof v === "number" && v > 0);
+  if (values.length === 0) return { min: 0, max: 0 };
+  return { min: Math.min(...values), max: Math.max(...values) };
+}
+
+function formatPercent(value: number): string {
+  return value > 0 ? `${value.toFixed(2).replace(".", ",")}%` : "-";
+}
+
 // ---- Column filter modal ----
 
 type ColumnFilterModalProps = {
@@ -595,16 +628,16 @@ export default function Home() {
     { key: "raca", label: "Raca", width: 110 },
     { key: "consMOCab", label: "MO/cab Ontem", width: 80, format: (r) => r.consMOCab > 0 ? r.consMOCab.toFixed(1) : "-" },
     { key: "consMSCab", label: "MS/cab Ontem", width: 80, format: (r) => r.consMSCab > 0 ? r.consMSCab.toFixed(2) : "-" },
-    { key: "cmsPctPV", label: "CMS %PV Ontem", width: 80, format: (r) => r.cmsPctPV > 0 ? r.cmsPctPV.toFixed(2) : "-" },
+    { key: "cmsPctPV", label: "CMS %PV Ontem", width: 80, format: (r) => formatPercent(r.cmsPctPV) },
     { key: "consMOCabPrev", label: "MO/cab Prev.", width: 80, format: (r) => r.consMOCabPrev > 0 ? r.consMOCabPrev.toFixed(1) : "-" },
     { key: "consMSCabPrev", label: "MS/cab Prev.", width: 80, format: (r) => r.consMSCabPrev > 0 ? r.consMSCabPrev.toFixed(2) : "-" },
-    { key: "cmsPctPVPrev", label: "CMS %PV Prev.", width: 80, format: (r) => r.cmsPctPVPrev > 0 ? r.cmsPctPVPrev.toFixed(2) : "-" },
+    { key: "cmsPctPVPrev", label: "CMS %PV Prev.", width: 80, format: (r) => formatPercent(r.cmsPctPVPrev) },
     { key: "leituraCocho", label: "Leit. Cocho", width: 80 },
     { key: "gmdEstimado", label: "GMD Est.", width: 75, format: (r) => r.gmdEstimado > 0 ? r.gmdEstimado.toFixed(3) : "-" },
     { key: "pesoHojeProjetado", label: "Peso Proj.", width: 80, format: (r) => r.pesoHojeProjetado > 0 ? r.pesoHojeProjetado.toFixed(1) : "-" },
     { key: "gmdRealMedio", label: "GMD Real", width: 75, format: (r) => r.gmdRealMedio > 0 ? r.gmdRealMedio.toFixed(3) : "-" },
     { key: "pesoReal", label: "Peso Real", width: 80, format: (r) => r.pesoReal > 0 ? r.pesoReal.toFixed(1) : "-" },
-    { key: "cmsPctPVMedio", label: "CMS %PV Med", width: 90, format: (r) => r.cmsPctPVMedio > 0 ? r.cmsPctPVMedio.toFixed(2) : "-" },
+    { key: "cmsPctPVMedio", label: "CMS %PV Med", width: 90, format: (r) => formatPercent(r.cmsPctPVMedio) },
   ];
 
   function getCellValue(row: LoteReportRow, col: typeof columns[number]): string {
@@ -679,15 +712,42 @@ export default function Home() {
 
   const visibleRows = getSortedRows(getFilteredRows(reportRows));
 
+  const heatmapRanges = new Map(
+    HEATMAP_COLUMNS.map((key) => [key, getColumnRange(visibleRows, key)])
+  );
+
+  function getCellBackgroundColor(row: LoteReportRow, col: typeof columns[number]): string | undefined {
+    if (!HEATMAP_COLUMNS.includes(col.key)) return undefined;
+    const value = row[col.key];
+    if (typeof value !== "number" || value <= 0) return undefined;
+    const range = heatmapRanges.get(col.key);
+    if (!range) return undefined;
+    return getHeatmapColor(value, range.min, range.max);
+  }
+
   function buildReportHtml(rows: LoteReportRow[]): string {
     const escapeHtml = (s: string) =>
       s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const htmlHeatmapRanges = new Map(
+      HEATMAP_COLUMNS.map((key) => [key, getColumnRange(rows, key)])
+    );
     const headerCells = columns.map((c) => `<th>${escapeHtml(c.label)}</th>`).join("");
     const bodyRows = rows
-      .map(
-        (row) =>
-          `<tr>${columns.map((c) => `<td>${escapeHtml(getCellValue(row, c))}</td>`).join("")}</tr>`
-      )
+      .map((row) => {
+        const cells = columns
+          .map((c) => {
+            const value = row[c.key];
+            let styleAttr = "";
+            if (HEATMAP_COLUMNS.includes(c.key) && typeof value === "number" && value > 0) {
+              const range = htmlHeatmapRanges.get(c.key)!;
+              const bg = getHeatmapColor(value, range.min, range.max);
+              styleAttr = ` style="background-color: ${bg};"`;
+            }
+            return `<td${styleAttr}>${escapeHtml(getCellValue(row, c))}</td>`;
+          })
+          .join("");
+        return `<tr>${cells}</tr>`;
+      })
       .join("");
     const dataGeracao = new Date().toLocaleDateString("pt-BR");
     return `<!DOCTYPE html>
@@ -943,8 +1003,10 @@ export default function Home() {
                               key={row.loteNumero}
                               style={[styles.tableDataRow, i % 2 === 1 && styles.tableDataRowAlt]}
                             >
-                              {columns.map((col) => (
-                                <View key={col.key} style={[styles.tableDataCell, { width: col.width }]}>
+                              {columns.map((col) => {
+                                const heatmapBg = getCellBackgroundColor(row, col);
+                                return (
+                                <View key={col.key} style={[styles.tableDataCell, { width: col.width }, heatmapBg ? { backgroundColor: heatmapBg } : null]}>
                                   {col.key === "loteNumero" ? (
                                     <View style={styles.dietaCell}>
                                       <Text style={[styles.tableDataText, { flex: 1 }]} numberOfLines={1}>
@@ -987,7 +1049,8 @@ export default function Home() {
                                     </Text>
                                   )}
                                 </View>
-                              ))}
+                                );
+                              })}
                             </View>
                           ))}
                         </View>
