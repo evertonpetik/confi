@@ -3,6 +3,10 @@ import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { calcularEstoque } from "@/components/InsumoCard";
 import { Movimentacao } from "@/components/LoteCard";
 import { Roteiro, RoteiroPiquete } from "@/components/RoteiroCard";
+import {
+  TransferenciaFormData,
+  TransferenciaLoteModal,
+} from "@/components/TransferenciaLoteModal";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
@@ -12,6 +16,7 @@ import {
   queryCollection,
   updateDocument,
 } from "@/services/firestoreService";
+import { transferirEntreLotes } from "@/services/transferenciaLote";
 import {
   calcularAutonomiaDias,
   calcularConsumoUltimoDia,
@@ -42,6 +47,7 @@ import {
 // ---- Types ----
 
 type LoteReportRow = {
+  loteId: string;
   piquete: string;
   piqueteId: string;
   loteNumero: number;
@@ -65,6 +71,7 @@ type LoteReportRow = {
   gmdRealMedio: number;
   pesoReal: number;
   cmsPctPVMedio: number;
+  pesoPrevistoHoje: number;
 };
 
 // ---- Column filter modal ----
@@ -229,6 +236,13 @@ export default function Home() {
   const [filterModalColumn, setFilterModalColumn] = useState<keyof LoteReportRow | null>(null);
   const [roteiros, setRoteiros] = useState<Roteiro[]>([]);
   const [trocaRoteiroPiquete, setTrocaRoteiroPiquete] = useState<{ piqueteId: string; piqueteNome: string } | null>(null);
+  const [transferLote, setTransferLote] = useState<{
+    id: string;
+    numero: number;
+    piqueteId: string;
+    qtdAtual: number;
+    pesoPrevisto: number;
+  } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -523,6 +537,7 @@ export default function Home() {
         const cmsPctPVMedio = cmsArr.length > 0 ? cmsArr.reduce((a, c) => a + c, 0) / cmsArr.length : 0;
 
         rows.push({
+          loteId: loteDoc.id,
           piquete: ld.piqueteNome ?? "-",
           piqueteId: ld.piqueteId ?? "",
           loteNumero: ld.numero ?? 0,
@@ -546,6 +561,7 @@ export default function Home() {
           gmdRealMedio,
           pesoReal,
           cmsPctPVMedio,
+          pesoPrevistoHoje: pesoMedioAtual,
         });
       });
 
@@ -568,7 +584,7 @@ export default function Home() {
   // Table column definitions
   const columns: { key: keyof LoteReportRow; label: string; width: number; format?: (v: LoteReportRow) => string }[] = [
     { key: "piquete", label: "Piquete", width: 100 },
-    { key: "loteNumero", label: "Lote", width: 60, format: (r) => `${r.loteNumero}` },
+    { key: "loteNumero", label: "Lote", width: 70, format: (r) => `${r.loteNumero}` },
     { key: "dieta", label: "Dieta", width: 100 },
     { key: "quantidade", label: "Qtde", width: 60, format: (r) => `${r.quantidade}` },
     { key: "produtor", label: "Produtor", width: 110 },
@@ -764,6 +780,38 @@ export default function Home() {
     }
   }
 
+  async function handleTransferirLote(form: TransferenciaFormData) {
+    if (!transferLote) return;
+    const destino = reportRows.find((r) => r.loteId === form.destinoId);
+    if (!destino) return;
+    try {
+      const { origemInativado } = await transferirEntreLotes({
+        origemId: transferLote.id,
+        origemNumero: transferLote.numero,
+        origemPiqueteId: transferLote.piqueteId,
+        destinoId: form.destinoId,
+        destinoNumero: destino.loteNumero,
+        quantidade: form.quantidade,
+        pesoMedio: form.pesoMedio,
+        data: form.data,
+        observacao: form.observacao,
+        qtdAtualOrigem: transferLote.qtdAtual,
+      });
+      const numeroOrigem = transferLote.numero;
+      setTransferLote(null);
+      await fetchDashboard();
+      Alert.alert(
+        "Transferência realizada",
+        origemInativado
+          ? `${form.quantidade} animais transferidos para o Lote ${destino.loteNumero}. O Lote ${numeroOrigem} foi inativado pois o saldo chegou a zero.`
+          : `${form.quantidade} animais transferidos para o Lote ${destino.loteNumero}.`
+      );
+    } catch (error) {
+      console.error("Erro ao transferir entre lotes:", error);
+      Alert.alert("Erro", "Não foi possível realizar a transferência.");
+    }
+  }
+
   const roteiroAtualId = trocaRoteiroPiquete
     ? roteiros.find((r) => r.piquetes.some((p) => p.piqueteId === trocaRoteiroPiquete.piqueteId))?.id
     : undefined;
@@ -897,7 +945,27 @@ export default function Home() {
                             >
                               {columns.map((col) => (
                                 <View key={col.key} style={[styles.tableDataCell, { width: col.width }]}>
-                                  {col.key === "dieta" ? (
+                                  {col.key === "loteNumero" ? (
+                                    <View style={styles.dietaCell}>
+                                      <Text style={[styles.tableDataText, { flex: 1 }]} numberOfLines={1}>
+                                        {getCellValue(row, col)}
+                                      </Text>
+                                      <TouchableOpacity
+                                        onPress={() =>
+                                          setTransferLote({
+                                            id: row.loteId,
+                                            numero: row.loteNumero,
+                                            piqueteId: row.piqueteId,
+                                            qtdAtual: row.quantidade,
+                                            pesoPrevisto: row.pesoPrevistoHoje,
+                                          })
+                                        }
+                                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                      >
+                                        <Feather name="corner-up-right" size={13} color={primaryColor} />
+                                      </TouchableOpacity>
+                                    </View>
+                                  ) : col.key === "dieta" ? (
                                     <View style={styles.dietaCell}>
                                       <Text style={[styles.tableDataText, { flex: 1 }]} numberOfLines={1}>
                                         {getCellValue(row, col)}
@@ -982,6 +1050,22 @@ export default function Home() {
           selectedValues={filterModalSelected}
           onToggleValue={(value) => handleToggleFilterValue(filterModalCol.key, value, filterModalValues)}
           onClose={() => setFilterModalColumn(null)}
+        />
+      )}
+      {transferLote && (
+        <TransferenciaLoteModal
+          visible
+          origem={transferLote}
+          lotesDisponiveis={reportRows
+            .filter((r) => r.loteId !== transferLote.id)
+            .map((r) => ({
+              id: r.loteId,
+              numero: r.loteNumero,
+              piqueteNome: r.piquete === "-" ? "" : r.piquete,
+              produtor: r.produtor === "-" ? "" : r.produtor,
+            }))}
+          onConfirm={handleTransferirLote}
+          onClose={() => setTransferLote(null)}
         />
       )}
       {trocaRoteiroPiquete && (

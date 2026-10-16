@@ -22,12 +22,25 @@ import {
   View,
 } from "react-native";
 
+export type LoteDestinoOption = {
+  id: string;
+  numero: number;
+  piqueteNome: string;
+  produtor: string;
+};
+
 type MovimentacaoFormModalProps = {
   visible: boolean;
   lote: Lote | null;
   movimentacaoOptions: { descricao: string; tipo: string }[];
+  lotesAtivos: LoteDestinoOption[];
   onAddMovimentacao: (loteId: string, mov: Omit<Movimentacao, "id">) => void;
   onDeleteMovimentacao: (loteId: string, movId: string) => void;
+  onTransferir: (
+    loteOrigemId: string,
+    loteDestinoId: string,
+    mov: { data: string; quantidade: number; pesoMedio: number; observacao: string }
+  ) => void;
   onClose: () => void;
 };
 
@@ -58,15 +71,23 @@ function dateToISO(date: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function isTransferenciaDesc(descricao: string): boolean {
+  const semAcentos = descricao.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return semAcentos.toUpperCase().includes("TRANSFER");
+}
+
 export function MovimentacaoFormModal({
   visible,
   lote,
   movimentacaoOptions,
+  lotesAtivos,
   onAddMovimentacao,
   onDeleteMovimentacao,
+  onTransferir,
   onClose,
 }: MovimentacaoFormModalProps) {
   const [movForm, setMovForm] = useState<MovForm>(getEmptyMovForm);
+  const [destinoLoteId, setDestinoLoteId] = useState("");
   const { primaryColor } = useTheme();
 
   if (!lote) return null;
@@ -80,6 +101,28 @@ export function MovimentacaoFormModal({
   const movimentacaoFilteredOptions: SelectOption[] = movimentacaoOptions
     .filter((m) => m.tipo === movForm.evento)
     .map((m) => ({ label: m.descricao, value: m.descricao }));
+
+  // Garante a opcao de transferencia nas saidas mesmo sem cadastro na colecao
+  if (
+    movForm.evento === "Saida" &&
+    !movimentacaoFilteredOptions.some((o) => isTransferenciaDesc(o.value))
+  ) {
+    movimentacaoFilteredOptions.push({ label: "Transferência", value: "Transferência" });
+  }
+
+  const isTransferencia =
+    movForm.evento === "Saida" && isTransferenciaDesc(movForm.movimentacao);
+
+  const destinoOptions: SelectOption[] = lotesAtivos
+    .filter((l) => l.id !== loteId)
+    .map((l) => ({
+      label: `Lote ${l.numero} — ${l.piqueteNome || "Sem piquete"} — ${l.produtor || "-"}`,
+      value: l.id,
+    }));
+
+  const qtdDigitada = parseInt(movForm.quantidade, 10);
+  const transfereTudo =
+    isTransferencia && !isNaN(qtdDigitada) && qtdDigitada >= qtdAtual;
 
   function handleAdd() {
     if (
@@ -100,6 +143,30 @@ export function MovimentacaoFormModal({
       Alert.alert("Atenção", "Peso médio deve ser um número positivo.");
       return;
     }
+
+    if (isTransferencia) {
+      if (!destinoLoteId) {
+        Alert.alert("Atenção", "Selecione o lote de destino da transferência.");
+        return;
+      }
+      if (qtd > qtdAtual) {
+        Alert.alert(
+          "Atenção",
+          `Quantidade maior que o saldo do lote (${qtdAtual} animais).`
+        );
+        return;
+      }
+      onTransferir(loteId, destinoLoteId, {
+        data: dateToISO(movForm.data),
+        quantidade: qtd,
+        pesoMedio: peso,
+        observacao: movForm.observacao,
+      });
+      setMovForm(getEmptyMovForm());
+      setDestinoLoteId("");
+      return;
+    }
+
     onAddMovimentacao(loteId, {
       evento: movForm.evento,
       movimentacao: movForm.movimentacao,
@@ -231,13 +298,14 @@ export function MovimentacaoFormModal({
                       movForm.evento === "Entrada" && { backgroundColor: primaryColor, borderColor: primaryColor },
                     ]}
                     activeOpacity={0.8}
-                    onPress={() =>
+                    onPress={() => {
                       setMovForm((p) => ({
                         ...p,
                         evento: "Entrada",
                         movimentacao: "",
-                      }))
-                    }
+                      }));
+                      setDestinoLoteId("");
+                    }}
                   >
                     <Text
                       style={[
@@ -255,13 +323,14 @@ export function MovimentacaoFormModal({
                       movForm.evento === "Saida" && styles.toggleInactive,
                     ]}
                     activeOpacity={0.8}
-                    onPress={() =>
+                    onPress={() => {
                       setMovForm((p) => ({
                         ...p,
                         evento: "Saida",
                         movimentacao: "",
-                      }))
-                    }
+                      }));
+                      setDestinoLoteId("");
+                    }}
                   >
                     <Text
                       style={[
@@ -280,10 +349,33 @@ export function MovimentacaoFormModal({
                   placeholder="Selecione a movimentação"
                   value={movForm.movimentacao}
                   options={movimentacaoFilteredOptions}
-                  onSelect={(v) =>
-                    setMovForm((p) => ({ ...p, movimentacao: v }))
-                  }
+                  onSelect={(v) => {
+                    const transf =
+                      movForm.evento === "Saida" && isTransferenciaDesc(v);
+                    setMovForm((p) => ({
+                      ...p,
+                      movimentacao: v,
+                      // Transferencia: traz preenchido o peso previsto hoje
+                      pesoMedio:
+                        transf && pesoMedioAtual > 0
+                          ? pesoMedioAtual.toFixed(1)
+                          : p.pesoMedio,
+                    }));
+                    if (!transf) setDestinoLoteId("");
+                  }}
                 />
+
+                {isTransferencia && (
+                  <>
+                    <Text style={styles.label}>Lote de Destino</Text>
+                    <Select
+                      placeholder="Selecione o lote de destino"
+                      value={destinoLoteId}
+                      options={destinoOptions}
+                      onSelect={setDestinoLoteId}
+                    />
+                  </>
+                )}
 
                 <Text style={styles.label}>Data</Text>
                 <DatePickerInput
@@ -321,6 +413,16 @@ export function MovimentacaoFormModal({
                     setMovForm((p) => ({ ...p, observacao: v }))
                   }
                 />
+
+                {transfereTudo && (
+                  <View style={styles.warningBox}>
+                    <Feather name="alert-triangle" size={16} color="#E65100" />
+                    <Text style={styles.warningText}>
+                      Ao transferir todo o saldo, este lote será inativado e
+                      removido do roteiro.
+                    </Text>
+                  </View>
+                )}
 
                 <View style={styles.buttonWrapper}>
                   <TouchableOpacity
@@ -510,6 +612,21 @@ const styles = StyleSheet.create({
   },
   toggleTextInactive: {
     color: "#FFF",
+  },
+  warningBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FFF3E0",
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 8,
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#E65100",
+    fontWeight: "600",
   },
   buttonWrapper: {
     marginTop: 16,

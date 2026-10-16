@@ -2,7 +2,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { FaturamentoModal, LancamentoFinanceiro } from "@/components/FaturamentoModal";
-import { Lote, LoteCard, Movimentacao } from "@/components/LoteCard";
+import { calcularQuantidadeAtual, Lote, LoteCard, Movimentacao } from "@/components/LoteCard";
 import { LoteFormModal } from "@/components/LoteFormModal";
 import { MovimentacaoFormModal } from "@/components/MovimentacaoFormModal";
 import { Produtor } from "@/components/ProdutorCard";
@@ -16,6 +16,7 @@ import {
   getCollection,
   updateDocument,
 } from "@/services/firestoreService";
+import { transferirEntreLotes } from "@/services/transferenciaLote";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
@@ -447,6 +448,43 @@ export default function Lotes() {
     }
   }
 
+  async function handleTransferir(
+    origemId: string,
+    destinoId: string,
+    mov: { data: string; quantidade: number; pesoMedio: number; observacao: string }
+  ) {
+    const origem = lotes.find((l) => l.id === origemId);
+    const destino = lotes.find((l) => l.id === destinoId);
+    if (!origem || !destino) return;
+    try {
+      const qtdAtualOrigem = calcularQuantidadeAtual(origem.movimentacoes);
+      const { origemInativado } = await transferirEntreLotes({
+        origemId,
+        origemNumero: origem.numero,
+        origemPiqueteId: origem.piqueteId,
+        destinoId,
+        destinoNumero: destino.numero,
+        quantidade: mov.quantidade,
+        pesoMedio: mov.pesoMedio,
+        data: mov.data,
+        observacao: mov.observacao,
+        qtdAtualOrigem,
+      });
+      setMovVisible(false);
+      setMovLote(null);
+      await fetchLotes();
+      Alert.alert(
+        "Transferência realizada",
+        origemInativado
+          ? `${mov.quantidade} animais transferidos para o Lote ${destino.numero}. O Lote ${origem.numero} foi inativado pois o saldo chegou a zero.`
+          : `${mov.quantidade} animais transferidos para o Lote ${destino.numero}.`
+      );
+    } catch (error) {
+      console.error("Erro ao transferir entre lotes:", error);
+      Alert.alert("Erro", "Não foi possível realizar a transferência.");
+    }
+  }
+
   async function handleDeleteMovimentacao(loteId: string, movId: string) {
     try {
       await deleteDocument(["lotes", loteId, "movimentacoes"], movId);
@@ -653,8 +691,17 @@ export default function Lotes() {
         visible={movVisible}
         lote={movLote}
         movimentacaoOptions={movimentacaoOptions}
+        lotesAtivos={lotes
+          .filter((l) => l.ativo)
+          .map((l) => ({
+            id: l.id,
+            numero: l.numero,
+            piqueteNome: l.piqueteNome,
+            produtor: l.produtor,
+          }))}
         onAddMovimentacao={handleAddMovimentacao}
         onDeleteMovimentacao={handleDeleteMovimentacao}
+        onTransferir={handleTransferir}
         onClose={() => {
           setMovVisible(false);
           setMovLote(null);
