@@ -2,6 +2,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { FaturamentoModal, LancamentoFinanceiro } from "@/components/FaturamentoModal";
+import { AgendarEmbarqueModal } from "@/components/AgendarEmbarqueModal";
 import { calcularQuantidadeAtual, Lote, LoteCard, Movimentacao } from "@/components/LoteCard";
 import { LoteFormModal } from "@/components/LoteFormModal";
 import { MovimentacaoFormModal } from "@/components/MovimentacaoFormModal";
@@ -50,6 +51,7 @@ export default function Lotes() {
 
   const [fatVisible, setFatVisible] = useState(false);
   const [fatLote, setFatLote] = useState<Lote | null>(null);
+  const [embarqueLote, setEmbarqueLote] = useState<Lote | null>(null);
   const [lancamentosMap, setLancamentosMap] = useState<Map<string, LancamentoFinanceiro[]>>(new Map());
   const [gmdRealMap, setGmdRealMap] = useState<Map<string, { data: string; gmdReal: number }[]>>(new Map());
 
@@ -276,6 +278,10 @@ export default function Lotes() {
   function handleFaturamento(lote: Lote) {
     setFatLote(lote);
     setFatVisible(true);
+  }
+
+  function handleAgendarEmbarque(lote: Lote) {
+    setEmbarqueLote(lote);
   }
 
   async function handleInlineProdutorSave(data: Omit<Produtor, "id">) {
@@ -654,6 +660,7 @@ export default function Lotes() {
                     onDelete={handleDeleteRequest}
                     onMovimentacoes={handleMovimentacoes}
                     onFaturamento={handleFaturamento}
+                    onAgendarEmbarque={handleAgendarEmbarque}
                   />
                 ))}
               </View>
@@ -724,6 +731,20 @@ export default function Lotes() {
           setFatVisible(false);
           setFatLote(null);
         }}
+      />
+
+      <AgendarEmbarqueModal
+        visible={!!embarqueLote}
+        lote={
+          embarqueLote
+            ? {
+                id: embarqueLote.id,
+                numero: embarqueLote.numero,
+                qtdAtual: calcularQuantidadeAtual(embarqueLote.movimentacoes),
+              }
+            : null
+        }
+        onClose={() => setEmbarqueLote(null)}
       />
     </DrawerSceneWrapper>
   );

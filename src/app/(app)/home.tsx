@@ -2,6 +2,7 @@ import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { calcularEstoque } from "@/components/InsumoCard";
 import { Movimentacao } from "@/components/LoteCard";
+import { AgendarEmbarqueModal, AgendarEmbarqueLote } from "@/components/AgendarEmbarqueModal";
 import { Roteiro, RoteiroPiquete } from "@/components/RoteiroCard";
 import {
   TransferenciaFormData,
@@ -9,6 +10,7 @@ import {
 } from "@/components/TransferenciaLoteModal";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { somarEmbarquesAgendadosNaData } from "@/services/embarqueAgendado";
 import {
   fsLimit,
   fsOrderBy,
@@ -276,6 +278,10 @@ export default function Home() {
     qtdAtual: number;
     pesoPrevisto: number;
   } | null>(null);
+  const [embarqueLote, setEmbarqueLote] = useState<AgendarEmbarqueLote | null>(null);
+  const [embarquesHoje, setEmbarquesHoje] = useState<
+    { loteId: string; loteNumero: number; piqueteNome: string; quantidade: number; qtdAtual: number; total: boolean }[]
+  >([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -457,7 +463,7 @@ export default function Home() {
 
       const lotesAtivosDocs = lotesSnap.docs.filter((d) => d.data().ativo === true);
 
-      const [movSnaps, leitSnaps] = await Promise.all([
+      const [movSnaps, leitSnaps, embarqueSnaps] = await Promise.all([
         Promise.all(lotesAtivosDocs.map((loteDoc) => getCollection("lotes", loteDoc.id, "movimentacoes"))),
         Promise.all(
           lotesAtivosDocs.map((loteDoc) =>
@@ -467,7 +473,17 @@ export default function Home() {
             ).catch(() => null)
           )
         ),
+        Promise.all(lotesAtivosDocs.map((loteDoc) => getCollection("lotes", loteDoc.id, "embarquesAgendados"))),
       ]);
+
+      const embarquesHojeList: {
+        loteId: string;
+        loteNumero: number;
+        piqueteNome: string;
+        quantidade: number;
+        qtdAtual: number;
+        total: boolean;
+      }[] = [];
 
       let ativos = 0;
       let animais = 0;
@@ -499,6 +515,23 @@ export default function Home() {
           }
         }
         animais += qtdAtual;
+
+        const embarqueDocs = embarqueSnaps[idx].docs.map((e) => ({
+          data: e.data().data as string,
+          quantidade: e.data().quantidade as number,
+          status: e.data().status as "agendado" | "cancelado",
+        }));
+        const quantidadeAgendadaHoje = somarEmbarquesAgendadosNaData(embarqueDocs, hoje);
+        if (quantidadeAgendadaHoje > 0) {
+          embarquesHojeList.push({
+            loteId: loteDoc.id,
+            loteNumero: ld.numero ?? 0,
+            piqueteNome: ld.piqueteNome ?? "",
+            quantidade: quantidadeAgendadaHoje,
+            qtdAtual,
+            total: quantidadeAgendadaHoje >= qtdAtual,
+          });
+        }
 
         // First entry date and peso
         const entradasMov = movs
@@ -600,6 +633,7 @@ export default function Home() {
 
       rows.sort((a, b) => compararPiquetes(a.piquete, b.piquete));
       setReportRows(rows);
+      setEmbarquesHoje(embarquesHojeList);
       setLotesAtivos(ativos);
       setTotalAnimais(animais);
       setTotalMortes(mortes);
@@ -922,6 +956,27 @@ export default function Home() {
               </View>
             )}
 
+            {embarquesHoje.length > 0 && (
+              <View style={styles.estoqueBaixoCard}>
+                <View style={styles.estoqueBaixoHeader}>
+                  <Feather name="truck" size={18} color="#E65100" />
+                  <Text style={styles.estoqueBaixoTitle}>Embarques agendados para hoje</Text>
+                </View>
+                {embarquesHoje.map((item) => (
+                  <View key={item.loteId} style={styles.estoqueBaixoItem}>
+                    <Text style={styles.estoqueBaixoNome} numberOfLines={1}>
+                      Lote {item.loteNumero} — {item.piqueteNome}
+                    </Text>
+                    <Text style={styles.estoqueBaixoDetalhe}>
+                      {item.total
+                        ? "Embarque hoje (lote inteiro) — removido do mapa de trato"
+                        : `Saída parcial de ${item.quantidade} de ${item.qtdAtual} animais`}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             <View style={[styles.header, { paddingTop: headerPaddingTop }]}>
               <Text style={[styles.title, { fontSize: titleFontSize, flex: 1 }]} numberOfLines={1}>Dashboard</Text>
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
@@ -1025,6 +1080,18 @@ export default function Home() {
                                         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                                       >
                                         <Feather name="corner-up-right" size={13} color={primaryColor} />
+                                      </TouchableOpacity>
+                                      <TouchableOpacity
+                                        onPress={() =>
+                                          setEmbarqueLote({
+                                            id: row.loteId,
+                                            numero: row.loteNumero,
+                                            qtdAtual: row.quantidade,
+                                          })
+                                        }
+                                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                                      >
+                                        <Feather name="truck" size={13} color="#E65100" />
                                       </TouchableOpacity>
                                     </View>
                                   ) : col.key === "dieta" ? (
@@ -1131,6 +1198,11 @@ export default function Home() {
           onClose={() => setTransferLote(null)}
         />
       )}
+      <AgendarEmbarqueModal
+        visible={!!embarqueLote}
+        lote={embarqueLote}
+        onClose={() => setEmbarqueLote(null)}
+      />
       {trocaRoteiroPiquete && (
         <TrocarRoteiroModal
           piqueteNome={trocaRoteiroPiquete.piqueteNome}

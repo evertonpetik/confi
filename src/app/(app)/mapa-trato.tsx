@@ -9,6 +9,7 @@ import { setDocument } from "@/services/firestoreService";
 import {
   buildCalcData,
   calcGmdNRC,
+  type EmbarqueHojeInfo,
   fetchMapaTratoData,
   getHojeStr,
   type RoteiroCalculado,
@@ -77,6 +78,7 @@ export default function MapaTrato() {
   const [historicoCargas, setHistoricoCargas] = useState<Map<string, CargaTrato[]>>(new Map());
   const [historicoDescargas, setHistoricoDescargas] = useState<Map<string, DescargaTrato[]>>(new Map());
   const [percentualMSPorRoteiro, setPercentualMSPorRoteiro] = useState<Map<string, number>>(new Map());
+  const [embarquesHoje, setEmbarquesHoje] = useState<EmbarqueHojeInfo[]>([]);
 
   const [dataSelecionada, setDataSelecionada] = useState(() => new Date());
   const hoje = getHojeStr(dataSelecionada);
@@ -114,6 +116,7 @@ export default function MapaTrato() {
       setHistoricoCargas(data.historicoCargas);
       setHistoricoDescargas(data.historicoDescargas);
       setPercentualMSPorRoteiro(data.percentualMSPorRoteiro);
+      setEmbarquesHoje(data.embarquesHoje);
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
     } finally {
@@ -772,6 +775,27 @@ export default function MapaTrato() {
               )}
             </View>
 
+            {embarquesHoje.length > 0 && (
+              <View style={styles.estoqueBaixoCard}>
+                <View style={styles.estoqueBaixoHeader}>
+                  <Feather name="truck" size={18} color="#E65100" />
+                  <Text style={styles.estoqueBaixoTitle}>Embarques agendados para hoje</Text>
+                </View>
+                {embarquesHoje.map((item) => (
+                  <View key={item.loteId} style={styles.estoqueBaixoItem}>
+                    <Text style={styles.estoqueBaixoNome} numberOfLines={1}>
+                      Lote {item.loteNumero} — {item.piqueteNome}
+                    </Text>
+                    <Text style={styles.estoqueBaixoDetalhe}>
+                      {item.total
+                        ? "Embarque hoje (lote inteiro) — removido do roteiro"
+                        : `Saída parcial de ${item.quantidade} de ${item.qtdAtual} animais`}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
             {/* Select Vagão */}
             <Text style={styles.sectionLabel}>Vagão</Text>
             <Select
@@ -947,6 +971,36 @@ export default function MapaTrato() {
 }
 
 const styles = StyleSheet.create({
+  estoqueBaixoCard: {
+    backgroundColor: "#FFF3E0",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  estoqueBaixoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  estoqueBaixoTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#E65100",
+  },
+  estoqueBaixoItem: {
+    paddingVertical: 4,
+  },
+  estoqueBaixoNome: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1a1a1a",
+  },
+  estoqueBaixoDetalhe: {
+    fontSize: 12,
+    color: "#666",
+  },
   container: {
     flex: 1,
     backgroundColor: "#FDFDFD",

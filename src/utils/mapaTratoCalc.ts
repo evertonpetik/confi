@@ -1,5 +1,6 @@
 import { CargaTrato } from "@/components/CargaModal";
 import { DescargaTrato } from "@/components/DescargaModal";
+import { somarEmbarquesAgendadosNaData } from "@/services/embarqueAgendado";
 import {
   fsLimit,
   fsOrderBy,
@@ -94,6 +95,15 @@ export type FatorMaps = {
   gecFatorMap: Map<string, number>;
 };
 
+export type EmbarqueHojeInfo = {
+  loteId: string;
+  loteNumero: number;
+  piqueteNome: string;
+  quantidade: number;
+  qtdAtual: number;
+  total: boolean;
+};
+
 export type MapaTratoFetchResult = {
   vagoes: Vagao[];
   roteiros: RoteiroData[];
@@ -104,6 +114,7 @@ export type MapaTratoFetchResult = {
   historicoCargas: Map<string, CargaTrato[]>;
   historicoDescargas: Map<string, DescargaTrato[]>;
   percentualMSPorRoteiro: Map<string, number>;
+  embarquesHoje: EmbarqueHojeInfo[];
 };
 
 // ---- Helpers ----
@@ -382,6 +393,7 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
 
   // Lotes with movimentacoes and CMS
   const lotesData: LoteData[] = [];
+  const embarquesHoje: EmbarqueHojeInfo[] = [];
   for (const loteDoc of lotesSnap.docs) {
     const ld = loteDoc.data();
     if (!ld.piqueteId || ld.ativo === false) continue;
@@ -415,6 +427,41 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
       cmsAtual = leituraHojeCms;
     } else if (cmsRealizadoOntemMap.get(loteDoc.id) && cmsRealizadoOntemMap.get(loteDoc.id)! > 0) {
       cmsAtual = cmsRealizadoOntemMap.get(loteDoc.id)!;
+    }
+
+    const embarquesSnap = await getCollection("lotes", loteDoc.id, "embarquesAgendados");
+    const embarquesDocs = embarquesSnap.docs.map((e) => ({
+      data: e.data().data as string,
+      quantidade: e.data().quantidade as number,
+      status: e.data().status as "agendado" | "cancelado",
+    }));
+    const quantidadeAgendadaHoje = somarEmbarquesAgendadosNaData(embarquesDocs, hoje);
+    const qtdAtual = calcQtdAtual(movs);
+
+    if (quantidadeAgendadaHoje > 0) {
+      embarquesHoje.push({
+        loteId: loteDoc.id,
+        loteNumero: ld.numero ?? 0,
+        piqueteNome: ld.piqueteNome ?? "",
+        quantidade: quantidadeAgendadaHoje,
+        qtdAtual,
+        total: quantidadeAgendadaHoje >= qtdAtual,
+      });
+    }
+
+    if (quantidadeAgendadaHoje >= qtdAtual && qtdAtual > 0) {
+      // Embarque total: lote sai do roteiro calculado nesta data
+      continue;
+    }
+
+    if (quantidadeAgendadaHoje > 0) {
+      // Embarque parcial: reduz proporcionalmente via movimentação sintética (só em memória)
+      movs.push({
+        evento: "Saida",
+        quantidade: quantidadeAgendadaHoje,
+        pesoMedio: calcPesoMedio(movs, ld.gmdEstimado ?? 0),
+        data: hoje,
+      });
     }
 
     lotesData.push({
@@ -477,5 +524,6 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
     historicoCargas,
     historicoDescargas,
     percentualMSPorRoteiro,
+    embarquesHoje,
   };
 }

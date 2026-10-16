@@ -37,6 +37,7 @@ type LoteCardProps = {
   onDelete: (lote: Lote) => void;
   onMovimentacoes: (lote: Lote) => void;
   onFaturamento: (lote: Lote) => void;
+  onAgendarEmbarque: (lote: Lote) => void;
 };
 
 function calcularQuantidadeAtual(movimentacoes: Movimentacao[]): number {
@@ -82,7 +83,7 @@ function calcularPesoMedioInicial(movimentacoes: Movimentacao[]): number {
 
 export { calcularPesoMedio, calcularPesoMedioInicial, calcularQuantidadeAtual };
 
-export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoes, onFaturamento }: LoteCardProps) {
+export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoes, onFaturamento, onAgendarEmbarque }: LoteCardProps) {
   const { primaryColor } = useTheme();
   const qtdAtual = calcularQuantidadeAtual(lote.movimentacoes);
   const pesoMedio = calcularPesoMedio(lote.movimentacoes, lote.gmdEstimado);
@@ -193,6 +194,13 @@ export function LoteCard({ lote, gmdRealDiario, onEdit, onDelete, onMovimentacoe
           onPress={() => onMovimentacoes(lote)}
         >
           <Feather name="shopping-cart" size={18} color="#2E7D32" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionButton}
+          activeOpacity={0.7}
+          onPress={() => onAgendarEmbarque(lote)}
+        >
+          <Feather name="truck" size={18} color="#E65100" />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
