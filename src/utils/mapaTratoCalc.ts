@@ -6,12 +6,30 @@ import {
   fsOrderBy,
   fsWhere,
   getCollection,
+  getDocument,
   queryCollection,
 } from "@/services/firestoreService";
 
 // ---- Constants ----
 
 export const CMS_INICIAL = 1.3;
+
+// ---- Config: base do CMS da leitura ----
+// "realizado": o CMS do dia parte do realizado de ontem (padrao)
+// "previsto": o CMS do dia parte do previsto de ontem (realizado nao afeta a projecao)
+
+export type BaseCmsLeitura = "realizado" | "previsto";
+
+export async function getBaseCmsLeitura(): Promise<BaseCmsLeitura> {
+  try {
+    const doc = await getDocument(["config"], "app");
+    if (doc.exists !== false && doc.data()) {
+      const v = (doc.data() as Record<string, any>).baseCmsLeitura;
+      if (v === "previsto") return "previsto";
+    }
+  } catch { /* offline - usa padrao */ }
+  return "realizado";
+}
 
 // ---- Types ----
 
@@ -374,18 +392,20 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
     });
   }
 
-  // CMS realizado do dia anterior por lote
+  // CMS base do dia anterior por lote (realizado ou previsto, conforme configuracao)
+  const baseCmsLeitura = await getBaseCmsLeitura();
   const ontem = new Date();
   ontem.setDate(ontem.getDate() - 1);
   const ontemStr = `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, "0")}-${String(ontem.getDate()).padStart(2, "0")}`;
   const histOntemSnap = await queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", ontemStr)]);
-  const cmsRealizadoOntemMap = new Map<string, number>();
+  const cmsOntemMap = new Map<string, number>();
   for (const hDoc of histOntemSnap.docs) {
-    const msPorLote = hDoc.data().msPorLote as { loteId: string; cmsRealizado?: number }[] | undefined;
+    const msPorLote = hDoc.data().msPorLote as { loteId: string; cmsRealizado?: number; cmsPrevisto?: number }[] | undefined;
     if (msPorLote) {
       for (const ml of msPorLote) {
-        if (ml.cmsRealizado && ml.cmsRealizado > 0) {
-          cmsRealizadoOntemMap.set(ml.loteId, ml.cmsRealizado);
+        const base = baseCmsLeitura === "previsto" ? ml.cmsPrevisto : ml.cmsRealizado;
+        if (base && base > 0) {
+          cmsOntemMap.set(ml.loteId, base);
         }
       }
     }
@@ -425,8 +445,8 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
 
     if (leituraHojeCms > 0) {
       cmsAtual = leituraHojeCms;
-    } else if (cmsRealizadoOntemMap.get(loteDoc.id) && cmsRealizadoOntemMap.get(loteDoc.id)! > 0) {
-      cmsAtual = cmsRealizadoOntemMap.get(loteDoc.id)!;
+    } else if (cmsOntemMap.get(loteDoc.id) && cmsOntemMap.get(loteDoc.id)! > 0) {
+      cmsAtual = cmsOntemMap.get(loteDoc.id)!;
     }
 
     const embarquesSnap = await getCollection("lotes", loteDoc.id, "embarquesAgendados");

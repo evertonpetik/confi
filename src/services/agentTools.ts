@@ -118,9 +118,19 @@ export const AGENT_TOOLS = [
 
 // ---------------------------------------------------------------------------
 // Helper: replica a lógica de prioridade de CMS usada em fetchMapaTratoData()
-// (seção 5.4 da documentação): leitura de hoje > CMS realizado de ontem
-// (historicoMapaTrato) > última leitura anterior > CMS_INICIAL.
+// (seção 5.4 da documentação): leitura de hoje > CMS base de ontem
+// (historicoMapaTrato: realizado ou previsto, conforme config/app.baseCmsLeitura)
+// > última leitura anterior > CMS_INICIAL.
 // ---------------------------------------------------------------------------
+
+async function getBaseCmsLeitura(): Promise<"realizado" | "previsto"> {
+  try {
+    const snap = await getCollection("config");
+    const appDoc = snap.docs.find((d) => d.id === "app");
+    if (appDoc?.data()?.baseCmsLeitura === "previsto") return "previsto";
+  } catch { /* usa padrão */ }
+  return "realizado";
+}
 
 async function getCmsAtualLote(loteId: string): Promise<number> {
   const hoje = getHojeStr();
@@ -135,6 +145,7 @@ async function getCmsAtualLote(loteId: string): Promise<number> {
     return ultimaLeitura.cmsNovo ?? CMS_INICIAL;
   }
 
+  const baseCms = await getBaseCmsLeitura();
   const ontem = new Date();
   ontem.setDate(ontem.getDate() - 1);
   const ontemStr = getHojeStr(ontem);
@@ -145,11 +156,12 @@ async function getCmsAtualLote(loteId: string): Promise<number> {
   );
   for (const hDoc of histSnap.docs) {
     const msPorLote = hDoc.data().msPorLote as
-      | { loteId: string; cmsRealizado?: number }[]
+      | { loteId: string; cmsRealizado?: number; cmsPrevisto?: number }[]
       | undefined;
     const entry = msPorLote?.find((m) => m.loteId === loteId);
-    if (entry?.cmsRealizado && entry.cmsRealizado > 0) {
-      return entry.cmsRealizado;
+    const base = baseCms === "previsto" ? entry?.cmsPrevisto : entry?.cmsRealizado;
+    if (base && base > 0) {
+      return base;
     }
   }
 

@@ -13,6 +13,7 @@ import {
   addDocument,
   deleteDocument,
   getCollection,
+  getDocument,
   setDocument,
   updateDocument,
 } from "@/services/firestoreService";
@@ -91,6 +92,23 @@ const TABELAS: TabelaConfig[] = [
 
 type ItemAux = { id: string } & Record<string, string | number>;
 
+type BaseCmsLeitura = "realizado" | "previsto";
+
+const OPCOES_BASE_CMS: { valor: BaseCmsLeitura; titulo: string; descricao: string }[] = [
+  {
+    valor: "realizado",
+    titulo: "Basear no realizado de ontem",
+    descricao:
+      "O % CMS do dia parte do consumo realizado no dia anterior. A nota de leitura ajusta esse valor.",
+  },
+  {
+    valor: "previsto",
+    titulo: "Seguir somente os previstos",
+    descricao:
+      "O % CMS do dia parte do previsto do dia anterior. O realizado nao afeta a projecao: uma nota de aumento aumenta o previsto de ontem.",
+  },
+];
+
 export default function Configuracoes() {
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const { selectedFazendaId } = useAuth();
@@ -101,6 +119,7 @@ export default function Configuracoes() {
   const [syncProgress, setSyncProgress] = useState("");
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [baseCmsLeitura, setBaseCmsLeitura] = useState<BaseCmsLeitura>("realizado");
 
   // Data per table: colecao -> items[]
   const [dados, setDados] = useState<Map<string, ItemAux[]>>(new Map());
@@ -150,8 +169,31 @@ export default function Configuracoes() {
     useCallback(() => {
       fetchAllTables();
       loadLastSync();
+      loadBaseCmsLeitura();
     }, [])
   );
+
+  async function loadBaseCmsLeitura() {
+    try {
+      const doc = await getDocument(["config"], "app");
+      if (doc.exists !== false && doc.data()) {
+        const v = (doc.data() as Record<string, any>).baseCmsLeitura;
+        setBaseCmsLeitura(v === "previsto" ? "previsto" : "realizado");
+      }
+    } catch { /* offline - mantem padrao */ }
+  }
+
+  async function handleSetBaseCmsLeitura(valor: BaseCmsLeitura) {
+    const anterior = baseCmsLeitura;
+    setBaseCmsLeitura(valor);
+    try {
+      await setDocument(["config"], "app", { baseCmsLeitura: valor }, { merge: true });
+    } catch (error) {
+      console.error("Erro ao salvar configuracao:", error);
+      setBaseCmsLeitura(anterior);
+      Alert.alert("Erro", "Nao foi possivel salvar a configuracao.");
+    }
+  }
 
   async function fetchAllTables() {
     try {
@@ -398,6 +440,43 @@ export default function Configuracoes() {
                   )}
                 </TouchableOpacity>
               </View>
+            </View>
+
+            {/* Leitura de Cocho */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Leitura de Cocho</Text>
+              <Text style={styles.sectionDescription}>
+                Define a base de calculo do % CMS previsto na leitura diaria.
+              </Text>
+              {OPCOES_BASE_CMS.map((opcao) => {
+                const selecionado = baseCmsLeitura === opcao.valor;
+                return (
+                  <TouchableOpacity
+                    key={opcao.valor}
+                    style={[
+                      styles.radioCard,
+                      selecionado && { borderColor: primaryColor, backgroundColor: "#FFF" },
+                    ]}
+                    activeOpacity={0.7}
+                    onPress={() => handleSetBaseCmsLeitura(opcao.valor)}
+                  >
+                    <View
+                      style={[
+                        styles.radioCircle,
+                        selecionado && { borderColor: primaryColor },
+                      ]}
+                    >
+                      {selecionado && (
+                        <View style={[styles.radioDot, { backgroundColor: primaryColor }]} />
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.radioTitle}>{opcao.titulo}</Text>
+                      <Text style={styles.radioDescricao}>{opcao.descricao}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             {/* Sync button */}
@@ -677,6 +756,42 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 16,
     marginLeft: 12,
+  },
+  radioCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    backgroundColor: "#F5F5F5",
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "transparent",
+    padding: 14,
+  },
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#BDBDBD",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  radioTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1a1a1a",
+  },
+  radioDescricao: {
+    fontSize: 12,
+    color: "#777",
+    marginTop: 2,
+    lineHeight: 17,
   },
   lastSyncText: {
     fontSize: 13,

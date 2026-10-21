@@ -10,7 +10,7 @@ import {
   getCollection,
   queryCollection,
 } from "@/services/firestoreService";
-import { getHojeStr } from "@/utils/mapaTratoCalc";
+import { getBaseCmsLeitura, getHojeStr } from "@/utils/mapaTratoCalc";
 import { compararPiquetes } from "@/utils/piqueteOrdenacao";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -92,9 +92,10 @@ export default function Leitura() {
   async function fetchData() {
     try {
       setLoading(true);
-      const [lotesSnap, notasSnap] = await Promise.all([
+      const [lotesSnap, notasSnap, baseCmsLeitura] = await Promise.all([
         getCollection("lotes"),
         getCollection("notaLeitura"),
+        getBaseCmsLeitura(),
       ]);
 
       // Notas de leitura
@@ -161,8 +162,12 @@ export default function Leitura() {
           [fsOrderBy("data", "desc"), fsLimit(1)]
         );
 
-        // CMS: priorizar CMS realizado do dia anterior, senão última leitura, senão CMS_INICIAL
-        let cmsAtual = cmsRealizadoOntemMap.get(loteDoc.id) ?? 0;
+        // CMS: conforme configuração, priorizar o realizado ou o previsto do
+        // dia anterior, senão última leitura, senão CMS_INICIAL
+        let cmsAtual =
+          (baseCmsLeitura === "previsto"
+            ? cmsPrevistoOntemMap.get(loteDoc.id)
+            : cmsRealizadoOntemMap.get(loteDoc.id)) ?? 0;
         let ultimaLeituraData = "";
 
         if (!leituraSnap.empty) {
