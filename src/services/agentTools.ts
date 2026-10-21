@@ -36,6 +36,7 @@ import {
   calcQtdAtual,
   calcPesoMedio,
   CMS_INICIAL,
+  escolherLeituraMaisRecente,
   getHojeStr,
 } from "../utils/loteCalcCore";
 
@@ -132,24 +133,28 @@ async function getBaseCmsLeitura(): Promise<"realizado" | "previsto"> {
   return "realizado";
 }
 
-async function getCmsAtualLote(loteId: string): Promise<number> {
+async function getCmsInfoLote(
+  loteId: string
+): Promise<{ cmsAtual: number; cmsBase: number }> {
   const hoje = getHojeStr();
 
+  // limit(10): pode haver várias leituras no mesmo dia; desempate por criadoEm
   const leiturasSnap = await queryCollection(
     ["lotes", loteId, "leituras"],
-    [fsOrderBy("data", "desc"), fsLimit(1)]
+    [fsOrderBy("data", "desc"), fsLimit(10)]
   );
-  const ultimaLeitura = leiturasSnap.docs[0]?.data();
-
-  if (ultimaLeitura && ultimaLeitura.data === hoje) {
-    return ultimaLeitura.cmsNovo ?? CMS_INICIAL;
-  }
+  const ultimaLeitura = escolherLeituraMaisRecente(
+    leiturasSnap.docs.map((d) => d.data() as {
+      data?: string; criadoEm?: number; cmsAnterior?: number; cmsNovo?: number;
+    })
+  );
 
   const baseCms = await getBaseCmsLeitura();
   const ontem = new Date();
   ontem.setDate(ontem.getDate() - 1);
   const ontemStr = getHojeStr(ontem);
 
+  let cmsBase = 0;
   const histSnap = await queryCollection(
     ["historicoMapaTrato"],
     [fsWhere("data", "==", ontemStr)]
@@ -161,11 +166,28 @@ async function getCmsAtualLote(loteId: string): Promise<number> {
     const entry = msPorLote?.find((m) => m.loteId === loteId);
     const base = baseCms === "previsto" ? entry?.cmsPrevisto : entry?.cmsRealizado;
     if (base && base > 0) {
-      return base;
+      cmsBase = base;
+      break;
     }
   }
 
-  return ultimaLeitura?.cmsNovo ?? CMS_INICIAL;
+  if (cmsBase <= 0 && ultimaLeitura) {
+    cmsBase = ultimaLeitura.data === hoje
+      ? (ultimaLeitura.cmsAnterior ?? 0)
+      : (ultimaLeitura.cmsNovo ?? 0);
+  }
+  if (cmsBase <= 0) cmsBase = CMS_INICIAL;
+
+  const cmsAtual =
+    ultimaLeitura?.data === hoje && (ultimaLeitura.cmsNovo ?? 0) > 0
+      ? ultimaLeitura.cmsNovo!
+      : cmsBase;
+
+  return { cmsAtual, cmsBase };
+}
+
+async function getCmsAtualLote(loteId: string): Promise<number> {
+  return (await getCmsInfoLote(loteId)).cmsAtual;
 }
 
 // ---------------------------------------------------------------------------
@@ -267,9 +289,9 @@ export async function registrarLeituraCocho(piqueteNome: string, nota: number) {
 
   const loteDoc = lotesSnap.docs[0];
 
-  // Mesma prioridade de CMS usada em leitura.tsx / fetchMapaTratoData:
-  // leitura de hoje > realizado de ontem > leitura anterior > CMS_INICIAL
-  const cmsAnterior = await getCmsAtualLote(loteDoc.id);
+  // Base do dia (realizado ou previsto de ontem, conforme config) — remarcar
+  // a nota no mesmo dia não acumula fatores
+  const { cmsBase: cmsAnterior } = await getCmsInfoLote(loteDoc.id);
   const cmsNovo = Math.round((cmsAnterior + CMS_BASE * (fator - 1)) * 100) / 100;
 
   await addDocument(["lotes", loteDoc.id, "leituras"], {
@@ -278,6 +300,7 @@ export async function registrarLeituraCocho(piqueteNome: string, nota: number) {
     fator,
     cmsAnterior,
     cmsNovo,
+    criadoEm: Date.now(),
   });
 
   return {

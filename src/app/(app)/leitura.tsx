@@ -10,6 +10,7 @@ import {
   getCollection,
   queryCollection,
 } from "@/services/firestoreService";
+import { escolherLeituraMaisRecente } from "@/utils/loteCalcCore";
 import { getBaseCmsLeitura, getHojeStr } from "@/utils/mapaTratoCalc";
 import { compararPiquetes } from "@/utils/piqueteOrdenacao";
 import { Feather } from "@expo/vector-icons";
@@ -40,7 +41,11 @@ type LoteComPiquete = {
   numero: number;
   piqueteId: string;
   piqueteNome: string;
+  // CMS vigente exibido: leitura de hoje (se houver), senão a base do dia
   cmsAtual: number;
+  // Base do dia (realizado ou previsto de ontem, conforme configuração):
+  // é sempre o ponto de partida ao marcar/remarcar uma nota
+  cmsBase: number;
   ultimaLeituraData: string;
 };
 
@@ -156,42 +161,57 @@ export default function Leitura() {
         const data = loteDoc.data();
         if (!data.piqueteId || data.ativo === false) continue;
 
-        // Buscar ultima leitura
+        // Buscar leituras recentes: pode haver várias no mesmo dia (nota
+        // remarcada, ajuste fino, repetir previsto) — desempate por criadoEm
         const leituraSnap = await queryCollection(
           ["lotes", loteDoc.id, "leituras"],
-          [fsOrderBy("data", "desc"), fsLimit(1)]
+          [fsOrderBy("data", "desc"), fsLimit(10)]
+        );
+        const ultimaLeitura = escolherLeituraMaisRecente(
+          leituraSnap.docs.map((d) => d.data() as {
+            data?: string; criadoEm?: number; nota?: string; fator?: number;
+            cmsAnterior?: number; cmsNovo?: number;
+          })
         );
 
-        // CMS: conforme configuração, priorizar o realizado ou o previsto do
-        // dia anterior, senão última leitura, senão CMS_INICIAL
-        let cmsAtual =
+        // Base do dia: conforme configuração, o realizado ou o previsto do
+        // dia anterior, senão derivada da última leitura, senão CMS_INICIAL
+        let cmsBase =
           (baseCmsLeitura === "previsto"
             ? cmsPrevistoOntemMap.get(loteDoc.id)
             : cmsRealizadoOntemMap.get(loteDoc.id)) ?? 0;
         let ultimaLeituraData = "";
+        let leituraHoje: LeituraHoje | null = null;
 
-        if (!leituraSnap.empty) {
-          const ultimaLeitura = leituraSnap.docs[0].data();
-          if (cmsAtual <= 0) {
-            cmsAtual = ultimaLeitura.cmsNovo ?? CMS_INICIAL;
-          }
+        if (ultimaLeitura) {
           ultimaLeituraData = ultimaLeitura.data ?? "";
 
-          // Se a ultima leitura é de hoje, marcar como ja feita
           if (ultimaLeitura.data === hoje) {
-            leiturasHojeMap.set(loteDoc.id, {
+            leituraHoje = {
               loteId: loteDoc.id,
-              nota: ultimaLeitura.nota,
-              fator: ultimaLeitura.fator,
-              cmsAnterior: ultimaLeitura.cmsAnterior,
-              cmsNovo: ultimaLeitura.cmsNovo,
-            });
+              nota: ultimaLeitura.nota ?? "",
+              fator: ultimaLeitura.fator ?? 0,
+              cmsAnterior: ultimaLeitura.cmsAnterior ?? 0,
+              cmsNovo: ultimaLeitura.cmsNovo ?? 0,
+            };
+            leiturasHojeMap.set(loteDoc.id, leituraHoje);
+            if (cmsBase <= 0) {
+              // Sem base de ontem: a base do dia é o ponto de partida
+              // registrado na própria leitura de hoje
+              cmsBase = ultimaLeitura.cmsAnterior ?? 0;
+            }
+          } else if (cmsBase <= 0) {
+            cmsBase = ultimaLeitura.cmsNovo ?? 0;
           }
         }
 
-        if (cmsAtual <= 0) {
-          cmsAtual = CMS_INICIAL;
+        if (cmsBase <= 0) {
+          cmsBase = CMS_INICIAL;
         }
+
+        // Exibição: se já há leitura hoje, mostrar o CMS resultante dela
+        // (o mesmo valor que o mapa de trato vai usar); senão a base do dia
+        const cmsAtual = leituraHoje && leituraHoje.cmsNovo > 0 ? leituraHoje.cmsNovo : cmsBase;
 
         lotesComPiquete.push({
           id: loteDoc.id,
@@ -199,6 +219,7 @@ export default function Leitura() {
           piqueteId: data.piqueteId ?? "",
           piqueteNome: data.piqueteNome ?? "",
           cmsAtual,
+          cmsBase,
           ultimaLeituraData,
         });
       }
@@ -219,12 +240,9 @@ export default function Leitura() {
       const loteId = lote.id;
       if (saving) return;
 
-      // CMS anterior: se ja tem leitura de hoje, usar o cmsAnterior original
-      // senão, usar o cmsAtual do lote
-      const leituraExistente = leiturasHoje.get(loteId);
-      const cmsAnterior = leituraExistente
-        ? leituraExistente.cmsAnterior
-        : lote.cmsAtual;
+      // CMS anterior: sempre a base do dia (realizado ou previsto de ontem,
+      // conforme configuração) — remarcar a nota não acumula fatores
+      const cmsAnterior = lote.cmsBase;
       const cmsNovo = parseFloat(
         (cmsAnterior + CMS_BASE * (nota.fator - 1)).toFixed(4)
       );
@@ -238,6 +256,7 @@ export default function Leitura() {
           fator: nota.fator,
           cmsAnterior,
           cmsNovo,
+          criadoEm: Date.now(),
         });
 
         // Atualizar estado local
@@ -265,7 +284,7 @@ export default function Leitura() {
         setSaving(null);
       }
     },
-    [saving, leiturasHoje, hoje]
+    [saving, hoje]
   );
 
   function formatCms(cms: number): string {
@@ -288,6 +307,7 @@ export default function Leitura() {
         fator: 1,
         cmsAnterior: lote.cmsAtual,
         cmsNovo,
+        criadoEm: Date.now(),
       });
 
       // Atualizar estado local
@@ -340,6 +360,7 @@ export default function Leitura() {
           fator: 0,
           cmsAnterior: lote.cmsAtual,
           cmsNovo,
+          criadoEm: Date.now(),
         });
 
         setLotes((prev) =>

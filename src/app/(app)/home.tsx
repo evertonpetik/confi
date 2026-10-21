@@ -24,7 +24,8 @@ import {
   calcularConsumoUltimoDia,
   isEstoqueBaixo,
 } from "@/utils/insumoAutonomia";
-import { calcPesoMedio, CMS_INICIAL } from "@/utils/mapaTratoCalc";
+import { escolherLeituraMaisRecente } from "@/utils/loteCalcCore";
+import { calcPesoMedio, CMS_INICIAL, getBaseCmsLeitura } from "@/utils/mapaTratoCalc";
 import { compararPiquetes } from "@/utils/piqueteOrdenacao";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -433,10 +434,12 @@ export default function Home() {
       const ontemMOByLote = new Map<string, number>();
       const ontemMSByLote = new Map<string, number>();
       const cmsRealizadoOntemByLote = new Map<string, number>();
+      const cmsPrevistoOntemByLote = new Map<string, number>();
+      const baseCmsLeitura = await getBaseCmsLeitura();
 
       for (const hDoc of histSnap.docs) {
         const h = hDoc.data();
-        const msPorLote = h.msPorLote as { loteId: string; totalMO?: number; totalMS?: number; gmdReal?: number; cmsRealizado?: number }[] | undefined;
+        const msPorLote = h.msPorLote as { loteId: string; totalMO?: number; totalMS?: number; gmdReal?: number; cmsRealizado?: number; cmsPrevisto?: number }[] | undefined;
         if (!msPorLote) continue;
         for (const ml of msPorLote) {
           if (ml.gmdReal != null && ml.gmdReal > 0) {
@@ -458,6 +461,9 @@ export default function Home() {
             if (ml.cmsRealizado != null && ml.cmsRealizado > 0) {
               cmsRealizadoOntemByLote.set(ml.loteId, ml.cmsRealizado);
             }
+            if (ml.cmsPrevisto != null && ml.cmsPrevisto > 0) {
+              cmsPrevistoOntemByLote.set(ml.loteId, ml.cmsPrevisto);
+            }
           }
         }
       }
@@ -470,7 +476,7 @@ export default function Home() {
           lotesAtivosDocs.map((loteDoc) =>
             queryCollection(
               ["lotes", loteDoc.id, "leituras"],
-              [fsOrderBy("data", "desc"), fsLimit(1)]
+              [fsOrderBy("data", "desc"), fsLimit(10)]
             ).catch(() => null)
           )
         ),
@@ -561,10 +567,15 @@ export default function Home() {
         let leituraData = "";
         const leitSnap = leitSnaps[idx];
         if (leitSnap && !leitSnap.empty) {
-          const l = leitSnap.docs[0].data();
-          leituraCocho = l.nota ?? "-";
-          cmsAtual = l.cmsNovo ?? 0;
-          leituraData = l.data ?? "";
+          // pode haver várias leituras no mesmo dia — desempate por criadoEm
+          const l = escolherLeituraMaisRecente(
+            leitSnap.docs.map((d: any) => d.data() as { data?: string; criadoEm?: number; nota?: string; cmsNovo?: number })
+          );
+          if (l) {
+            leituraCocho = l.nota ?? "-";
+            cmsAtual = l.cmsNovo ?? 0;
+            leituraData = l.data ?? "";
+          }
         }
 
         // Consumo realizado de ontem (MO e MS por cabeca)
@@ -577,13 +588,17 @@ export default function Home() {
         const cmsPctPV = pesoHojeProjetado > 0 ? (consMSCab / pesoHojeProjetado) * 100 : cmsAtual;
 
         // Previsto de hoje: mesma logica do mapa de trato
-        // CMS previsto: leitura de hoje > CMS realizado de ontem > ultima leitura > CMS inicial
-        const cmsOntemRealizado = cmsRealizadoOntemByLote.get(loteDoc.id) ?? 0;
+        // CMS previsto: leitura de hoje > base de ontem (realizado ou previsto,
+        // conforme configuracao) > ultima leitura > CMS inicial
+        const cmsOntemBase =
+          (baseCmsLeitura === "previsto"
+            ? cmsPrevistoOntemByLote.get(loteDoc.id)
+            : cmsRealizadoOntemByLote.get(loteDoc.id)) ?? 0;
         let cmsPrevPct = CMS_INICIAL;
         if (leituraData === hoje && cmsAtual > 0) {
           cmsPrevPct = cmsAtual;
-        } else if (cmsOntemRealizado > 0) {
-          cmsPrevPct = cmsOntemRealizado;
+        } else if (cmsOntemBase > 0) {
+          cmsPrevPct = cmsOntemBase;
         } else if (cmsAtual > 0) {
           cmsPrevPct = cmsAtual;
         }

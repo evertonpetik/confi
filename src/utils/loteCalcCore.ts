@@ -48,3 +48,25 @@ export function getHojeStr(date?: Date): string {
   const d = date ?? new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
+// No mesmo dia pode haver varias leituras (nota refeita, ajuste fino, repetir
+// previsto), cada uma em um doc separado. A query ordenada so por "data" nao
+// desempata entre elas (a ordem vira o ID aleatorio do doc). Este helper
+// escolhe a mais recente: maior data e, dentro da mesma data, maior criadoEm
+// (docs antigos sem criadoEm contam como 0 e perdem para os novos).
+export function escolherLeituraMaisRecente<T extends { data?: string; criadoEm?: number }>(
+  leituras: T[]
+): T | undefined {
+  let melhor: T | undefined;
+  for (const l of leituras) {
+    if (!melhor) {
+      melhor = l;
+      continue;
+    }
+    const cmpData = String(l.data ?? "").localeCompare(String(melhor.data ?? ""));
+    if (cmpData > 0 || (cmpData === 0 && (l.criadoEm ?? 0) > (melhor.criadoEm ?? 0))) {
+      melhor = l;
+    }
+  }
+  return melhor;
+}

@@ -1,6 +1,7 @@
 import { CargaTrato } from "@/components/CargaModal";
 import { DescargaTrato } from "@/components/DescargaModal";
 import { somarEmbarquesAgendadosNaData } from "@/services/embarqueAgendado";
+import { escolherLeituraMaisRecente } from "@/utils/loteCalcCore";
 import {
   fsLimit,
   fsOrderBy,
@@ -429,12 +430,16 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
     let cmsAtual = CMS_INICIAL;
     let leituraHojeCms = 0;
     try {
+      // limit(10): pode haver varias leituras no mesmo dia; o desempate é feito
+      // no cliente por criadoEm (ver escolherLeituraMaisRecente)
       const leitSnap = await queryCollection(
         ["lotes", loteDoc.id, "leituras"],
-        [fsOrderBy("data", "desc"), fsLimit(1)]
+        [fsOrderBy("data", "desc"), fsLimit(10)]
       );
-      if (!leitSnap.empty) {
-        const ultimaLeitura = leitSnap.docs[0].data();
+      const ultimaLeitura = escolherLeituraMaisRecente(
+        leitSnap.docs.map((d) => d.data() as { data?: string; criadoEm?: number; cmsNovo?: number })
+      );
+      if (ultimaLeitura) {
         if (ultimaLeitura.data === hoje) {
           leituraHojeCms = ultimaLeitura.cmsNovo ?? 0;
         } else {
