@@ -1,5 +1,5 @@
 import { CompraFormModal } from "@/components/CompraFormModal";
-import { ConferenciaMSModal } from "@/components/ConferenciaMSModal";
+import { ConferenciaMSDados, ConferenciaMSModal } from "@/components/ConferenciaMSModal";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
@@ -13,12 +13,15 @@ import {
 import { InsumoFormModal } from "@/components/InsumoFormModal";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import Aviso from "@/services/alerta";
 import {
   addDocument,
   deleteDocument,
   getCollection,
+  setDocument,
   updateDocument,
 } from "@/services/firestoreService";
+import { msVigente } from "@/utils/materiaSecaCalc";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
@@ -88,6 +91,7 @@ export default function Insumos() {
           nome: insumoData.nome ?? "",
           percentualMateriaSeca: insumoData.percentualMateriaSeca ?? 0,
           materiaSecaVariavel: insumoData.materiaSecaVariavel ?? false,
+          autonomiaMinimaDias: insumoData.autonomiaMinimaDias,
           compras,
           saidas,
           conferencias,
@@ -225,118 +229,79 @@ export default function Insumos() {
     setConferenciaVisible(true);
   }
 
-  async function handleAddConferencia(
-    insumoId: string,
-    confData: Omit<ConferenciaMS, "id">
-  ) {
+  /**
+   * Aplica a nova lista de conferências de um insumo: recalcula a MS vigente
+   * (conferência finalizada de data mais recente), grava no Firestore quando
+   * mudou e sincroniza o estado da tela e do modal.
+   */
+  async function aplicarConferencias(insumoId: string, conferencias: ConferenciaMS[]) {
+    const insumoAtual = insumos.find((i) => i.id === insumoId);
+    const vigente = msVigente(conferencias);
+    const novaMS = vigente ?? insumoAtual?.percentualMateriaSeca ?? 0;
+
+    if (insumoAtual && novaMS !== insumoAtual.percentualMateriaSeca) {
+      await updateDocument(["insumos"], insumoId, { percentualMateriaSeca: novaMS });
+    }
+
+    const atualizar = (i: Insumo): Insumo =>
+      i.id === insumoId ? { ...i, percentualMateriaSeca: novaMS, conferencias } : i;
+    setInsumos((prev) => prev.map(atualizar));
+    setConferenciaInsumo((prev) => (prev && prev.id === insumoId ? atualizar(prev) : prev));
+  }
+
+  async function handleAddConferencia(insumoId: string, confData: ConferenciaMSDados) {
     try {
-      const docRef = await addDocument(
-        ["insumos", insumoId, "conferencias"],
-        confData
-      );
-      // Atualizar percentualMateriaSeca no Firestore
-      await updateDocument(["insumos"], insumoId, {
-        percentualMateriaSeca: confData.percentualMS,
-      });
+      const docRef = await addDocument(["insumos", insumoId, "conferencias"], confData);
       const newConf: ConferenciaMS = { id: docRef.id, ...confData };
-      setInsumos((prev) =>
-        prev.map((i) =>
-          i.id === insumoId
-            ? {
-              ...i,
-              percentualMateriaSeca: confData.percentualMS,
-              conferencias: [...i.conferencias, newConf],
-            }
-            : i
-        )
-      );
-      setConferenciaInsumo((prev) =>
-        prev && prev.id === insumoId
-          ? {
-            ...prev,
-            percentualMateriaSeca: confData.percentualMS,
-            conferencias: [...prev.conferencias, newConf],
-          }
-          : prev
-      );
+      const insumoAtual = insumos.find((i) => i.id === insumoId);
+      await aplicarConferencias(insumoId, [...(insumoAtual?.conferencias ?? []), newConf]);
     } catch (error) {
       console.error("Erro ao adicionar conferência:", error);
-      Alert.alert("Erro", "Não foi possível adicionar a conferência.");
+      Aviso.alert("Erro", "Não foi possível adicionar a conferência.");
     }
   }
 
-  async function handleDeleteConferencia(
+  async function handleUpdateConferencia(
     insumoId: string,
-    conferenciaId: string
+    conferenciaId: string,
+    confData: ConferenciaMSDados
   ) {
     try {
-      await deleteDocument(
-        ["insumos", insumoId, "conferencias"],
-        conferenciaId
-      );
-
-      // Encontrar insumo atual para recalcular MS
+      // setDocument sem merge: a conferência é regravada por inteiro, para que
+      // campos removidos (ex.: observação apagada) não fiquem para trás.
+      await setDocument(["insumos", insumoId, "conferencias"], conferenciaId, confData);
       const insumoAtual = insumos.find((i) => i.id === insumoId);
-      const restantes = insumoAtual
-        ? insumoAtual.conferencias.filter((c) => c.id !== conferenciaId)
-        : [];
+      const conferencias = (insumoAtual?.conferencias ?? []).map((c) =>
+        c.id === conferenciaId ? { id: conferenciaId, ...confData } : c
+      );
+      await aplicarConferencias(insumoId, conferencias);
+    } catch (error) {
+      console.error("Erro ao atualizar conferência:", error);
+      Aviso.alert("Erro", "Não foi possível atualizar a conferência.");
+    }
+  }
 
-      // Se restam conferências, usar a mais recente por data
-      if (restantes.length > 0) {
-        const maisRecente = restantes.reduce((a, b) =>
-          a.data.localeCompare(b.data) > 0 ? a : b
-        );
-        await updateDocument(["insumos"], insumoId, {
-          percentualMateriaSeca: maisRecente.percentualMS,
-        });
-
-        setInsumos((prev) =>
-          prev.map((i) =>
-            i.id === insumoId
-              ? {
-                ...i,
-                percentualMateriaSeca: maisRecente.percentualMS,
-                conferencias: restantes,
-              }
-              : i
-          )
-        );
-        setConferenciaInsumo((prev) =>
-          prev && prev.id === insumoId
-            ? {
-              ...prev,
-              percentualMateriaSeca: maisRecente.percentualMS,
-              conferencias: restantes,
-            }
-            : prev
-        );
-      } else {
-        // Sem conferências restantes, manter o valor atual
-        setInsumos((prev) =>
-          prev.map((i) =>
-            i.id === insumoId
-              ? { ...i, conferencias: [] }
-              : i
-          )
-        );
-        setConferenciaInsumo((prev) =>
-          prev && prev.id === insumoId
-            ? { ...prev, conferencias: [] }
-            : prev
-        );
-      }
+  async function handleDeleteConferencia(insumoId: string, conferenciaId: string) {
+    try {
+      await deleteDocument(["insumos", insumoId, "conferencias"], conferenciaId);
+      const insumoAtual = insumos.find((i) => i.id === insumoId);
+      const restantes = (insumoAtual?.conferencias ?? []).filter((c) => c.id !== conferenciaId);
+      // Sem conferência finalizada restante, aplicarConferencias mantém a MS atual.
+      await aplicarConferencias(insumoId, restantes);
     } catch (error) {
       console.error("Erro ao excluir conferência:", error);
-      Alert.alert("Erro", "Não foi possível excluir a conferência.");
+      Aviso.alert("Erro", "Não foi possível excluir a conferência.");
     }
   }
 
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     try {
-      const comprasSnap = await getCollection("insumos", deleteTarget.id, "compras");
-      for (const compraDoc of comprasSnap.docs) {
-        await deleteDocument(["insumos", deleteTarget.id, "compras"], compraDoc.id);
+      for (const sub of ["compras", "saidas", "conferencias"]) {
+        const snap = await getCollection("insumos", deleteTarget.id, sub);
+        for (const doc of snap.docs) {
+          await deleteDocument(["insumos", deleteTarget.id, sub], doc.id);
+        }
       }
       await deleteDocument(["insumos"], deleteTarget.id);
       setInsumos((prev) => prev.filter((i) => i.id !== deleteTarget.id));
@@ -430,6 +395,7 @@ export default function Insumos() {
         visible={conferenciaVisible}
         insumo={conferenciaInsumo}
         onAddConferencia={handleAddConferencia}
+        onUpdateConferencia={handleUpdateConferencia}
         onDeleteConferencia={handleDeleteConferencia}
         onClose={() => {
           setConferenciaVisible(false);
@@ -440,7 +406,7 @@ export default function Insumos() {
       <ConfirmDialog
         visible={!!deleteTarget}
         title="Excluir Insumo"
-        message={`Deseja realmente excluir o insumo "${deleteTarget?.nome ?? ""}"? Todas as compras associadas também serão excluídas.`}
+        message={`Deseja realmente excluir o insumo "${deleteTarget?.nome ?? ""}"? Compras, saídas e conferências de MS associadas também serão excluídas.`}
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />

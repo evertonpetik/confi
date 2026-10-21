@@ -24,10 +24,31 @@ export type Saida = {
   roteiroNumero: number;
 };
 
+/** Uma repesagem da amostra durante a secagem. Pesos em gramas. */
+export type PesagemMS = {
+  /** Minutos de secagem desde a pesagem anterior (60 na primeira, 10 depois). */
+  tempoMin: number;
+  /** Peso bruto (amostra + recipiente) lido na balança. */
+  pesoBruto: number;
+};
+
 export type ConferenciaMS = {
   id: string;
   data: string;
+  /** %MS resultante (0–100). Na secagem, é a %MS da última pesagem. */
   percentualMS: number;
+  // Processo de secagem (opcional: conferências informadas direto não têm).
+  /** Peso do recipiente vazio, em gramas. */
+  tara?: number;
+  /** Peso bruto da amostra úmida + recipiente, em gramas. */
+  pesoInicialBruto?: number;
+  pesagens?: PesagemMS[];
+  /**
+   * false enquanto a secagem está em andamento (ainda não conta como MS
+   * vigente nem para o alerta de vencimento). Ausente = finalizada.
+   */
+  finalizada?: boolean;
+  observacao?: string;
 };
 
 export type Insumo = {
@@ -95,6 +116,7 @@ export function InsumoCard({
   const consumoUltimoDia = calcularConsumoUltimoDia(insumo.saidas).quantidade;
   const autonomiaDias = calcularAutonomiaDias(estoque, consumoUltimoDia);
   const estoqueBaixo = isEstoqueBaixo(autonomiaDias, insumo.autonomiaMinimaDias);
+  const secagemEmAndamento = insumo.conferencias.some((c) => c.finalizada === false);
 
   return (
     <View style={styles.card}>
@@ -104,6 +126,13 @@ export function InsumoCard({
           {insumo.materiaSecaVariavel && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>MS Variável</Text>
+            </View>
+          )}
+          {secagemEmAndamento && (
+            <View style={[styles.badge, styles.badgeAndamento]}>
+              <Text style={[styles.badgeText, styles.badgeAndamentoText]}>
+                Secagem em andamento
+              </Text>
             </View>
           )}
         </View>
@@ -202,6 +231,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: "#E65100",
+  },
+  badgeAndamento: {
+    backgroundColor: "#E3F2FD",
+  },
+  badgeAndamentoText: {
+    color: "#1565C0",
   },
   detalhe: {
     fontSize: 13,

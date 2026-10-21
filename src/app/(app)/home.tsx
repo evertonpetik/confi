@@ -365,19 +365,24 @@ export default function Home() {
             return;
           }
 
-          // Encontrar data mais recente
+          // Data mais recente entre as conferências finalizadas (secagens em
+          // andamento ainda não contam como conferência válida)
           let maisRecente = "";
           for (const cDoc of confSnap.docs) {
+            if (cDoc.data().finalizada === false) continue;
             const cData = cDoc.data().data as string;
             if (cData > maisRecente) maisRecente = cData;
           }
 
-          if (maisRecente) {
-            const dataConf = new Date(maisRecente + "T00:00:00").getTime();
-            const diffDias = Math.floor((hojeMs - dataConf) / 86400000);
-            if (diffDias >= tempoMSDias) {
-              vencidos.push(insumoData.nome ?? "Sem nome");
-            }
+          if (!maisRecente) {
+            vencidos.push(insumoData.nome ?? "Sem nome");
+            return;
+          }
+
+          const dataConf = new Date(maisRecente + "T00:00:00").getTime();
+          const diffDias = Math.floor((hojeMs - dataConf) / 86400000);
+          if (diffDias >= tempoMSDias) {
+            vencidos.push(insumoData.nome ?? "Sem nome");
           }
         });
 

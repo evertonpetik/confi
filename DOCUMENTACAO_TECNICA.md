@@ -177,6 +177,23 @@ src/
 | roteiroId | string | ID do roteiro |
 | roteiroNumero | number | Numero do roteiro |
 
+**Subcolecao `insumos/{id}/conferencias`** (conferencia de materia seca):
+| Campo | Tipo | Descricao |
+| ---------------- | ------- | ------------------------------------------------------------------- |
+| data | string | Data ISO da conferencia |
+| percentualMS | number | %MS resultante (0-100). Na secagem, e a %MS da ultima pesagem |
+| tara | number? | Peso do recipiente vazio (g). Ausente quando a %MS foi informada direto |
+| pesoInicialBruto | number? | Peso da amostra umida + recipiente (g) |
+| pesagens | array? | Lista de { tempoMin, pesoBruto }: repesagens durante a secagem |
+| finalizada | boolean?| `false` enquanto a secagem esta em andamento. Ausente = finalizada |
+| observacao | string? | Texto livre |
+
+Formulas (ver `src/utils/materiaSecaCalc.ts`):
+- `pesoLiquidoInicial = pesoInicialBruto - tara`
+- `%MS da pesagem = (pesoBruto - tara) / pesoLiquidoInicial * 100`, arredondada a 1 casa
+- Peso "estabilizou" quando as duas ultimas pesagens tem o mesmo peso bruto
+- MS vigente do insumo (`insumos.percentualMateriaSeca`) = `percentualMS` da conferencia **finalizada** de data mais recente. Secagens em andamento nao alteram a MS nem contam para o alerta de vencimento (`tempoMS`).
+
 #### `dietas`
 
 | Campo        | Tipo    | Descricao                                     |
@@ -729,10 +746,15 @@ CRUD simples. Busca estados/municipios via API IBGE. Valida CPF/CNPJ.
 - CRUD de insumos
 - Registro de compras (com preco por kg)
 - Exibicao de estoque e preco medio
+- Conferencia de materia seca (`ConferenciaMSModal.tsx`), para insumos com `materiaSecaVariavel`:
+  - **Nova Secagem**: reproduz a planilha de campo. Informa tara e peso inicial bruto, registra as pesagens sucessivas (60 min na primeira, 10 min nas seguintes) e mostra a %MS de cada etapa e o resultado final. Pode ser salva "em andamento" e retomada depois; ao finalizar, a %MS da ultima pesagem vira a MS vigente do insumo. Se o peso nao estabilizou, pede confirmacao.
+  - **Informar %MS**: lancamento direto do percentual, sem o processo de secagem.
 
 #### Regra de negocio:
 
 - Ao alterar o nome de um insumo, propaga a alteracao para todas as dietas que o utilizam
+- A MS vigente do insumo e sempre a conferencia finalizada de data mais recente (adicionar, editar ou excluir uma conferencia recalcula). Sem nenhuma conferencia finalizada, o valor atual e mantido.
+- Excluir um insumo apaga tambem as subcolecoes `compras`, `saidas` e `conferencias`.
 
 ### 6.7 Dietas (`dietas.tsx`)
 
