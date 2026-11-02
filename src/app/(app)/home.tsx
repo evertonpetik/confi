@@ -24,7 +24,7 @@ import {
   calcularConsumoUltimoDia,
   isEstoqueBaixo,
 } from "@/utils/insumoAutonomia";
-import { escolherLeituraMaisRecente } from "@/utils/loteCalcCore";
+import { calcQtdNaData, escolherLeituraMaisRecente } from "@/utils/loteCalcCore";
 import { calcPesoMedio, CMS_INICIAL, getBaseCmsLeitura } from "@/utils/mapaTratoCalc";
 import { compararPiquetes } from "@/utils/piqueteOrdenacao";
 import { Feather } from "@expo/vector-icons";
@@ -583,11 +583,13 @@ export default function Home() {
           }
         }
 
-        // Consumo realizado de ontem (MO e MS por cabeca)
+        // Consumo realizado de ontem (MO e MS por cabeca) — dividido pelos
+        // animais que estavam no lote ontem, não pela quantidade de hoje
         const totalMOOntem = ontemMOByLote.get(loteDoc.id) ?? 0;
         const totalMSOntem = ontemMSByLote.get(loteDoc.id) ?? 0;
-        const consMOCab = qtdAtual > 0 ? totalMOOntem / qtdAtual : 0;
-        const consMSCab = qtdAtual > 0 ? totalMSOntem / qtdAtual : 0;
+        const qtdOntem = calcQtdNaData(movs, ontem);
+        const consMOCab = qtdOntem > 0 ? totalMOOntem / qtdOntem : 0;
+        const consMSCab = qtdOntem > 0 ? totalMSOntem / qtdOntem : 0;
 
         // CMS % PV (ontem)
         const cmsPctPV = pesoHojeProjetado > 0 ? (consMSCab / pesoHojeProjetado) * 100 : cmsAtual;

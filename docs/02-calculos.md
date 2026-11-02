@@ -10,12 +10,14 @@ Os módulos puros (sem React Native) estão em `src/utils/loteCalcCore.ts`, `mat
 
 ## 1. Lote: quantidade, peso e dias
 
-### 1.1 Quantidade atual
-`utils/mapaTratoCalc.ts::calcQtdAtual` · `utils/loteCalcCore.ts` · `components/LoteCard.tsx::calcularQuantidadeAtual`
+### 1.1 Quantidade atual e quantidade em uma data
+`utils/mapaTratoCalc.ts::calcQtdAtual` · `utils/loteCalcCore.ts::calcQtdAtual` / `calcQtdNaData` · `components/LoteCard.tsx::calcularQuantidadeAtual`
 
 ```
-qtdAtual = Σ quantidade (evento = "Entrada") − Σ quantidade (evento = "Saida")
+qtdAtual        = Σ quantidade (evento = "Entrada") − Σ quantidade (evento = "Saida")
+qtdNaData(d)    = idem, só movimentações com data ≤ d   (saída no dia já desconta)
 ```
+Toda média por cabeça ao longo do tempo (análise de lote, relatório histórico, consumo de ontem no dashboard) usa `qtdNaData`, nunca `qtdAtual`.
 
 ### 1.2 Peso médio projetado (hoje)
 `calcPesoMedio(movs, gmdEstimado)` (mesmos três arquivos)
@@ -276,10 +278,10 @@ Campos gravados: `loteId, loteNumero, piqueteNome, totalMO, previsto (= moLote),
 
 ## 6. Dashboard (`home.tsx`) — consumo por cabeça
 
-Com `totalMO_ontem` e `totalMS_ontem` do `msPorLote` de ontem:
+Com `totalMO_ontem` e `totalMS_ontem` do `msPorLote` de ontem e `qtdOntem = calcQtdNaData(movs, ontem)`:
 ```
-consMOCab = totalMO_ontem / qtdAtual
-consMSCab = totalMS_ontem / qtdAtual
+consMOCab = totalMO_ontem / qtdOntem
+consMSCab = totalMS_ontem / qtdOntem
 cmsPctPV  = pesoHojeProjetado > 0 ? consMSCab / pesoHojeProjetado × 100 : cmsAtual
 ```
 Previsto para hoje (com `cmsPrevPct` = CMS vigente e `%MS` da dieta do roteiro do lote):
@@ -369,16 +371,20 @@ Validações: soma dos percentuais = 100 (± 0,01); NDT entre 0 e 100.
 
 ## 8. Análise de lote (`analise-lote.tsx`)
 
-Com `dailyData` = dias de `historicoMapaTrato` em que o lote tem `custoPorLote` ou `msPorLote`, e `custoOperacional` = parâmetro `custo_operacional` (R$/cab/dia):
+Com `dailyData` = dias de `historicoMapaTrato` em que o lote tem `custoPorLote` ou `msPorLote`, `cabecas_d` = animais do lote no dia (`loteCalcCore.ts::calcQtdNaData`, movimentações com data ≤ dia) e `custoOperacional` = parâmetro `custo_operacional` (R$/cab/dia). Todas as médias por cabeça são **ponderadas por animais-dia** — o lote muda de tamanho ao longo do período, e dividir pela quantidade atual distorceria o passado (ex.: lote que entrou com 120 e hoje tem 42).
 ```
-custoDiario_d   = custoLote_d / qtdAnimais + custoOperacional      (só dias com custoLote > 0)
-custoDiaMedia   = média(custoDiario)
-custoDiaHoje    = último custoDiario
-custoDia5Dias   = média dos últimos 5
-cmsHoje         = último cmsRealizado > 0;  cmsMedia = média(cmsRealizado > 0)
-consMOCab       = totalMO do último dia / qtdAnimais
-gmdRealUltimo   = gmdReal do último dia
-custoMSAnimalDia_d = custoLote_d / qtdAnimais          (gráfico)
+dias válidos      = custoLote_d > 0 e cabecas_d > 0
+custoDiaMedia     = Σ custoLote_d / Σ cabecas_d + custoOperacional
+custoDia5Dias     = idem, últimos 5 dias válidos
+custoDiaHoje      = custoLote_último / cabecas_último + custoOperacional
+cmsHoje           = último cmsRealizado > 0
+cmsMedia          = Σ (cmsRealizado_d × cabecas_d) / Σ cabecas_d        (dias com cmsRealizado > 0)
+consMOCab         = totalMO do último dia / cabecas desse dia
+gmdRealUltimo     = gmdReal do último dia
+pesoConsumo       = pesoEntrada + Σ gmdReal_d
+gráficos          : consumoMS_d = totalMS_d / cabecas_d ; custoMSAnimalDia_d = custoLote_d / cabecas_d
+layout            : espaçamento = (larguraPlot − 2×12) / (n − 1); rótulo do eixo X a cada ceil(38 px / espaçamento) pontos;
+                    se n × 3 px > larguraPlot, agrupa k = ceil(3n / larguraPlot) dias consecutivos e plota a média do bloco
 ```
 
 ---

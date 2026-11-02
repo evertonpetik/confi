@@ -11,6 +11,7 @@ import { Select } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { getCollection } from "@/services/firestoreService";
+import { calcQtdNaData } from "@/utils/loteCalcCore";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
@@ -34,6 +35,8 @@ type DailyData = {
   totalMO: number;
   cmsRealizado: number;
   gmdReal: number;
+  /** Animais no lote naquele dia (movimentações até a data). */
+  cabecas: number;
 };
 
 // ---- Component ----
@@ -53,6 +56,9 @@ export default function AnaliseLote() {
   const [custoOperacional, setCustoOperacional] = useState(0);
   const [ultimaLeitura, setUltimaLeitura] = useState<{ nota: string; data: string } | null>(null);
   const [roteiroInfo, setRoteiroInfo] = useState<string | null>(null);
+  // Largura útil do card de gráfico (medida em runtime) — os gráficos se
+  // redimensionam para caber todos os dias sem scroll, como um painel de BI.
+  const [chartAreaWidth, setChartAreaWidth] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -141,6 +147,7 @@ export default function AnaliseLote() {
             totalMO: msEntry?.totalMO ?? 0,
             cmsRealizado: msEntry?.cmsRealizado ?? 0,
             gmdReal: msEntry?.gmdReal ?? 0,
+            cabecas: calcQtdNaData(lote.movimentacoes, h.data),
           });
         }
       }
@@ -208,37 +215,34 @@ export default function AnaliseLote() {
     )
     : 0;
 
-  // Custo diária por animal
-  const custoDiarioArray = dailyData
-    .filter((d) => d.custoLote > 0)
-    .map((d) => d.custoLote / qtdAnimais + custoOperacional);
+  // Custo diária por animal — ponderado por animais-dia: o lote muda de tamanho
+  // ao longo do período, então dividir pela quantidade atual distorce o passado.
+  const diasComCusto = dailyData.filter((d) => d.custoLote > 0 && d.cabecas > 0);
+  function custoDiaPonderado(dias: DailyData[]): number {
+    const cabDias = dias.reduce((a, d) => a + d.cabecas, 0);
+    if (cabDias <= 0) return 0;
+    return dias.reduce((a, d) => a + d.custoLote, 0) / cabDias + custoOperacional;
+  }
 
-  const custoDiaMedia =
-    custoDiarioArray.length > 0
-      ? custoDiarioArray.reduce((a, b) => a + b, 0) / custoDiarioArray.length
-      : 0;
-  const custoDiaHoje =
-    custoDiarioArray.length > 0
-      ? custoDiarioArray[custoDiarioArray.length - 1]
-      : 0;
-  const ultimos5 = custoDiarioArray.slice(-5);
-  const custoDia5Dias =
-    ultimos5.length > 0
-      ? ultimos5.reduce((a, b) => a + b, 0) / ultimos5.length
-      : 0;
+  const custoDiaMedia = custoDiaPonderado(diasComCusto);
+  const custoDiaHoje = custoDiaPonderado(diasComCusto.slice(-1));
+  const custoDia5Dias = custoDiaPonderado(diasComCusto.slice(-5));
 
-  // CMS % PV
+  // CMS % PV — média ponderada por animais-dia
   const cmsValues = dailyData.filter((d) => d.cmsRealizado > 0);
   const cmsHoje =
     cmsValues.length > 0 ? cmsValues[cmsValues.length - 1].cmsRealizado : 0;
+  const cmsCabDias = cmsValues.reduce((a, d) => a + d.cabecas, 0);
   const cmsMedia =
-    cmsValues.length > 0
-      ? cmsValues.reduce((a, d) => a + d.cmsRealizado, 0) / cmsValues.length
-      : 0;
+    cmsCabDias > 0
+      ? cmsValues.reduce((a, d) => a + d.cmsRealizado * d.cabecas, 0) / cmsCabDias
+      : cmsValues.length > 0
+        ? cmsValues.reduce((a, d) => a + d.cmsRealizado, 0) / cmsValues.length
+        : 0;
 
-  // Consumo MO/cab e GMD real mais recente
+  // Consumo MO/cab e GMD real mais recente (com os animais daquele dia)
   const lastDay = dailyData.length > 0 ? dailyData[dailyData.length - 1] : null;
-  const consMOCab = lastDay && qtdAnimais > 0 ? lastDay.totalMO / qtdAnimais : 0;
+  const consMOCab = lastDay && lastDay.cabecas > 0 ? lastDay.totalMO / lastDay.cabecas : 0;
   const gmdRealUltimo = lastDay ? lastDay.gmdReal : 0;
 
   // ---- Chart data ----
@@ -248,27 +252,88 @@ export default function AnaliseLote() {
     return `${d}/${m}`;
   }
 
-  const cmsChartData = cmsValues.map((d) => ({
-    value: parseFloat(d.cmsRealizado.toFixed(2)),
-    label: formatLabel(d.data),
-    dataPointText: d.cmsRealizado.toFixed(2) + "%",
+  // ---- Layout responsivo dos gráficos ----
+  // Tudo cabe na largura disponível: o espaçamento entre pontos/barras é
+  // derivado da quantidade de dias, e os rótulos do eixo X são afinados para
+  // não se sobreporem (um rótulo a cada `passoRotulo` dias).
+  const Y_AXIS_WIDTH = 40;
+  const EDGE_SPACING = 12;
+  const LABEL_MIN_PX = 38;
+  const plotWidth = Math.max(0, chartAreaWidth - Y_AXIS_WIDTH);
+
+  function layoutLinha(n: number) {
+    const spacing = n > 1 ? Math.max(1, (plotWidth - 2 * EDGE_SPACING) / (n - 1)) : plotWidth / 2;
+    const passoRotulo = Math.max(1, Math.ceil(LABEL_MIN_PX / spacing));
+    return { spacing, passoRotulo, mostrarPontos: spacing >= 14 };
+  }
+
+  function layoutBarras(n: number) {
+    // barra + vão, com o vão em 40 % da barra; barra entre 2 e 28 px
+    const bruto = n > 0 ? (plotWidth - 2 * EDGE_SPACING) / (n + 0.4 * Math.max(0, n - 1)) : 28;
+    const barWidth = Math.min(28, Math.max(2, bruto));
+    const spacing = n > 1 ? Math.max(0.5, (plotWidth - 2 * EDGE_SPACING - n * barWidth) / (n - 1)) : 0;
+    const passoRotulo = Math.max(1, Math.ceil(LABEL_MIN_PX / (barWidth + spacing)));
+    return { barWidth, spacing, passoRotulo };
+  }
+
+  function rotulo(data: string, i: number, n: number, passo: number) {
+    // Mostra o primeiro, o último e um a cada `passo`; evita colar o penúltimo no último
+    if (i === n - 1) return formatLabel(data);
+    if (i % passo === 0 && n - 1 - i >= Math.ceil(passo / 2)) return formatLabel(data);
+    return "";
+  }
+
+  // Quando há mais dias do que pixels razoáveis (3 px por ponto), agrupa dias
+  // consecutivos e plota a média do bloco — como um painel de BI faz ao
+  // reduzir a granularidade. Abaixo disso, um ponto/barra por dia.
+  const MIN_PX_POR_PONTO = 3;
+  function fatorAgregacao(n: number) {
+    const disponivel = Math.max(1, plotWidth - 2 * EDGE_SPACING);
+    return Math.max(1, Math.ceil((n * MIN_PX_POR_PONTO) / disponivel));
+  }
+  type Ponto = { data: string; valores: number[] };
+  function agregar(pontos: Ponto[], k: number): Ponto[] {
+    if (k <= 1) return pontos;
+    const out: Ponto[] = [];
+    for (let i = 0; i < pontos.length; i += k) {
+      const bloco = pontos.slice(i, i + k);
+      out.push({
+        data: bloco[0].data,
+        valores: bloco[0].valores.map((_, j) => bloco.reduce((a, p) => a + p.valores[j], 0) / bloco.length),
+      });
+    }
+    return out;
+  }
+
+  const kCms = fatorAgregacao(cmsValues.length);
+  const cmsPontos = agregar(
+    cmsValues.map((d) => ({ data: d.data, valores: [d.cmsRealizado] })),
+    kCms
+  );
+  const linhaLayout = layoutLinha(cmsPontos.length);
+  const cmsChartData = cmsPontos.map((p, i) => ({
+    value: parseFloat(p.valores[0].toFixed(2)),
+    label: rotulo(p.data, i, cmsPontos.length, linhaLayout.passoRotulo),
+    dataPointText: linhaLayout.mostrarPontos && linhaLayout.passoRotulo === 1 ? p.valores[0].toFixed(2) + "%" : "",
   }));
 
-  const msBarData = dailyData
-    .filter((d) => d.totalMS > 0)
-    .map((d) => ({
-      value: parseFloat((qtdAnimais > 0 ? d.totalMS / qtdAnimais : 0).toFixed(2)),
-      label: formatLabel(d.data),
-      frontColor: "#D4A843",
-    }));
+  const diasConsumo = dailyData.filter((d) => d.totalMS > 0 && d.cabecas > 0);
+  const kConsumo = fatorAgregacao(diasConsumo.length);
+  const consumoPontos = agregar(
+    diasConsumo.map((d) => ({ data: d.data, valores: [d.totalMS / d.cabecas, d.custoLote / d.cabecas] })),
+    kConsumo
+  );
+  const barrasLayout = layoutBarras(consumoPontos.length);
+  const msBarData = consumoPontos.map((p, i) => ({
+    value: parseFloat(p.valores[0].toFixed(2)),
+    label: rotulo(p.data, i, consumoPontos.length, barrasLayout.passoRotulo),
+    frontColor: "#D4A843",
+  }));
 
-  const custoLineData = dailyData
-    .filter((d) => d.custoLote > 0)
-    .map((d) => ({
-      value: parseFloat(
-        (qtdAnimais > 0 ? d.custoLote / qtdAnimais : 0).toFixed(2)
-      ),
-    }));
+  // Mesmos blocos do gráfico de barras, para a linha ficar alinhada às barras
+  const custoLineData = consumoPontos.map((p) => ({
+    value: parseFloat(p.valores[1].toFixed(2)),
+  }));
 
   // Leitura cocho color
   function leituraColor(nota: string): string {
@@ -395,12 +460,18 @@ export default function AnaliseLote() {
   }
 
   function renderCharts() {
-    const chartWidth = isDesktop ? 700 : undefined;
+    const pronto = plotWidth > 0;
 
     return (
       <>
         {/* Chart 1: CMS % PV */}
-        <View style={styles.chartCard}>
+        <View
+          style={styles.chartCard}
+          onLayout={(e) => {
+            const w = e.nativeEvent.layout.width - 2 * 16; // padding do card
+            if (Math.abs(w - chartAreaWidth) > 1) setChartAreaWidth(w);
+          }}
+        >
           <View style={styles.chartHeaderRow}>
             <Text style={styles.chartTitle}>
               Consumo Materia Seca % Peso Vivo
@@ -416,29 +487,37 @@ export default function AnaliseLote() {
               <Text style={styles.chartSideLabel}>Media CMS % PV</Text>
             </View>
           </View>
-          {cmsChartData.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <LineChart
-                data={cmsChartData}
-                width={chartWidth}
-                height={180}
-                color={primaryColor}
-                thickness={2}
-                dataPointsColor={primaryColor}
-                dataPointsRadius={4}
-                xAxisLabelTextStyle={styles.chartXLabel}
-                yAxisTextStyle={styles.chartYLabel}
-                noOfSections={4}
-                spacing={60}
-                initialSpacing={20}
-                endSpacing={20}
-                hideRules
-                yAxisOffset={0}
-                isAnimated
-              />
-            </ScrollView>
-          ) : (
+          {kCms > 1 && (
+            <Text style={styles.chartSideLabel}>
+              {cmsValues.length} dias · cada ponto é a média de {kCms} dias
+            </Text>
+          )}
+          {cmsChartData.length === 0 ? (
             <Text style={styles.emptyChart}>Sem dados de CMS</Text>
+          ) : !pronto ? (
+            <View style={{ height: 180 }} />
+          ) : (
+            <LineChart
+              data={cmsChartData}
+              width={plotWidth}
+              height={180}
+              color={primaryColor}
+              thickness={2}
+              dataPointsColor={primaryColor}
+              dataPointsRadius={linhaLayout.mostrarPontos ? 3 : 0}
+              hideDataPoints={!linhaLayout.mostrarPontos}
+              xAxisLabelTextStyle={styles.chartXLabel}
+              yAxisTextStyle={styles.chartYLabel}
+              yAxisLabelWidth={Y_AXIS_WIDTH}
+              noOfSections={4}
+              spacing={linhaLayout.spacing}
+              initialSpacing={EDGE_SPACING}
+              endSpacing={EDGE_SPACING}
+              hideRules
+              yAxisOffset={0}
+              disableScroll
+              isAnimated
+            />
           )}
         </View>
 
@@ -447,33 +526,43 @@ export default function AnaliseLote() {
           <Text style={styles.chartTitle}>
             Consumo Materia Seca x Preco Kg MS
           </Text>
-          {msBarData.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <BarChart
-                data={msBarData}
-                width={chartWidth}
-                height={200}
-                barWidth={28}
-                spacing={32}
-                initialSpacing={20}
-                endSpacing={20}
-                xAxisLabelTextStyle={styles.chartXLabel}
-                yAxisTextStyle={styles.chartYLabel}
-                noOfSections={5}
-                showLine
-                lineData={custoLineData}
-                lineConfig={{
-                  color: primaryColor,
-                  thickness: 2,
-                  dataPointsColor: primaryColor,
-                  dataPointsRadius: 3,
-                }}
-                hideRules
-                isAnimated
-              />
-            </ScrollView>
-          ) : (
+          {kConsumo > 1 && (
+            <Text style={styles.chartSideLabel}>
+              {diasConsumo.length} dias · cada barra é a média de {kConsumo} dias
+            </Text>
+          )}
+          {msBarData.length === 0 ? (
             <Text style={styles.emptyChart}>Sem dados de consumo</Text>
+          ) : !pronto ? (
+            <View style={{ height: 200 }} />
+          ) : (
+            <BarChart
+              data={msBarData}
+              width={plotWidth}
+              height={200}
+              barWidth={barrasLayout.barWidth}
+              spacing={barrasLayout.spacing}
+              initialSpacing={EDGE_SPACING}
+              endSpacing={EDGE_SPACING}
+              xAxisLabelTextStyle={styles.chartXLabel}
+              yAxisTextStyle={styles.chartYLabel}
+              yAxisLabelWidth={Y_AXIS_WIDTH}
+              noOfSections={5}
+              showLine
+              lineData={custoLineData}
+              lineConfig={{
+                color: primaryColor,
+                thickness: 2,
+                dataPointsColor: primaryColor,
+                dataPointsRadius: barrasLayout.barWidth >= 8 ? 3 : 0,
+                hideDataPoints: barrasLayout.barWidth < 8,
+                initialSpacing: EDGE_SPACING + barrasLayout.barWidth / 2,
+                spacing: barrasLayout.barWidth + barrasLayout.spacing,
+              }}
+              hideRules
+              disableScroll
+              isAnimated
+            />
           )}
           <View style={styles.legendRow}>
             <View style={styles.legendItem}>

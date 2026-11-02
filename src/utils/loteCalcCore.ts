@@ -29,6 +29,21 @@ export function calcQtdAtual(movs: MovimentacaoLote[]): number {
   );
 }
 
+/**
+ * Quantidade de animais do lote em uma data (yyyy-mm-dd): conta só as
+ * movimentações com data ≤ a data pedida. Saída no próprio dia já desconta —
+ * é como o histórico de trato registra o dia (animal que saiu não comeu).
+ *
+ * Médias por cabeça ao longo do tempo têm que usar isto, nunca calcQtdAtual:
+ * um lote de 120 que hoje tem 42 teria custo/cab triplicado no período antigo.
+ */
+export function calcQtdNaData(movs: MovimentacaoLote[], data: string): number {
+  return movs.reduce((acc, m) => {
+    if (m.data > data) return acc;
+    return m.evento === "Entrada" ? acc + m.quantidade : acc - m.quantidade;
+  }, 0);
+}
+
 export function calcPesoMedio(movs: MovimentacaoLote[], gmd: number): number {
   const qtd = calcQtdAtual(movs);
   if (qtd <= 0) return 0;
