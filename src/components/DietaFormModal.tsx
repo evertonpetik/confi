@@ -4,6 +4,7 @@ import { Input } from "@/components/Input";
 import { Insumo } from "@/components/InsumoCard";
 import { Select, SelectOption } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
+import { calcMSDietaBaseMS } from "@/utils/dietaCalc";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
@@ -90,11 +91,12 @@ export function DietaFormModal({
 
         // Inferir estado do toggle a partir dos dados salvos
         const savedMS = dieta.percentualMS ?? 0;
-        const naturalMS = dieta.insumos.reduce((acc, di) => {
-          const insumo = insumosMap.get(di.insumoId);
-          const percMS = insumo?.percentualMateriaSeca ?? 0;
-          return acc + (di.percentual / 100) * percMS;
-        }, 0);
+        const naturalMS = calcMSDietaBaseMS(
+          dieta.insumos.map((di) => ({
+            percentual: di.percentual,
+            percentualMS: insumosMap.get(di.insumoId)?.percentualMateriaSeca ?? 0,
+          }))
+        );
 
         if (naturalMS > 0 && Math.abs(savedMS - naturalMS) < 0.01) {
           setManterMS(true);
@@ -109,14 +111,14 @@ export function DietaFormModal({
     }
   }, [visible, dieta]);
 
-  // MS da dieta calculada (media ponderada)
-  const msDieta = insumoRows.reduce((acc, row) => {
-    const perc = parseFloat(row.percentual.replace(",", "."));
-    if (isNaN(perc) || perc <= 0 || !row.insumoId) return acc;
-    const insumo = insumosMap.get(row.insumoId);
-    const percMS = insumo?.percentualMateriaSeca ?? 0;
-    return acc + (perc / 100) * percMS;
-  }, 0);
+  // MS da dieta a partir das inclusões em base MS (como o RLM formula):
+  // MS = Σp / Σ(p_i / MS_i). Média ponderada simples valeria só para inclusão em matéria natural.
+  const msDieta = calcMSDietaBaseMS(
+    insumoRows.map((row) => ({
+      percentual: parseFloat(row.percentual.replace(",", ".")),
+      percentualMS: row.insumoId ? insumosMap.get(row.insumoId)?.percentualMateriaSeca ?? 0 : 0,
+    }))
+  );
 
   // Sincronizar percentualMS quando "Manter MS" estiver ativo
   useEffect(() => {
@@ -289,7 +291,7 @@ export function DietaFormModal({
                     </Text>
                     {msDieta > 0 && (
                       <Text style={[styles.sectionSubtitle, { color: primaryColor }]}>
-                        MS da Dieta: {msDieta.toFixed(2).replace(".", ",")}%
+                        MS dos insumos (base MS): {msDieta.toFixed(2).replace(".", ",")}%
                       </Text>
                     )}
                   </View>
@@ -340,7 +342,11 @@ export function DietaFormModal({
                 {/* Toggle Manter MS da Dieta */}
                 {insumoRows.length > 0 && msDieta > 0 && (
                   <>
-                    <Text style={styles.label}>Manter MS da Dieta?</Text>
+                    <Text style={styles.label}>Manter MS da Dieta igual à dos insumos?</Text>
+                    <Text style={styles.sectionSubtitle}>
+                      Inclusões em base MS (como no RLM). Se a dieta leva água no vagão, responda Não e
+                      informe a MS final abaixo — a diferença vira água prevista no mapa de trato.
+                    </Text>
                     <View style={styles.toggleRow}>
                       <TouchableOpacity
                         style={[

@@ -353,10 +353,16 @@ para cada insumo da dieta (ignora %MS ≤ 0 ou sem compras):
 ```
 
 ### 7.7 %MS automática da dieta
-`DietaFormModal.tsx` (toggle *Manter MS*)
+`utils/dietaCalc.ts::calcMSDietaBaseMS` (usado por `DietaFormModal.tsx`, toggle *Manter MS*)
+
+As dietas são formuladas no RLM com inclusões em **base de matéria seca**, então a MS da mistura é a média harmônica, não a média ponderada:
 ```
-msDieta = Σ (percentual_insumo / 100 × percentualMS_insumo)      (2 casas)
+msDieta = Σ p_i / Σ (p_i / percentualMS_i)        (itens com p_i > 0 e MS_i > 0; 2 casas)
 ```
+Exemplo: silagem 40 % (36,5 % MS), milho 22,5 % (87 %), DDG 34,4 % (90 %), núcleo 2,95 % (100 %), ureia 0,15 % (99 %) → **56,57 %** (a média ponderada daria 68,23 %, que seria o valor correto apenas se a inclusão fosse em matéria natural).
+
+A água adicionada no vagão não entra nesse cálculo: no app ela não é insumo, e a diferença entre o `percentualMS` gravado na dieta e a MS dos insumos é o que o mapa de trato prevê como água (§4.3). Dietas com água na formulação (ex.: planilha SOL, R4-TERM 60,6 % com água × 79,9 % sem) devem ter o valor ajustado manualmente.
+
 Validações: soma dos percentuais = 100 (± 0,01); NDT entre 0 e 100.
 
 ---
