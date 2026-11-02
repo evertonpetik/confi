@@ -1,0 +1,33 @@
+# Arquivos que não precisam ir para o EAS Build (reduz o upload de ~155 MB para poucos MB).
+# Quando este arquivo existe, ele substitui o .gitignore na hora de montar o pacote,
+# por isso repete as exclusões padrão.
+
+# dependências e builds
+node_modules/
+functions/node_modules/
+.expo/
+dist/
+web-build/
+/ios
+/android
+*.tsbuildinfo
+
+# runtime Python embutido e trabalho local (seed, planilhas, notebooks)
+Python/
+.scratch_planilha/
+notebooks/
+
+# documentação e artefatos de repositório
+docs/
+*.md
+.git/
+.vscode/
+.claude/
+
+# segredos locais
+.env*.local
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision

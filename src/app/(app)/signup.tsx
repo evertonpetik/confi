@@ -2,6 +2,7 @@ import { Button } from "@/components/Button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { IdentidadeVisual } from "@/components/IdentidadeVisual";
 import { Input } from "@/components/Input";
 import { ALL_MODULOS, Fazenda, ModuloId, TipoUsuario, TIPOS_USUARIO, useAuth } from "@/contexts/AuthContext";
 import { MODULO_LABEL, telasSelecionaveis } from "@/constants/telas";
@@ -24,6 +25,7 @@ import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -78,6 +80,8 @@ export default function Signup() {
   const [fazendaModalVisible, setFazendaModalVisible] = useState(false);
   const [formFazendaNome, setFormFazendaNome] = useState("");
   const [savingFazenda, setSavingFazenda] = useState(false);
+  // Identidade visual (cor e logo) da fazenda em edição
+  const [temaFazenda, setTemaFazenda] = useState<Fazenda | null>(null);
 
   // Delete dialog
   const [deleteTarget, setDeleteTarget] = useState<{
@@ -108,7 +112,12 @@ export default function Signup() {
       );
       setFazendas(
         fazendasSnap.docs
-          .map((d) => ({ id: d.id, nome: d.data().nome ?? "" }))
+          .map((d) => ({
+            id: d.id,
+            nome: d.data().nome ?? "",
+            primaryColor: d.data().primaryColor || null,
+            logoUrl: d.data().logoUrl || null,
+          }))
           .sort((a, b) => a.nome.localeCompare(b.nome))
       );
     } catch (error) {
@@ -341,7 +350,7 @@ export default function Signup() {
               {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
             </View>
             <Text style={styles.subtitle}>
-              Gerencie usuarios e fazendas.
+              Gerencie usuarios e fazendas (cada fazenda com sua cor e logo).
             </Text>
 
             {loading ? (
@@ -371,21 +380,33 @@ export default function Signup() {
                     fazendas.map((f) => (
                       <View key={f.id} style={styles.itemRow}>
                         <View style={styles.itemInfo}>
-                          <Feather name="map-pin" size={16} color={primaryColor} />
+                          {f.logoUrl ? (
+                            <Image source={{ uri: f.logoUrl }} style={{ width: 40, height: 24 }} resizeMode="contain" />
+                          ) : (
+                            <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: f.primaryColor || "#3366FF" }} />
+                          )}
                           <Text style={styles.itemName}>{f.nome}</Text>
                         </View>
-                        <TouchableOpacity
-                          activeOpacity={0.7}
-                          onPress={() =>
-                            setDeleteTarget({
-                              type: "fazenda",
-                              id: f.id,
-                              nome: f.nome,
-                            })
-                          }
-                        >
-                          <Feather name="trash-2" size={16} color="#E53935" />
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: "row", gap: 16 }}>
+                          <TouchableOpacity
+                            activeOpacity={0.7}
+                            onPress={() => setTemaFazenda(f)}
+                          >
+                            <Feather name="droplet" size={16} color={f.primaryColor || primaryColor} />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            activeOpacity={0.7}
+                            onPress={() =>
+                              setDeleteTarget({
+                                type: "fazenda",
+                                id: f.id,
+                                nome: f.nome,
+                              })
+                            }
+                          >
+                            <Feather name="trash-2" size={16} color="#E53935" />
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     ))
                   )}
@@ -733,6 +754,40 @@ export default function Signup() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Identidade visual da fazenda */}
+      <Modal
+        visible={!!temaFazenda}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setTemaFazenda(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalKeyboard}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Identidade Visual</Text>
+                <TouchableOpacity onPress={() => setTemaFazenda(null)} activeOpacity={0.7}>
+                  <Feather name="x" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView contentContainerStyle={styles.modalForm} keyboardShouldPersistTaps="handled">
+                {temaFazenda && (
+                  <IdentidadeVisual
+                    fazendaId={temaFazenda.id}
+                    fazendaNome={temaFazenda.nome}
+                    tema={{ primaryColor: temaFazenda.primaryColor, logoUrl: temaFazenda.logoUrl }}
+                    onChange={(t) => {
+                      setFazendas((prev) => prev.map((f) => (f.id === temaFazenda.id ? { ...f, ...t } : f)));
+                      setTemaFazenda((prev) => (prev ? { ...prev, ...t } : prev));
+                    }}
+                  />
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </View>
       </Modal>
 
       <ConfirmDialog

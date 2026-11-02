@@ -44,6 +44,9 @@ export type UsuarioProfile = {
 export type Fazenda = {
   id: string;
   nome: string;
+  /** Tema da fazenda (ver ThemeContext). */
+  primaryColor?: string | null;
+  logoUrl?: string | null;
 };
 
 type AuthContextType = {
@@ -146,6 +149,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const all: Fazenda[] = snap.docs.map((d) => ({
         id: d.id,
         nome: d.data().nome ?? "",
+        primaryColor: d.data().primaryColor || null,
+        logoUrl: d.data().logoUrl || null,
       }));
       if (profile.tipo === "admin") {
         setFazendas(all.sort((a, b) => a.nome.localeCompare(b.nome)));

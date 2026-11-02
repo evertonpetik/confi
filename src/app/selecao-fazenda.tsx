@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -195,8 +196,12 @@ export default function SelecaoFazenda() {
               activeOpacity={0.7}
               onPress={() => selectFazenda(f.id, f.nome)}
             >
-              <View style={[styles.cardIcon, { backgroundColor: primaryColor + "1A" }]}>
-                <Feather name="map-pin" size={24} color={primaryColor} />
+              <View style={[styles.cardIcon, { backgroundColor: (f.primaryColor || primaryColor) + "1A" }]}>
+                {f.logoUrl ? (
+                  <Image source={{ uri: f.logoUrl }} style={{ width: 40, height: 40 }} resizeMode="contain" />
+                ) : (
+                  <Feather name="map-pin" size={24} color={f.primaryColor || primaryColor} />
+                )}
               </View>
               <Text style={styles.cardText}>{f.nome}</Text>
               <Feather name="chevron-right" size={20} color="#999" />

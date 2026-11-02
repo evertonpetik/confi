@@ -1,6 +1,20 @@
-import { getDocument, setDocument } from "@/services/firestoreService";
+/**
+ * Tema visual (cor primária e logo) — definido POR FAZENDA.
+ *
+ * Fazendas patrocinadas pela Sol usam a logo Sol e laranja, as da Beeftec a
+ * logo Beeftec e vermelho, e as independentes escolhem a própria logo e cor.
+ * O admin configura no cadastro da fazenda (tela Usuários); fica gravado no
+ * documento `fazendas/{id}` (campos `primaryColor` e `logoUrl`), por isso
+ * vale para todo usuário que acessar aquela fazenda, em qualquer aparelho.
+ *
+ * O tema ativo acompanha a fazenda selecionada. Sem fazenda (login) usa o
+ * padrão. Cache local por fazenda em AsyncStorage para abrir rápido/offline.
+ * `fazendas/{id}/config/app` (cor/logo gravados pela tela antiga) é lido só
+ * como reserva enquanto o documento da fazenda não tem tema.
+ */
+import { getRawDocument, updateRawDocument } from "@/services/firestoreService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 
 export const THEME_COLORS = [
   { label: "Azul", value: "#3366FF" },
@@ -19,75 +33,116 @@ export const THEME_COLORS = [
   { label: "Cinza", value: "#4B5563" },
 ];
 
-const COLOR_KEY = "@confi_theme_color";
-const LOGO_KEY = "@confi_logo_url";
+export const COR_PADRAO = "#3366FF";
+
+export type TemaFazenda = {
+  primaryColor?: string | null;
+  logoUrl?: string | null;
+};
+
+/** Caminho da logo de uma fazenda no Storage (coberto por storage.rules em fazendas/{id}/**). */
+export function caminhoLogoFazenda(fazendaId: string): string {
+  return `fazendas/${fazendaId}/config/logo.png`;
+}
+
+const cacheKey = (fazendaId: string) => `@confi_tema:${fazendaId}`;
 
 type ThemeContextType = {
   primaryColor: string;
-  setPrimaryColor: (color: string) => void;
   logoUrl: string | null;
-  setLogoUrl: (url: string | null) => void;
+  /** Fazenda cujo tema está aplicado (null = padrão). */
+  temaFazendaId: string | null;
+  /** Aplica o tema da fazenda informada (null volta ao padrão). */
+  carregarTemaDaFazenda: (fazendaId: string | null) => Promise<void>;
+  /** Grava o tema no documento da fazenda; se for a fazenda ativa, aplica na hora. */
+  salvarTemaDaFazenda: (fazendaId: string, tema: TemaFazenda) => Promise<void>;
 };
 
 const ThemeContext = createContext<ThemeContextType>({
-  primaryColor: "#3366FF",
-  setPrimaryColor: () => { },
+  primaryColor: COR_PADRAO,
   logoUrl: null,
-  setLogoUrl: () => { },
+  temaFazendaId: null,
+  carregarTemaDaFazenda: async () => { },
+  salvarTemaDaFazenda: async () => { },
 });
 
+function normalizar(data: Record<string, any> | undefined | null): TemaFazenda | null {
+  if (!data) return null;
+  const cor = typeof data.primaryColor === "string" && data.primaryColor ? data.primaryColor : null;
+  const logo = typeof data.logoUrl === "string" && data.logoUrl ? data.logoUrl : null;
+  return cor || logo ? { primaryColor: cor, logoUrl: logo } : null;
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [primaryColor, setPrimaryColorState] = useState("#3366FF");
-  const [logoUrl, setLogoUrlState] = useState<string | null>(null);
+  const [primaryColor, setPrimaryColor] = useState(COR_PADRAO);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [temaFazendaId, setTemaFazendaId] = useState<string | null>(null);
+  // Evita que uma leitura lenta de fazenda antiga sobrescreva a fazenda atual
+  const fazendaAtualRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    // Load from local storage first (fast)
-    AsyncStorage.getItem(COLOR_KEY).then((saved) => {
-      if (saved) setPrimaryColorState(saved);
-    });
-    AsyncStorage.getItem(LOGO_KEY).then((saved) => {
-      if (saved) setLogoUrlState(saved);
-    });
-
-    // Then try Firestore for logo (may be updated from another device)
-    getDocument(["config"], "app")
-      .then((doc) => {
-        // DocSnapshot.exists é boolean opcional (não função): undefined = não informado
-        if (doc.exists !== false && doc.data()) {
-          const data = doc.data() as Record<string, any>;
-          if (data.logoUrl) {
-            setLogoUrlState(data.logoUrl);
-            AsyncStorage.setItem(LOGO_KEY, data.logoUrl);
-          }
-          if (data.primaryColor) {
-            setPrimaryColorState(data.primaryColor);
-            AsyncStorage.setItem(COLOR_KEY, data.primaryColor);
-          }
-        }
-      })
-      .catch(() => {
-        // Offline - use cached values
-      });
-  }, []);
-
-  function setPrimaryColor(color: string) {
-    setPrimaryColorState(color);
-    AsyncStorage.setItem(COLOR_KEY, color);
-    // Persist to Firestore so other devices can pick it up
-    setDocument(["config"], "app", { primaryColor: color }, { merge: true }).catch(() => { });
+  function aplicar(tema: TemaFazenda | null) {
+    setPrimaryColor(tema?.primaryColor || COR_PADRAO);
+    setLogoUrl(tema?.logoUrl || null);
   }
 
-  function setLogoUrl(url: string | null) {
-    setLogoUrlState(url);
-    if (url) {
-      AsyncStorage.setItem(LOGO_KEY, url);
+  async function carregarTemaDaFazenda(fazendaId: string | null) {
+    fazendaAtualRef.current = fazendaId;
+    setTemaFazendaId(fazendaId);
+    if (!fazendaId) {
+      aplicar(null);
+      return;
+    }
+
+    // 1) cache local da fazenda (instantâneo)
+    try {
+      const cached = await AsyncStorage.getItem(cacheKey(fazendaId));
+      if (cached && fazendaAtualRef.current === fazendaId) aplicar(JSON.parse(cached));
+    } catch { /* ignora */ }
+
+    // 2) documento da fazenda (fonte da verdade)
+    let tema: TemaFazenda | null = null;
+    try {
+      const doc = await getRawDocument(["fazendas"], fazendaId);
+      if (doc.exists !== false) tema = normalizar(doc.data());
+    } catch { /* offline ou sem permissão — fica com o cache */ }
+
+    // 3) reserva: tema legado em fazendas/{id}/config/app
+    if (!tema) {
+      try {
+        const legado = await getRawDocument(["fazendas", fazendaId, "config"], "app");
+        if (legado.exists !== false) tema = normalizar(legado.data());
+      } catch { /* ignora */ }
+    }
+
+    if (fazendaAtualRef.current !== fazendaId) return;
+    if (tema) {
+      aplicar(tema);
+      AsyncStorage.setItem(cacheKey(fazendaId), JSON.stringify(tema)).catch(() => { });
     } else {
-      AsyncStorage.removeItem(LOGO_KEY);
+      aplicar(null);
+      AsyncStorage.removeItem(cacheKey(fazendaId)).catch(() => { });
     }
   }
 
+  async function salvarTemaDaFazenda(fazendaId: string, tema: TemaFazenda) {
+    const payload: Record<string, unknown> = {};
+    if (tema.primaryColor !== undefined) payload.primaryColor = tema.primaryColor ?? "";
+    if (tema.logoUrl !== undefined) payload.logoUrl = tema.logoUrl ?? "";
+    await updateRawDocument(["fazendas"], fazendaId, payload);
+
+    // Atualiza o cache e, se for a fazenda em uso, a tela
+    let atual: TemaFazenda = {};
+    try {
+      const cached = await AsyncStorage.getItem(cacheKey(fazendaId));
+      if (cached) atual = JSON.parse(cached);
+    } catch { /* ignora */ }
+    const novo: TemaFazenda = { ...atual, ...tema };
+    await AsyncStorage.setItem(cacheKey(fazendaId), JSON.stringify(novo));
+    if (fazendaAtualRef.current === fazendaId) aplicar(novo);
+  }
+
   return (
-    <ThemeContext.Provider value={{ primaryColor, setPrimaryColor, logoUrl, setLogoUrl }}>
+    <ThemeContext.Provider value={{ primaryColor, logoUrl, temaFazendaId, carregarTemaDaFazenda, salvarTemaDaFazenda }}>
       {children}
     </ThemeContext.Provider>
   );

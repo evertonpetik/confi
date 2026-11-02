@@ -8,9 +8,14 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 function AuthGate() {
   const { user, userProfile, selectedFazendaId, selectedModulo, loading, signOut } = useAuth();
-  const { primaryColor } = useTheme();
+  const { primaryColor, carregarTemaDaFazenda } = useTheme();
   const segments = useSegments();
   const router = useRouter();
+
+  // O tema (cor e logo) é o da fazenda selecionada; sem fazenda, volta ao padrão.
+  useEffect(() => {
+    carregarTemaDaFazenda(user ? selectedFazendaId : null);
+  }, [user, selectedFazendaId]);
 
   useEffect(() => {
     if (loading) return;

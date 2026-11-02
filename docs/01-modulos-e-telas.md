@@ -186,14 +186,16 @@ Lista de abastecimentos com filtros por veículo/tanque/período (`Abastecimento
 ## 7. Telas comuns
 
 ### 7.1 `configuracoes.tsx`
-- **Identidade visual**: cor primária (paleta) e logo (upload ao Storage em `config/logo.png`) — gravados em `config/app`. Atenção: `storage.rules` só libera escrita sob `fazendas/{fazendaId}/…`, então o upload do logo nesse caminho raiz tende a ser negado pelas regras atuais.
-- **Base do CMS da leitura**: `realizado` (padrão) ou `previsto`.
+- **Base do CMS da leitura**: `realizado` (padrão) ou `previsto` — gravado em `config/app` da fazenda.
 - **Tabelas auxiliares** com CRUD genérico (`TabelaAuxiliarFormModal`): Piquetes, Vagão, Nota de Leitura, Parâmetros (`tempoMS`, `custo_operacional`), Configurações IA (`ANTHROPIC_API_KEY`). As demais tabelas (raça, categoria, GEC…) são populadas pelo **seed** (`seedTabelasAuxiliares`, ignora coleções já preenchidas).
 - **Migração multi-tenant** (`migrateToMultiTenant`): copia coleções legadas da raiz para `fazendas/{id}/…` preservando IDs.
 - Sincronização offline manual.
 
+A identidade visual (cor e logo) saiu desta tela: é configurada **por fazenda** pelo admin em *Usuários* (§7.2).
+
 ### 7.2 `signup.tsx` — Usuários (admin)
-Cria usuários no Firebase Auth via app secundário (não desloga o admin) e grava `usuarios/{uid}` com nome, e-mail, tipo (cliente, gestor, tratador, admin), fazendas[], módulos[] e **telas permitidas**: "Todas dos módulos" (grava `telas: null`) ou "Selecionar telas" com checkboxes agrupados por módulo (+ Configurações). Edita/exclui usuários e cria/exclui fazendas.
+- **Fazendas**: criar/excluir e, pelo ícone de gota em cada fazenda, editar a **identidade visual** (`components/IdentidadeVisual.tsx`): cor primária (paleta) e logo (upload para `fazendas/{id}/config/logo.png`), gravadas nos campos `primaryColor`/`logoUrl` do documento `fazendas/{id}`. Cada fazenda tem seu tema — ex.: patrocinadas pela Sol (laranja + logo Sol), vinculadas à Beeftec (vermelho + logo Beeftec), independentes com cor/logo próprias — e todo usuário que acessar a fazenda, em qualquer aparelho, vê esse tema no menu, nas telas e no card da seleção de fazenda. `ThemeContext` aplica o tema da fazenda selecionada (cache local por fazenda em AsyncStorage; `fazendas/{id}/config/app` é lido só como reserva legada); sem fazenda selecionada (login) usa a cor padrão.
+- Cria usuários no Firebase Auth via app secundário (não desloga o admin) e grava `usuarios/{uid}` com nome, e-mail, tipo (cliente, gestor, tratador, admin), fazendas[], módulos[] e **telas permitidas**: "Todas dos módulos" (grava `telas: null`) ou "Selecionar telas" com checkboxes agrupados por módulo (+ Configurações). Edita/exclui usuários.
 
 ---
 

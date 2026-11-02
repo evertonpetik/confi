@@ -92,7 +92,11 @@ lotes/{…}                                               ← raiz, legado pré 
 | Campo | Tipo | Descrição |
 | --- | --- | --- |
 | nome | string | Nome da fazenda |
+| primaryColor | string? | Cor primária do tema da fazenda (#RRGGBB); vazio = padrão `#3366FF` |
+| logoUrl | string? | URL da logo no Storage (`fazendas/{id}/config/logo.png`); vazio = sem logo |
 | criadoEm | string? | ISO |
+
+O tema (cor + logo) é por fazenda — ex.: Sol (laranja), Beeftec (vermelho), independentes com escolha própria — editado pelo admin na tela *Usuários* e aplicado a todo usuário que selecionar a fazenda (`ThemeContext`).
 
 ### 4.3 `whatsappSessoes/{telefone}/mensagens/{id}`
 ID = `${Date.now()}_u` (usuário) ou `_a` (assistente).
@@ -112,9 +116,8 @@ ID = `${Date.now()}_u` (usuário) ou `_a` (assistente).
 ### `config/app`
 | Campo | Tipo | Descrição |
 | --- | --- | --- |
-| primaryColor | string | Cor primária (#RRGGBB) |
-| logoUrl | string | URL do logo no Storage |
 | baseCmsLeitura | `"realizado" \| "previsto"` | Base do CMS do dia na leitura de cocho (padrão realizado) |
+| primaryColor, logoUrl | string | **Legado** — tema gravado pela tela antiga de Configurações; usado só como reserva enquanto o documento `fazendas/{id}` não tem `primaryColor`/`logoUrl` |
 
 ### Tabelas auxiliares (seed em `utils/seedTabelasAuxiliares.ts`)
 | Coleção | Campos | Observação |
@@ -394,7 +397,7 @@ Correções nunca editam/apagam: grava-se um `estorno` apontando o original.
 
 ```
 usuarios/{uid}      read: próprio ou admin · create: próprio · update/delete: próprio ou admin
-fazendas/{id}       read: temAcessoAFazenda · write: admin
+fazendas/{id}       read: temAcessoAFazenda · write: admin   (inclui o tema: primaryColor/logoUrl)
 fazendas/{id}/**    read/write: temAcessoAFazenda(id)   (admin OU id ∈ perfil().fazendas)
 lotes/**            read/write: autenticado            (legado raiz)
 tudo o mais         negado
@@ -406,7 +409,7 @@ tudo o mais         negado
 fazendas/{fazendaId}/**   read: temAcessoAFazenda · write: temAcessoAFazenda e tamanho < 20 MB
 tudo o mais               negado
 ```
-Conteúdo: PDFs das GTAs em `fazendas/{fazendaId}/gtas/{serie}{numero}.pdf`. O logo é enviado para `config/logo.png` (raiz do bucket), caminho que as regras atuais **não** autorizam — candidato a correção (mover para `fazendas/{fazendaId}/config/logo.png`).
+Conteúdo: PDFs das GTAs em `fazendas/{fazendaId}/gtas/{serie}{numero}.pdf` e a logo da fazenda em `fazendas/{fazendaId}/config/logo.png`.
 
 ## 10. Índices compostos (`firestore.indexes.json`)
 
