@@ -2,9 +2,12 @@ import { CargaModal, CargaTrato } from "@/components/CargaModal";
 import { DescargaModal, DescargaTrato } from "@/components/DescargaModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { RoteiroTabelas } from "@/components/RoteiroTabelas";
 import { Select, SelectOption } from "@/components/Select";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { exportarViewComoPng } from "@/services/exportarImagem";
 import { setDocument } from "@/services/firestoreService";
 import {
   buildCalcData,
@@ -20,7 +23,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -82,6 +85,28 @@ export default function MapaTrato() {
 
   const [dataSelecionada, setDataSelecionada] = useState(() => new Date());
   const hoje = getHojeStr(dataSelecionada);
+
+  // Exportação em imagem: uma versão "aberta" (sem rolagem horizontal) do
+  // mapa é montada fora da tela só durante a captura.
+  const { selectedFazendaNome } = useAuth();
+  const [exportandoImagem, setExportandoImagem] = useState(false);
+  const exportViewRef = useRef<View>(null);
+
+  async function handleExportImagem() {
+    if (exportandoImagem) return;
+    setExportandoImagem(true);
+    try {
+      // dois frames para a view fora da tela concluir o layout antes da captura
+      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+      await new Promise((r) => setTimeout(r, 150));
+      await exportarViewComoPng(exportViewRef, `mapa-trato-${hoje}.png`);
+    } catch (err) {
+      console.error("Erro ao exportar imagem:", err);
+      Alert.alert("Erro", "Não foi possível gerar a imagem do mapa de trato.");
+    } finally {
+      setExportandoImagem(false);
+    }
+  }
 
   function mudarData(delta: number) {
     setDataSelecionada((prev) => {
@@ -838,6 +863,19 @@ export default function MapaTrato() {
                     <Feather name="upload" size={18} color="#FFF" />
                     <Text style={styles.exportButtonLabel} numberOfLines={1} adjustsFontSizeToFit>Importar Realizados</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.importButton, { backgroundColor: "#455A64" }]}
+                    activeOpacity={0.8}
+                    onPress={handleExportImagem}
+                    disabled={exportandoImagem}
+                  >
+                    {exportandoImagem ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <Feather name="image" size={18} color="#FFF" />
+                    )}
+                    <Text style={styles.exportButtonLabel} numberOfLines={1} adjustsFontSizeToFit>Exportar Imagem</Text>
+                  </TouchableOpacity>
                 </View>
 
                 <View style={styles.list}>
@@ -894,6 +932,14 @@ export default function MapaTrato() {
                           </View>
                         </View>
 
+                        {/* Carga e descarga por trato (previsto × realizado) */}
+                        <RoteiroTabelas
+                          rc={rc}
+                          cargas={historicoCargas.get(rc.roteiro.id) ?? []}
+                          descargas={historicoDescargas.get(rc.roteiro.id) ?? []}
+                          percentualMSFinal={percentualMSPorRoteiro.get(rc.roteiro.id)}
+                        />
+
                         <View style={styles.cardActions}>
                           <TouchableOpacity
                             style={[styles.actionBtn, styles.actionBtnCarga, { backgroundColor: primaryColor }]}
@@ -925,6 +971,35 @@ export default function MapaTrato() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* View fora da tela usada só para gerar a imagem (tabelas abertas, largura fixa) */}
+      {exportandoImagem && (
+        <View style={styles.exportOffscreen} pointerEvents="none">
+          <View ref={exportViewRef} collapsable={false} style={styles.exportPage}>
+            <Text style={styles.exportTitulo}>Mapa de Trato — {selectedFazendaNome ?? ""}</Text>
+            <Text style={styles.exportSub}>
+              {dataSelecionada.toLocaleDateString("pt-BR")} · Vagão: {vagoes.find((v) => v.id === selectedVagaoId)?.descricao ?? "-"}
+            </Text>
+            {activeRoteiros.map((rc) => (
+              <View key={rc.roteiro.id} style={styles.exportRoteiro}>
+                <Text style={styles.exportRoteiroTitulo}>
+                  Roteiro {rc.roteiro.numero} · {rc.dieta.nome} · {rc.numTratos} trato(s) · {Math.round(rc.totalMO)} kg MO
+                </Text>
+                <Text style={styles.cardSubText}>
+                  Piquetes: {rc.roteiro.piquetes.map((p) => p.piqueteNome).join(", ")}
+                </Text>
+                <RoteiroTabelas
+                  rc={rc}
+                  cargas={historicoCargas.get(rc.roteiro.id) ?? []}
+                  descargas={historicoDescargas.get(rc.roteiro.id) ?? []}
+                  percentualMSFinal={percentualMSPorRoteiro.get(rc.roteiro.id)}
+                  scrollHorizontal={false}
+                />
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       {/* Carga Modal */}
       {cargaModal.visible && activeRoteiros[cargaModal.index] && (
@@ -1152,11 +1227,13 @@ const styles = StyleSheet.create({
   },
   csvButtonsRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginTop: 20,
   },
   exportButton: {
     flex: 1,
+    minWidth: 150,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1167,6 +1244,7 @@ const styles = StyleSheet.create({
   },
   importButton: {
     flex: 1,
+    minWidth: 150,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1178,5 +1256,37 @@ const styles = StyleSheet.create({
     color: "#FFF",
     fontSize: 15,
     fontWeight: "600",
+  },
+  exportOffscreen: {
+    position: "absolute",
+    left: -20000,
+    top: 0,
+  },
+  exportPage: {
+    width: 1200,
+    backgroundColor: "#FFFFFF",
+    padding: 24,
+  },
+  exportTitulo: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#1a1a1a",
+  },
+  exportSub: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 2,
+    marginBottom: 12,
+  },
+  exportRoteiro: {
+    backgroundColor: "#F5F5F5",
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+  },
+  exportRoteiroTitulo: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1a1a1a",
   },
 });

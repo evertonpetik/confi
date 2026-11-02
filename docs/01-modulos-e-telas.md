@@ -89,7 +89,7 @@ Lista lotes ativos com piquete, ordenados por `compararPiquetes` (prefixo "pique
 - **Alertas**: CMS realizado de ontem fora de `[cmsPrevisto × menorFator, cmsPrevisto × maiorFator]`.
 
 ### 4.8 `mapa-trato.tsx`
-Planejamento e execução do trato por roteiro (desktop). Fluxo: escolher vagão → ver roteiros calculados (`buildCalcData`) → `CargaModal` (insumos e água realizados por trato) → `DescargaModal` (kg descarregados por piquete, com CMS realizado e GMD em tempo real).
+Planejamento e execução do trato por roteiro (desktop). Fluxo: escolher vagão → ver roteiros calculados (`buildCalcData`) → `CargaModal` (insumos e água realizados por trato) → `DescargaModal` (kg descarregados por piquete, com CMS realizado e GMD em tempo real). Cada card de roteiro mostra, na própria tela, a **tabela de carga** (insumos × tratos, previsto e realizado, com %MS final) e logo abaixo a **tabela de descarga** (piquetes × tratos) — componente `RoteiroTabelas`; realizado em verde quando dentro de ±5 % do previsto, vermelho fora. O botão **Exportar Imagem** gera um PNG do mapa completo (cabeçalho com fazenda/data/vagão + todos os roteiros com as duas tabelas abertas), via `react-native-view-shot` — no celular abre o compartilhamento, na web faz download (`services/exportarImagem.ts`).
 
 - Salvar carga: grava `insumos/{id}/saidas/{roteiroId}_{data}_{insumoId}` (uma por insumo/roteiro/dia, `setDocument` idempotente), calcula `%MS final`, `custoTotal`, `custoPorLote` (proporcional ao previsto) e grava `historicoMapaTrato/{roteiroId}_{data}`.
 - Salvar descarga: calcula `msPorLote` (MO/MS realizados, CMS previsto × realizado, GMD estimado × real via NRC) e redistribui `custoPorLote` proporcional ao realizado.
