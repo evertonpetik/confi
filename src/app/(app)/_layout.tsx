@@ -1,4 +1,5 @@
 import { ModuloId, useAuth } from "@/contexts/AuthContext";
+import { menuDoModulo, MODULO_LABEL, podeAcessar, primeiraTelaPermitida, telaPorRota } from "@/constants/telas";
 import { DrawerProvider, useDrawer } from "@/contexts/DrawerContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { WeighingProvider } from "@/contexts/WeighingContext";
@@ -20,55 +21,15 @@ import {
   View,
 } from "react-native";
 
-const MENU_ITEMS: { route: string; label: string; icon: React.ComponentProps<typeof Feather>["name"] }[] = [
-  { route: "home", label: "Home", icon: "home" },
-  { route: "home-ifarm", label: "Home", icon: "home" },
-  { route: "home-abastecimento", label: "Home", icon: "home" },
-  { route: "produtores", label: "Produtores", icon: "users" },
-  { route: "lotes", label: "Lotes", icon: "trello" },
-  { route: "leitura", label: "Leitura de Cocho", icon: "trending-up" },
-  { route: "insumos", label: "Insumos", icon: "feather" },
-  { route: "dietas", label: "Dietas", icon: "clipboard" },
-  { route: "roteiros", label: "Roteiros", icon: "truck" },
-  { route: "mapa-trato", label: "Mapa de Trato", icon: "map" },
-  { route: "tratador", label: "Tratador", icon: "play-circle" },
-  { route: "estimativa-peso", label: "Estimativa Peso", icon: "camera" },
-  { route: "analise-lote", label: "Analise Lote", icon: "bar-chart-2" },
-  { route: "relatorio-historico", label: "Relatório Histórico", icon: "clock" },
-  { route: "animais", label: "Rebanho", icon: "list" },
-  { route: "movimentacoes", label: "Movimentações", icon: "shuffle" },
-  { route: "sanidade", label: "Sanidade", icon: "shield" },
-  { route: "consulta-gta", label: "Consultas", icon: "search" },
-  { route: "pesagem-lista", label: "Pesagem", icon: "activity" },
-  { route: "processos", label: "Processos", icon: "layers" },
-  { route: "tanques", label: "Tanques", icon: "database" },
-  { route: "veiculos", label: "Veiculos", icon: "navigation" },
-  { route: "abastecimento", label: "Abastecimento", icon: "droplet" },
-  { route: "historico-combustivel", label: "Hist. Combustivel", icon: "list" },
-  { route: "configuracoes", label: "Configuracoes", icon: "settings" },
-  { route: "signup", label: "Usuarios", icon: "user-plus" },
-];
-
-const MODULO_ROUTES: Record<ModuloId, string[]> = {
-  iconfi: ["home", "produtores", "lotes", "leitura", "insumos", "dietas", "roteiros", "mapa-trato", "tratador", "estimativa-peso", "analise-lote", "relatorio-historico"],
-  ifarm: ["home-ifarm", "animais", "movimentacoes", "pesagem-lista", "pesagem-leitura", "pesagem-historico", "pesagem-balanca", "animal-detalhe", "sanidade", "consulta-gta", "brincos", "processos", "fechar-processo"],
-  abastecimento: ["home-abastecimento", "tanques", "veiculos", "abastecimento", "historico-combustivel"],
-};
-
-const COMMON_ROUTES = ["configuracoes", "signup"];
-
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { userProfile, selectedFazendaNome, selectedModulo, signOut, clearFazenda, clearModulo } = useAuth();
   const { logoUrl, primaryColor } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
-  const isAdmin = userProfile?.tipo === "admin";
 
-  const visibleRoutes = selectedModulo
-    ? [...MODULO_ROUTES[selectedModulo], ...COMMON_ROUTES]
-    : [];
-
-  const moduloLabel = selectedModulo === "iconfi" ? "iConfi" : selectedModulo === "ifarm" ? "iFarm" : selectedModulo === "abastecimento" ? "Abastecimento" : "";
+  // Menu do módulo já filtrado pelas telas liberadas no perfil (admin vê tudo)
+  const itens = selectedModulo ? menuDoModulo(userProfile, selectedModulo) : [];
+  const moduloLabel = selectedModulo ? MODULO_LABEL[selectedModulo] : "";
 
   return (
     <ScrollView contentContainerStyle={{ flex: 1 }} bounces={false}>
@@ -104,10 +65,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <View style={styles.divider} />
 
       {/* Menu items */}
-      {MENU_ITEMS.map((item) => {
-        if (!visibleRoutes.includes(item.route)) return null;
-        if (item.route === "signup" && !isAdmin) return null;
-
+      {itens.map((item) => {
         const isActive = pathname.includes(item.route);
         const color = isActive ? primaryColor : "#FFFFFF";
 
@@ -229,11 +187,24 @@ function MobileDrawer() {
 
 export default function AppLayout() {
   const { isDesktop } = useResponsive();
-  const { selectedFazendaId } = useAuth();
+  const { selectedFazendaId, selectedModulo, userProfile } = useAuth();
   const { primaryColor } = useTheme();
+  const pathname = usePathname();
+  const router = useRouter();
   const [checking, setChecking] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+
+  // Guarda de rota: quem digita a URL ou segue um atalho para uma tela não
+  // liberada no perfil é levado para a primeira tela permitida do módulo.
+  useEffect(() => {
+    if (!userProfile || !selectedModulo) return;
+    const rota = pathname.split("/").filter(Boolean).pop() ?? "";
+    if (!telaPorRota(rota)) return;
+    if (!podeAcessar(userProfile, rota)) {
+      router.replace(`/(app)/${primeiraTelaPermitida(userProfile, selectedModulo)}` as any);
+    }
+  }, [pathname, userProfile, selectedModulo]);
 
   useEffect(() => {
     if (selectedFazendaId) {

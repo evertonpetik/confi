@@ -3,7 +3,8 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Input } from "@/components/Input";
-import { ALL_MODULOS, Fazenda, ModuloId, useAuth } from "@/contexts/AuthContext";
+import { ALL_MODULOS, Fazenda, ModuloId, TipoUsuario, TIPOS_USUARIO, useAuth } from "@/contexts/AuthContext";
+import { MODULO_LABEL, telasSelecionaveis } from "@/constants/telas";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useTheme } from "@/contexts/ThemeContext";
 import { createUserOnSecondaryApp } from "@/services/authService";
@@ -37,9 +38,18 @@ type Usuario = {
   id: string;
   nome: string;
   email: string;
-  tipo: "admin" | "gestor" | "cliente";
+  tipo: TipoUsuario;
   fazendas: string[];
   modulos: ModuloId[];
+  /** Rotas liberadas; null/ausente = todas as telas dos módulos. */
+  telas?: string[] | null;
+};
+
+const TIPO_LABEL: Record<TipoUsuario, string> = {
+  cliente: "Cliente",
+  gestor: "Gestor",
+  tratador: "Tratador",
+  admin: "Admin",
 };
 
 export default function Signup() {
@@ -56,9 +66,12 @@ export default function Signup() {
   const [formNome, setFormNome] = useState("");
   const [formEmail, setFormEmail] = useState("");
   const [formSenha, setFormSenha] = useState("");
-  const [formTipo, setFormTipo] = useState<"admin" | "gestor" | "cliente">("cliente");
+  const [formTipo, setFormTipo] = useState<TipoUsuario>("cliente");
   const [formFazendas, setFormFazendas] = useState<string[]>([]);
   const [formModulos, setFormModulos] = useState<ModuloId[]>([]);
+  // Restrição de telas: desligada = todas as telas dos módulos (telas = null)
+  const [formRestringirTelas, setFormRestringirTelas] = useState(false);
+  const [formTelas, setFormTelas] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Fazenda form modal
@@ -113,6 +126,8 @@ export default function Signup() {
     setFormTipo("cliente");
     setFormFazendas([]);
     setFormModulos([]);
+    setFormRestringirTelas(false);
+    setFormTelas([]);
     setUserModalVisible(true);
   }
 
@@ -124,7 +139,16 @@ export default function Signup() {
     setFormTipo(user.tipo);
     setFormFazendas(user.fazendas ?? []);
     setFormModulos(user.modulos ?? []);
+    const restrito = Array.isArray(user.telas) && user.telas.length > 0;
+    setFormRestringirTelas(restrito);
+    setFormTelas(restrito ? user.telas! : []);
     setUserModalVisible(true);
+  }
+
+  /** Payload de acesso gravado em usuarios/{uid}. Admin nunca tem restrição. */
+  function dadosAcesso() {
+    const telas = formTipo !== "admin" && formRestringirTelas && formTelas.length > 0 ? formTelas : null;
+    return { tipo: formTipo, fazendas: formFazendas, modulos: formModulos, telas };
   }
 
   async function handleSaveUser() {
@@ -139,13 +163,12 @@ export default function Signup() {
 
     setSaving(true);
     try {
+      const acesso = dadosAcesso();
       if (editingUser) {
         await updateRawDocument(["usuarios"], editingUser.id, {
           nome: formNome.trim(),
           email: formEmail.trim(),
-          tipo: formTipo,
-          fazendas: formFazendas,
-          modulos: formModulos,
+          ...acesso,
         });
         setUsuarios((prev) =>
           prev.map((u) =>
@@ -154,9 +177,7 @@ export default function Signup() {
                 ...u,
                 nome: formNome.trim(),
                 email: formEmail.trim(),
-                tipo: formTipo,
-                fazendas: formFazendas,
-                modulos: formModulos,
+                ...acesso,
               }
               : u
           )
@@ -169,9 +190,7 @@ export default function Signup() {
         const userData = {
           nome: formNome.trim(),
           email: formEmail.trim(),
-          tipo: formTipo,
-          fazendas: formFazendas,
-          modulos: formModulos,
+          ...acesso,
         };
         await setRawDocument(["usuarios"], uid, userData);
         setUsuarios((prev) =>
@@ -202,10 +221,18 @@ export default function Signup() {
   }
 
   function toggleModulo(moduloId: ModuloId) {
-    setFormModulos((prev) =>
-      prev.includes(moduloId)
-        ? prev.filter((id) => id !== moduloId)
-        : [...prev, moduloId]
+    const proximos = formModulos.includes(moduloId)
+      ? formModulos.filter((id) => id !== moduloId)
+      : [...formModulos, moduloId];
+    setFormModulos(proximos);
+    // Tirar um módulo tira também as telas dele da seleção
+    const permitidas = new Set(telasSelecionaveis(proximos).map((t) => t.route));
+    setFormTelas((prev) => prev.filter((r) => permitidas.has(r)));
+  }
+
+  function toggleTela(route: string) {
+    setFormTelas((prev) =>
+      prev.includes(route) ? prev.filter((r) => r !== route) : [...prev, route]
     );
   }
 
@@ -400,12 +427,16 @@ export default function Signup() {
                           <Text style={styles.itemDetail}>
                             Modulos:{" "}
                             {u.modulos?.length
-                              ? u.modulos
-                                  .map((m) =>
-                                    m === "iconfi" ? "iConfi" : m === "ifarm" ? "iFarm" : "Abastecimento"
-                                  )
-                                  .join(", ")
+                              ? u.modulos.map((m) => MODULO_LABEL[m] ?? m).join(", ")
                               : "Nenhum"}
+                          </Text>
+                          <Text style={styles.itemDetail}>
+                            Telas:{" "}
+                            {u.tipo === "admin"
+                              ? "todas (admin)"
+                              : Array.isArray(u.telas) && u.telas.length > 0
+                                ? `${u.telas.length} selecionada(s)`
+                                : "todas dos módulos"}
                           </Text>
                         </View>
                         <View style={{ flexDirection: "row", gap: 12 }}>
@@ -506,8 +537,8 @@ export default function Signup() {
                   )}
 
                   <Text style={styles.label}>Tipo</Text>
-                  <View style={styles.toggleRow}>
-                    {(["cliente", "gestor", "admin"] as const).map((t) => (
+                  <View style={[styles.toggleRow, { flexWrap: "wrap" }]}>
+                    {TIPOS_USUARIO.map((t) => (
                       <TouchableOpacity
                         key={t}
                         style={[
@@ -524,7 +555,7 @@ export default function Signup() {
                             formTipo === t && styles.toggleTextActive,
                           ]}
                         >
-                          {t.charAt(0).toUpperCase() + t.slice(1)}
+                          {TIPO_LABEL[t]}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -582,6 +613,65 @@ export default function Signup() {
                       </TouchableOpacity>
                     );
                   })}
+
+                  {/* Telas permitidas (admin sempre vê tudo) */}
+                  {formTipo !== "admin" && formModulos.length > 0 && (
+                    <>
+                      <Text style={styles.label}>Telas permitidas</Text>
+                      <View style={styles.toggleRow}>
+                        {([
+                          { v: false, l: "Todas dos módulos" },
+                          { v: true, l: "Selecionar telas" },
+                        ] as const).map((op) => (
+                          <TouchableOpacity
+                            key={String(op.v)}
+                            style={[
+                              styles.toggleButton,
+                              formRestringirTelas === op.v && styles.toggleActive,
+                              formRestringirTelas === op.v && { backgroundColor: primaryColor, borderColor: primaryColor },
+                            ]}
+                            activeOpacity={0.8}
+                            onPress={() => setFormRestringirTelas(op.v)}
+                          >
+                            <Text style={[styles.toggleText, formRestringirTelas === op.v && styles.toggleTextActive]}>
+                              {op.l}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      {formRestringirTelas &&
+                        ([...formModulos, "comum"] as (ModuloId | "comum")[]).map((mod) => {
+                          const telas = telasSelecionaveis(formModulos).filter((t) => t.modulo === mod);
+                          if (telas.length === 0) return null;
+                          return (
+                            <View key={mod} style={{ marginTop: 8 }}>
+                              <Text style={[styles.checkLabel, { fontWeight: "700", marginBottom: 4 }]}>
+                                {mod === "comum" ? "Comuns" : MODULO_LABEL[mod]}
+                              </Text>
+                              {telas.map((t) => {
+                                const marcado = formTelas.includes(t.route);
+                                return (
+                                  <TouchableOpacity
+                                    key={t.route}
+                                    style={styles.checkRow}
+                                    activeOpacity={0.7}
+                                    onPress={() => toggleTela(t.route)}
+                                  >
+                                    <Feather name={marcado ? "check-square" : "square"} size={18} color={marcado ? primaryColor : "#999"} />
+                                    <Text style={styles.checkLabel}>{t.label}</Text>
+                                  </TouchableOpacity>
+                                );
+                              })}
+                            </View>
+                          );
+                        })}
+                      {formRestringirTelas && formTelas.length === 0 && (
+                        <Text style={[styles.checkLabel, { color: "#E53935", marginTop: 4 }]}>
+                          Nenhuma tela marcada — ao salvar, o usuário terá acesso a todas as telas dos módulos.
+                        </Text>
+                      )}
+                    </>
+                  )}
 
                   <View style={{ marginTop: 16 }}>
                     {saving ? (

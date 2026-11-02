@@ -1,6 +1,7 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { useAuth } from "@/contexts/AuthContext";
+import { podeAcessar } from "@/constants/telas";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { Feather } from "@expo/vector-icons";
@@ -22,9 +23,10 @@ const QUICK_ACCESS = [
 
 export default function HomeAbastecimento() {
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
-  const { selectedFazendaNome } = useAuth();
+  const { selectedFazendaNome, userProfile } = useAuth();
   const { primaryColor } = useTheme();
   const router = useRouter();
+  const atalhos = QUICK_ACCESS.filter((item) => podeAcessar(userProfile, item.route));
 
   return (
     <DrawerSceneWrapper>
@@ -57,7 +59,7 @@ export default function HomeAbastecimento() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Acesso Rapido</Text>
             <View style={styles.cardGrid}>
-              {QUICK_ACCESS.map((item) => (
+              {atalhos.map((item) => (
                 <TouchableOpacity
                   key={item.route}
                   style={styles.card}

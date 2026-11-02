@@ -1,5 +1,6 @@
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
+import { primeiraTelaPermitida } from "@/constants/telas";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
@@ -35,15 +36,9 @@ function AuthGate() {
         router.replace("/selecao-modulo");
       }
     } else {
-      // Tudo OK -> home do modulo
+      // Tudo OK -> primeira tela permitida do modulo (home, se liberada)
       if (!inAppGroup) {
-        const homeRoute =
-          selectedModulo === "ifarm"
-            ? "/(app)/home-ifarm"
-            : selectedModulo === "abastecimento"
-              ? "/(app)/home-abastecimento"
-              : "/(app)/home";
-        router.replace(homeRoute as any);
+        router.replace(`/(app)/${primeiraTelaPermitida(userProfile, selectedModulo)}` as any);
       }
     }
   }, [user, userProfile, selectedFazendaId, selectedModulo, loading, segments]);

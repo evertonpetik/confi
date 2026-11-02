@@ -130,9 +130,12 @@ Fazenda e módulo selecionados ficam em AsyncStorage (`@selectedFazendaId`, `@se
 
 | `tipo` | Permissões |
 | --- | --- |
-| `admin` | Vê todas as fazendas e módulos; único que pode criar/editar fazendas e usuários (tela *Usuários*) e escrever no documento da fazenda |
+| `admin` | Vê todas as fazendas, módulos e telas; único que pode criar/editar fazendas e usuários (tela *Usuários*) e escrever no documento da fazenda |
 | `gestor` | Acesso às fazendas e módulos listados no perfil; leitura/escrita total dentro delas |
 | `cliente` | Idem gestor (a diferenciação é apenas semântica; as regras do Firestore tratam ambos igualmente) |
+| `tratador` | Idem; pensado para o operador do trato, normalmente com `telas` restritas (ex.: Dashboard, Leitura de Cocho e Tratador) |
+
+**Telas permitidas (`usuarios.{uid}.telas`)** — para qualquer usuário que não seja admin, o administrador pode marcar na tela *Usuários* quais telas ficam liberadas. O catálogo e as regras estão em `src/constants/telas.ts`: com `telas` ausente/`null`/vazio o usuário vê todas as telas dos seus módulos; com uma lista, o menu lateral, os atalhos das homes e a guarda de rota (`(app)/_layout.tsx`) só liberam o que está na lista (telas internas, como detalhe do animal, acompanham a tela "pai"). O destino após o login passa a ser a primeira tela permitida do módulo.
 
 No WhatsApp existem ainda os papéis `produtor` e `tratador`, atribuídos quando o número é encontrado em `produtores` de uma fazenda (ver 04).
 

@@ -1,6 +1,7 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { useAuth } from "@/contexts/AuthContext";
+import { podeAcessar } from "@/constants/telas";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { Feather } from "@expo/vector-icons";
@@ -61,9 +62,10 @@ const MODULES = [
 
 export default function HomeIFarm() {
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
-  const { selectedFazendaNome } = useAuth();
+  const { selectedFazendaNome, userProfile } = useAuth();
   const { primaryColor } = useTheme();
   const router = useRouter();
+  const modulosVisiveis = MODULES.filter((mod) => podeAcessar(userProfile, mod.route));
 
   return (
     <DrawerSceneWrapper>
@@ -111,7 +113,7 @@ export default function HomeIFarm() {
 
           {/* Grid de módulos */}
           <View style={styles.grid}>
-            {MODULES.map((mod) => (
+            {modulosVisiveis.map((mod) => (
               <TouchableOpacity
                 key={mod.route}
                 style={styles.card}

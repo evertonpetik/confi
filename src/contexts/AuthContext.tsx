@@ -24,12 +24,21 @@ export type ModuloId = "iconfi" | "ifarm" | "abastecimento";
 
 export const ALL_MODULOS: ModuloId[] = ["iconfi", "ifarm", "abastecimento"];
 
+export type TipoUsuario = "admin" | "gestor" | "cliente" | "tratador";
+
+export const TIPOS_USUARIO: TipoUsuario[] = ["cliente", "gestor", "tratador", "admin"];
+
 export type UsuarioProfile = {
   nome: string;
   email: string;
-  tipo: "admin" | "gestor" | "cliente";
+  tipo: TipoUsuario;
   fazendas: string[];
   modulos: ModuloId[];
+  /**
+   * Telas liberadas (rotas). Ausente/null/vazio = todas as telas dos módulos.
+   * Ignorado para admin. Regras em `constants/telas.ts`.
+   */
+  telas?: string[] | null;
 };
 
 export type Fazenda = {
@@ -98,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           tipo: data.tipo ?? "cliente",
           fazendas: data.fazendas ?? [],
           modulos: data.modulos ?? [],
+          telas: Array.isArray(data.telas) ? data.telas : null,
         };
         setUserProfile(profile);
         await loadFazendas(profile);

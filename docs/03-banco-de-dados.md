@@ -82,9 +82,10 @@ lotes/{…}                                               ← raiz, legado pré 
 | --- | --- | --- |
 | nome | string | Nome exibido |
 | email | string | E-mail de login |
-| tipo | `"admin" \| "gestor" \| "cliente"` | Papel (padrão `cliente`) |
+| tipo | `"admin" \| "gestor" \| "cliente" \| "tratador"` | Papel (padrão `cliente`) |
 | fazendas | string[] | IDs das fazendas permitidas (admin ignora) |
 | modulos | `("iconfi" \| "ifarm" \| "abastecimento")[]` | Módulos liberados |
+| telas | string[] \| null? | Rotas liberadas (ex.: `["home","leitura","tratador"]`). Ausente/null/vazio = todas as telas dos módulos. Ignorado para admin. Catálogo em `src/constants/telas.ts` |
 | telefone | string? | Número WhatsApp (E.164 sem `+`) para o copiloto |
 
 ### 4.2 `fazendas/{fazendaId}`

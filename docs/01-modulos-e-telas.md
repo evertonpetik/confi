@@ -4,7 +4,7 @@
 
 ## 1. Os três módulos
 
-A seleção de módulo (`src/app/selecao-modulo.tsx`) oferece ao usuário apenas os módulos presentes em `usuarios/{uid}.modulos` (admin vê todos). O drawer (`src/app/(app)/_layout.tsx`) filtra o menu pela constante `MODULO_ROUTES`:
+A seleção de módulo (`src/app/selecao-modulo.tsx`) oferece ao usuário apenas os módulos presentes em `usuarios/{uid}.modulos` (admin vê todos). O drawer (`src/app/(app)/_layout.tsx`) monta o menu a partir do catálogo `src/constants/telas.ts` (`menuDoModulo`), filtrando pelas **telas permitidas** do perfil (`usuarios/{uid}.telas`); uma guarda de rota no mesmo layout redireciona para a primeira tela permitida quem tenta abrir uma rota não liberada.
 
 | Módulo | Rotas do menu | Rotas internas (sem item de menu) |
 | --- | --- | --- |
@@ -193,7 +193,7 @@ Lista de abastecimentos com filtros por veículo/tanque/período (`Abastecimento
 - Sincronização offline manual.
 
 ### 7.2 `signup.tsx` — Usuários (admin)
-Cria usuários no Firebase Auth via app secundário (não desloga o admin) e grava `usuarios/{uid}` com nome, e-mail, tipo, fazendas[] e módulos[]. Edita/exclui usuários e cria/exclui fazendas.
+Cria usuários no Firebase Auth via app secundário (não desloga o admin) e grava `usuarios/{uid}` com nome, e-mail, tipo (cliente, gestor, tratador, admin), fazendas[], módulos[] e **telas permitidas**: "Todas dos módulos" (grava `telas: null`) ou "Selecionar telas" com checkboxes agrupados por módulo (+ Configurações). Edita/exclui usuários e cria/exclui fazendas.
 
 ---
 
