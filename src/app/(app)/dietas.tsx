@@ -146,6 +146,8 @@ export default function Dietas() {
       nome: d.data().nome ?? "",
       insumos: d.data().insumos ?? [],
       percentualMS: d.data().percentualMS ?? 0,
+      // undefined em dietas antigas: o modal infere o toggle pelo valor gravado
+      manterMS: typeof d.data().manterMS === "boolean" ? d.data().manterMS : undefined,
       ndt: d.data().ndt ?? 0,
       aditivoId: d.data().aditivoId ?? "",
       aditivoNome: d.data().aditivoNome ?? "",

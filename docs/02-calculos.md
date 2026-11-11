@@ -365,6 +365,8 @@ Exemplo: silagem 40 % (36,5 % MS), milho 22,5 % (87 %), DDG 34,4 % (90 %), núcl
 
 A água adicionada no vagão não entra nesse cálculo: no app ela não é insumo, e a diferença entre o `percentualMS` gravado na dieta e a MS dos insumos é o que o mapa de trato prevê como água (§4.3). Dietas com água na formulação (ex.: planilha SOL, R4-TERM 60,6 % com água × 79,9 % sem) devem ter o valor ajustado manualmente.
 
+**Toggle "Manter MS" = Sim** grava `manterMS: true` na dieta. Nesse caso o `percentualMS` gravado é só o retrato do cadastro: `buildCalcData` (mapa de trato / tratador) e o dashboard recalculam a MS vigente com `utils/dietaCalc.ts::resolverMSDieta`, usando a MS **atual** de cada insumo (que muda a cada conferência), e `aguaPrevista` é fixada em 0. Sem isso uma conferência que altere a MS de um insumo deixaria a dieta travada no valor antigo e a diferença apareceria como água a adicionar. Dietas antigas sem o campo seguem o valor gravado até serem salvas de novo (o modal infere o toggle comparando o gravado com o recalculado).
+
 Validações: soma dos percentuais = 100 (± 0,01); NDT entre 0 e 100.
 
 ---

@@ -25,6 +25,7 @@ import {
   isEstoqueBaixo,
 } from "@/utils/insumoAutonomia";
 import { calcQtdNaData, escolherLeituraMaisRecente } from "@/utils/loteCalcCore";
+import { resolverMSDieta } from "@/utils/dietaCalc";
 import { calcPesoMedio, CMS_INICIAL, getBaseCmsLeitura } from "@/utils/mapaTratoCalc";
 import { compararPiquetes } from "@/utils/piqueteOrdenacao";
 import { Feather } from "@expo/vector-icons";
@@ -303,10 +304,26 @@ export default function Home() {
         getCollection("dietas"),
       ]);
 
-      // dietaId -> percentualMS (para calcular MO previsto a partir da MS prevista)
+      // dietaId -> percentualMS (para calcular MO previsto a partir da MS prevista).
+      // Dietas "Manter MS" seguem a MS atual dos insumos.
+      const msInsumoMap = new Map<string, number>();
+      for (const iDoc of insumosSnap.docs) {
+        msInsumoMap.set(iDoc.id, iDoc.data().percentualMateriaSeca ?? 0);
+      }
       const dietaPercMSMap = new Map<string, number>();
       for (const dDoc of dietasSnap.docs) {
-        dietaPercMSMap.set(dDoc.id, dDoc.data().percentualMS ?? 50);
+        const dData = dDoc.data();
+        dietaPercMSMap.set(
+          dDoc.id,
+          resolverMSDieta(
+            {
+              percentualMS: dData.percentualMS ?? 50,
+              manterMS: dData.manterMS === true,
+              insumos: dData.insumos ?? [],
+            },
+            (id) => msInsumoMap.get(id)
+          )
+        );
       }
 
       // Build piqueteId -> dietaNome / percentualMS maps from roteiros

@@ -39,6 +39,41 @@ export function calcMSDietaBaseMS(itens: ItemDietaMS[]): number {
   return somaPsobreMS > 0 ? somaP / somaPsobreMS : 0;
 }
 
+export type DietaMSResolvivel = {
+  /** %MS gravada na dieta (0–100). */
+  percentualMS: number;
+  /**
+   * Toggle "Manter MS da Dieta igual à dos insumos?". Quando true a MS gravada
+   * é só um retrato do momento do cadastro: a MS vigente deve ser recalculada
+   * a partir da MS atual dos insumos (que muda a cada conferência).
+   */
+  manterMS?: boolean;
+  insumos: { insumoId: string; percentual: number }[];
+};
+
+/**
+ * %MS vigente da dieta (0–100).
+ *
+ * Com `manterMS` ligado recalcula pela média harmônica com a MS atual de cada
+ * insumo, para que uma conferência de MS não deixe a dieta "travada" no valor
+ * antigo (o que faria o mapa de trato prever água que não existe). Se nenhum
+ * insumo tiver MS conhecida, cai no valor gravado. Sem o toggle (ou dietas
+ * antigas sem o campo) devolve o valor gravado.
+ */
+export function resolverMSDieta(
+  dieta: DietaMSResolvivel,
+  msInsumo: (insumoId: string) => number | undefined
+): number {
+  if (dieta.manterMS !== true) return dieta.percentualMS;
+  const calculada = calcMSDietaBaseMS(
+    dieta.insumos.map((di) => ({
+      percentual: di.percentual,
+      percentualMS: msInsumo(di.insumoId) ?? 0,
+    }))
+  );
+  return calculada > 0 ? Math.round(calculada * 100) / 100 : dieta.percentualMS;
+}
+
 /**
  * kg de matéria natural de cada insumo para `kgMSTotal` kg de MS da dieta.
  * Útil para conferir a formulação: moInsumo = kgMS × p_i / MS_i.

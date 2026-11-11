@@ -1,6 +1,7 @@
 import { CargaTrato } from "@/components/CargaModal";
 import { DescargaTrato } from "@/components/DescargaModal";
 import { somarEmbarquesAgendadosNaData } from "@/services/embarqueAgendado";
+import { resolverMSDieta } from "@/utils/dietaCalc";
 import { escolherLeituraMaisRecente } from "@/utils/loteCalcCore";
 import {
   fsLimit,
@@ -46,7 +47,9 @@ export type DietaData = {
   id: string;
   nome: string;
   insumos: DietaInsumo[];
+  /** %MS gravada; com `manterMS` o buildCalcData substitui pela MS atual dos insumos. */
   percentualMS: number;
+  manterMS?: boolean;
   ndt: number;
   aditivoNome: string;
 };
@@ -206,8 +209,8 @@ export function buildCalcData(
   fMaps: FatorMaps
 ): RoteiroCalculado[] {
   return roteiros.map((roteiro) => {
-    const dieta = dietasMap.get(roteiro.dietaId);
-    if (!dieta) {
+    const dietaSalva = dietasMap.get(roteiro.dietaId);
+    if (!dietaSalva) {
       return {
         roteiro,
         dieta: { id: "", nome: "", insumos: [], percentualMS: 50, ndt: 0, aditivoNome: "" },
@@ -221,6 +224,17 @@ export function buildCalcData(
         descargaPrevistos: [],
       };
     }
+
+    // Dieta "Manter MS igual à dos insumos": a MS vigente segue a MS atual dos
+    // insumos (conferências), senão a dieta fica travada no valor do cadastro e a
+    // diferença apareceria como água prevista.
+    const dieta: DietaData = {
+      ...dietaSalva,
+      percentualMS: resolverMSDieta(
+        dietaSalva,
+        (id) => insumosMap.get(id)?.percentualMateriaSeca
+      ),
+    };
 
     const lotesCalc = roteiro.piquetes
       .map((p) => {
@@ -261,7 +275,8 @@ export function buildCalcData(
       return { insumoId: di.insumoId, insumoNome: di.insumoNome, previsto: moInsumo, precoMedio: insumoData?.precoMedio ?? 0, percentualMS: percMS };
     });
 
-    const aguaPrevista = Math.max(0, moPerTrato - somaMOInsumos);
+    // Sem água na formulação a sobra é só ruído de arredondamento
+    const aguaPrevista = dieta.manterMS ? 0 : Math.max(0, moPerTrato - somaMOInsumos);
 
     const descargaPrevistos = lotesCalc.map((l) => ({
       piqueteId: l.lote.piqueteId,
@@ -324,6 +339,7 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
       nome: d.data().nome,
       insumos: d.data().insumos ?? [],
       percentualMS: d.data().percentualMS ?? 50,
+      manterMS: d.data().manterMS === true,
       ndt: d.data().ndt ?? 0,
       aditivoNome: d.data().aditivoNome ?? "",
     });

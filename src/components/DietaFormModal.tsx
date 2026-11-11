@@ -89,19 +89,18 @@ export function DietaFormModal({
           }))
         );
 
-        // Inferir estado do toggle a partir dos dados salvos
-        const savedMS = dieta.percentualMS ?? 0;
-        const naturalMS = calcMSDietaBaseMS(
-          dieta.insumos.map((di) => ({
-            percentual: di.percentual,
-            percentualMS: insumosMap.get(di.insumoId)?.percentualMateriaSeca ?? 0,
-          }))
-        );
-
-        if (naturalMS > 0 && Math.abs(savedMS - naturalMS) < 0.01) {
-          setManterMS(true);
+        // Toggle gravado na dieta; dietas antigas (sem o campo) inferem pelo valor salvo
+        if (typeof dieta.manterMS === "boolean") {
+          setManterMS(dieta.manterMS);
         } else {
-          setManterMS(false);
+          const savedMS = dieta.percentualMS ?? 0;
+          const naturalMS = calcMSDietaBaseMS(
+            dieta.insumos.map((di) => ({
+              percentual: di.percentual,
+              percentualMS: insumosMap.get(di.insumoId)?.percentualMateriaSeca ?? 0,
+            }))
+          );
+          setManterMS(naturalMS > 0 && Math.abs(savedMS - naturalMS) < 0.01);
         }
       } else {
         setForm(emptyForm);
@@ -232,6 +231,7 @@ export function DietaFormModal({
       nome: form.nome.trim(),
       insumos: parsedInsumos,
       percentualMS: pms,
+      manterMS,
       ndt,
       aditivoId: form.aditivoId,
       aditivoNome: form.aditivoNome,

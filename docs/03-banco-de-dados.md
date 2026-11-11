@@ -221,6 +221,7 @@ ID = `${Date.now()}_u` (usuário) ou `_a` (assistente).
 | --- | --- |
 | nome | string |
 | percentualMS | number |
+| manterMS | boolean (opcional) — toggle "Manter MS da Dieta igual à dos insumos?" = Sim; a MS vigente é recalculada a partir da MS atual dos insumos (`resolverMSDieta`), e `percentualMS` é só o retrato do cadastro. Ausente em dietas antigas (o modal infere pelo valor gravado) |
 | ndt | number |
 | aditivoId, aditivoNome | string |
 | ativo | boolean |

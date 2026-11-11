@@ -13,6 +13,12 @@ export type Dieta = {
   nome: string;
   insumos: DietaInsumo[];
   percentualMS: number;
+  /**
+   * "Manter MS da Dieta igual à dos insumos?" = Sim. A MS vigente é recalculada
+   * a partir da MS atual dos insumos (ver utils/dietaCalc.ts::resolverMSDieta);
+   * `percentualMS` guarda só o valor no momento do cadastro.
+   */
+  manterMS?: boolean;
   ndt: number;
   aditivoId: string;
   aditivoNome: string;
