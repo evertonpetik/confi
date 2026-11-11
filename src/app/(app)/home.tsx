@@ -32,7 +32,7 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -118,15 +118,96 @@ type ColumnFilterModalProps = {
   columnLabel: string;
   values: string[];
   selectedValues: Set<string>;
-  onToggleValue: (value: string) => void;
+  /** Aplica a seleção final (Confirmar). Fechar pelo X descarta as mudanças. */
+  onApply: (selected: Set<string>) => void;
   onClose: () => void;
 };
 
-function ColumnFilterModal({ columnLabel, values, selectedValues, onToggleValue, onClose }: ColumnFilterModalProps) {
+/** Busca sem acento e sem caixa, para "sao" achar "São". */
+function normalizarBusca(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Filtro de coluna no estilo do Excel: a seleção fica pendente até Confirmar;
+ * ao digitar na busca a lista é reduzida e os resultados já entram marcados
+ * (limpar a busca devolve a seleção anterior); a linha "(Selecionar tudo)"
+ * marca/desmarca o que está visível.
+ */
+function ColumnFilterModal({ columnLabel, values, selectedValues, onApply, onClose }: ColumnFilterModalProps) {
   const { primaryColor } = useTheme();
   const [search, setSearch] = useState("");
+  const [pending, setPending] = useState<Set<string>>(() => new Set(selectedValues));
+  // Seleção antes de começar a digitar, restaurada quando a busca é apagada
+  const antesDaBuscaRef = useRef<Set<string> | null>(null);
 
-  const filteredValues = values.filter((v) => v.toLowerCase().includes(search.toLowerCase()));
+  const termo = normalizarBusca(search);
+  const filteredValues = useMemo(
+    () => (termo ? values.filter((v) => normalizarBusca(v).includes(termo)) : values),
+    [values, termo]
+  );
+
+  function handleSearchChange(texto: string) {
+    const novoTermo = normalizarBusca(texto);
+    if (novoTermo) {
+      if (antesDaBuscaRef.current === null) antesDaBuscaRef.current = new Set(pending);
+      // Como no Excel: os resultados da busca já vêm todos marcados
+      setPending(new Set(values.filter((v) => normalizarBusca(v).includes(novoTermo))));
+    } else if (antesDaBuscaRef.current !== null) {
+      setPending(antesDaBuscaRef.current);
+      antesDaBuscaRef.current = null;
+    }
+    setSearch(texto);
+  }
+
+  function toggleValue(value: string) {
+    setPending((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  }
+
+  const visiveisMarcados = filteredValues.filter((v) => pending.has(v)).length;
+  const todosVisiveis = filteredValues.length > 0 && visiveisMarcados === filteredValues.length;
+  const algunsVisiveis = visiveisMarcados > 0 && !todosVisiveis;
+
+  function toggleTodosVisiveis() {
+    setPending((prev) => {
+      const next = new Set(prev);
+      if (todosVisiveis) filteredValues.forEach((v) => next.delete(v));
+      else filteredValues.forEach((v) => next.add(v));
+      return next;
+    });
+  }
+
+  function confirmar() {
+    // Com busca ativa só os resultados visíveis entram no filtro (como no Excel)
+    const final = termo ? new Set(filteredValues.filter((v) => pending.has(v))) : pending;
+    onApply(final);
+  }
+
+  const totalMarcados = termo ? visiveisMarcados : pending.size;
+
+  function renderCheckbox(marcado: boolean, parcial = false) {
+    const ativo = marcado || parcial;
+    return (
+      <View
+        style={[
+          styles.filterModalCheckbox,
+          ativo && { backgroundColor: primaryColor, borderColor: primaryColor },
+        ]}
+      >
+        {marcado && <Feather name="check" size={12} color="#FFF" />}
+        {!marcado && parcial && <Feather name="minus" size={12} color="#FFF" />}
+      </View>
+    );
+  }
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -146,44 +227,67 @@ function ColumnFilterModal({ columnLabel, values, selectedValues, onToggleValue,
             <Feather name="search" size={16} color="#999" style={styles.filterModalSearchIcon} />
             <TextInput
               style={styles.filterModalSearchInput}
-              placeholder="Buscar valor..."
+              placeholder="Pesquisar..."
               value={search}
-              onChangeText={setSearch}
+              onChangeText={handleSearchChange}
+              autoFocus
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+              onSubmitEditing={confirmar}
             />
+            {search.length > 0 && (
+              <TouchableOpacity
+                onPress={() => handleSearchChange("")}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="x-circle" size={16} color="#999" />
+              </TouchableOpacity>
+            )}
           </View>
+
+          <TouchableOpacity
+            style={[styles.filterModalOption, styles.filterModalSelectAll]}
+            onPress={toggleTodosVisiveis}
+            activeOpacity={0.7}
+            disabled={filteredValues.length === 0}
+          >
+            {renderCheckbox(todosVisiveis, algunsVisiveis)}
+            <Text style={[styles.filterModalOptionText, styles.filterModalSelectAllText]} numberOfLines={1}>
+              {termo ? "(Selecionar todos os resultados da pesquisa)" : "(Selecionar tudo)"}
+            </Text>
+          </TouchableOpacity>
 
           <FlatList
             data={filteredValues}
             keyExtractor={(item) => item}
-            renderItem={({ item }) => {
-              const isSelected = selectedValues.has(item);
-              return (
-                <TouchableOpacity
-                  style={styles.filterModalOption}
-                  onPress={() => onToggleValue(item)}
-                  activeOpacity={0.7}
-                >
-                  <View
-                    style={[
-                      styles.filterModalCheckbox,
-                      isSelected && { backgroundColor: primaryColor, borderColor: primaryColor },
-                    ]}
-                  >
-                    {isSelected && <Feather name="check" size={12} color="#FFF" />}
-                  </View>
-                  <Text style={styles.filterModalOptionText} numberOfLines={1}>{item}</Text>
-                </TouchableOpacity>
-              );
-            }}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.filterModalOption}
+                onPress={() => toggleValue(item)}
+                activeOpacity={0.7}
+              >
+                {renderCheckbox(pending.has(item))}
+                <Text style={styles.filterModalOptionText} numberOfLines={1}>{item}</Text>
+              </TouchableOpacity>
+            )}
             ListEmptyComponent={<Text style={styles.filterModalEmptyText}>Nenhum valor encontrado</Text>}
             style={{ maxHeight: 320 }}
           />
 
           <TouchableOpacity
-            style={[styles.filterModalConfirmButton, { backgroundColor: primaryColor }]}
-            onPress={onClose}
+            style={[
+              styles.filterModalConfirmButton,
+              { backgroundColor: primaryColor },
+              totalMarcados === 0 && { opacity: 0.5 },
+            ]}
+            onPress={confirmar}
+            disabled={totalMarcados === 0}
           >
-            <Text style={styles.filterModalConfirmButtonText}>Confirmar ({selectedValues.size})</Text>
+            <Text style={styles.filterModalConfirmButtonText}>
+              Confirmar ({totalMarcados} de {values.length})
+            </Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -769,23 +873,18 @@ export default function Home() {
     }
   }
 
-  function handleToggleFilterValue(key: keyof LoteReportRow, value: string, allValues: string[]) {
+  function handleApplyFilter(key: keyof LoteReportRow, selected: Set<string>, allValues: string[]) {
     setColumnFilters((prev) => {
-      const current = prev[key] ?? new Set(allValues);
-      const next = new Set(current);
-      if (next.has(value)) {
-        next.delete(value);
-      } else {
-        next.add(value);
-      }
       const updated = { ...prev };
-      if (next.size === allValues.length) {
+      // Tudo marcado = sem filtro na coluna
+      if (selected.size >= allValues.length && allValues.every((v) => selected.has(v))) {
         delete updated[key];
       } else {
-        updated[key] = next;
+        updated[key] = new Set(selected);
       }
       return updated;
     });
+    setFilterModalColumn(null);
   }
 
   const visibleRows = getSortedRows(getFilteredRows(reportRows));
@@ -1233,7 +1332,7 @@ export default function Home() {
           columnLabel={filterModalCol.label}
           values={filterModalValues}
           selectedValues={filterModalSelected}
-          onToggleValue={(value) => handleToggleFilterValue(filterModalCol.key, value, filterModalValues)}
+          onApply={(selected) => handleApplyFilter(filterModalCol.key, selected, filterModalValues)}
           onClose={() => setFilterModalColumn(null)}
         />
       )}
@@ -1513,6 +1612,17 @@ const styles = StyleSheet.create({
   filterModalOptionText: {
     fontSize: 16,
     color: "#1a1a1a",
+  },
+  filterModalSelectAll: {
+    backgroundColor: "#F5F5F5",
+    paddingVertical: 10,
+    marginHorizontal: 24,
+    paddingHorizontal: 0,
+    borderBottomColor: "#DCDCDC",
+  },
+  filterModalSelectAllText: {
+    fontWeight: "600",
+    fontSize: 15,
   },
   filterModalConfirmButton: {
     marginHorizontal: 24,

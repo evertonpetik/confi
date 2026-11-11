@@ -32,7 +32,14 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const moduloLabel = selectedModulo ? MODULO_LABEL[selectedModulo] : "";
 
   return (
-    <ScrollView contentContainerStyle={{ flex: 1 }} bounces={false}>
+    // flexGrow (não flex): o conteúdo ocupa no mínimo a altura do painel, para o
+    // rodapé ficar embaixo, mas pode ultrapassá-la e rolar quando há muitos itens.
+    // Com flex: 1 a altura fica travada na do painel e os itens de baixo somem.
+    <ScrollView
+      contentContainerStyle={{ flexGrow: 1 }}
+      bounces={false}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Logo */}
       {logoUrl && (
         <View style={styles.logoContainer}>
