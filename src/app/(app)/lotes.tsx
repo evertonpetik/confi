@@ -277,8 +277,11 @@ export default function Lotes() {
   }
 
   function getNextNumero(): number {
-    if (lotes.length === 0) return 1;
-    return Math.max(...lotes.map((l) => l.numero)) + 1;
+    // Menor número livre (preenche lacunas na numeração)
+    const usados = new Set(lotes.map((l) => l.numero));
+    let numero = 1;
+    while (usados.has(numero)) numero++;
+    return numero;
   }
 
   function handleNew() {
