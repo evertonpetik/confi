@@ -92,7 +92,7 @@ Lista lotes ativos com piquete, ordenados por `compararPiquetes` (prefixo "pique
 Planejamento e execução do trato por roteiro (desktop). Fluxo: escolher vagão → ver roteiros calculados (`buildCalcData`) → `CargaModal` (insumos e água realizados por trato) → `DescargaModal` (kg descarregados por piquete, com CMS realizado e GMD em tempo real). Cada card de roteiro mostra, na própria tela, a **tabela de carga** (insumos × tratos, previsto e realizado, com %MS final) e logo abaixo a **tabela de descarga** (piquetes × tratos) — componente `RoteiroTabelas`; realizado em verde quando dentro de ±5 % do previsto, vermelho fora. O botão **Exportar Imagem** gera um PNG do mapa completo (cabeçalho com fazenda/data/vagão + todos os roteiros com as duas tabelas abertas), via `react-native-view-shot` — no celular abre o compartilhamento, na web faz download (`services/exportarImagem.ts`).
 
 - Salvar carga: grava `insumos/{id}/saidas/{roteiroId}_{data}_{insumoId}` (uma por insumo/roteiro/dia, `setDocument` idempotente), calcula `%MS final`, `custoTotal`, `custoPorLote` (proporcional ao previsto) e grava `historicoMapaTrato/{roteiroId}_{data}`.
-- Salvar descarga: calcula `msPorLote` (MO/MS realizados, CMS previsto × realizado, GMD estimado × real via NRC) e redistribui `custoPorLote` proporcional ao realizado.
+- Salvar descarga: calcula `msPorLote` (MO/MS realizados, CMS previsto × realizado, GMD estimado × real pelo modelo energético de [02-calculos §2](./02-calculos.md)) e redistribui `custoPorLote` proporcional ao realizado.
 - Exporta/importa **CSV** (ingredientes por dieta e descarga por piquete/trato; match por nome normalizado sem acento).
 
 ### 4.9 `tratador.tsx`
@@ -187,7 +187,7 @@ Lista de abastecimentos com filtros por veículo/tanque/período (`Abastecimento
 
 ### 7.1 `configuracoes.tsx`
 - **Base do CMS da leitura**: `realizado` (padrão) ou `previsto` — gravado em `config/app` da fazenda.
-- **Tabelas auxiliares** com CRUD genérico (`TabelaAuxiliarFormModal`): Piquetes, Vagão, Nota de Leitura, Parâmetros (`tempoMS`, `custo_operacional`), Configurações IA (`ANTHROPIC_API_KEY`). As demais tabelas (raça, categoria, GEC…) são populadas pelo **seed** (`seedTabelasAuxiliares`, ignora coleções já preenchidas).
+- **Tabelas auxiliares** com CRUD genérico (`TabelaAuxiliarFormModal`): Piquetes, Vagão, Nota de Leitura, Parâmetros (`tempoMS`, `custo_operacional`, `perdas_cocho`), Configurações IA (`ANTHROPIC_API_KEY`). As demais tabelas (raça, categoria, GEC…) são populadas pelo **seed** (`seedTabelasAuxiliares`, ignora coleções já preenchidas).
 - **Migração multi-tenant** (`migrateToMultiTenant`): copia coleções legadas da raiz para `fazendas/{id}/…` preservando IDs.
 - Sincronização offline manual.
 
@@ -205,7 +205,7 @@ A identidade visual (cor e logo) saiu desta tela: é configurada **por fazenda**
 | --- | --- |
 | `LoteCard` | Exporta `calcularQuantidadeAtual`, `calcularPesoMedio`, `calcularPesoMedioInicial`; mostra qtde, peso projetado, GMD estimado/real, próximo embarque |
 | `InsumoCard` | Tipos `Compra`, `Saida`, `ConferenciaMS`, `PesagemMS`, `Insumo`; `calcularEstoque`, `calcularPrecoMedio`, autonomia |
-| `CargaModal` / `DescargaModal` | Registro por trato; `DescargaModal` exibe `getCmsRealizado` e `getGmdReal` (NRC inline) |
+| `CargaModal` / `DescargaModal` | Registro por trato; `DescargaModal` exibe `getCmsRealizado` e `getGmdReal` (via `utils/gmdCalc.ts`) |
 | `ConferenciaMSModal` | Secagem passo a passo com cronômetro sugerido (60/10 min) |
 | `DietaFormModal` | Composição, MS automática, validação 100 % |
 | `LinhaDoTempo` | Timeline de eventos agrupada por instante |

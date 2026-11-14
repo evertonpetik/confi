@@ -133,7 +133,7 @@ ID = `${Date.now()}_u` (usuário) ou `_a` (assistente).
 | `vagao` | descricao, capacidade (kg) | |
 | `notaLeitura` | descricao ("1"–"5"), fator | |
 | `movimentacao` | descricao, tipo (`"Entrada" \| "Saida"`) | Tipos de movimentação de lote |
-| `parametros` | descricao (`tempoMS`, `custo_operacional`), valor (number) | |
+| `parametros` | descricao (`tempoMS`, `custo_operacional`, `perdas_cocho`), valor (number) | `perdas_cocho` em %; ausente = 2 % |
 | `configuracoesIA` | descricao (`ANTHROPIC_API_KEY`), valor | Chave usada pela estimativa de peso |
 
 ---

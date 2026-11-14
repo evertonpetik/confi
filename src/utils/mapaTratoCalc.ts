@@ -2,6 +2,7 @@ import { CargaTrato } from "@/components/CargaModal";
 import { DescargaTrato } from "@/components/DescargaModal";
 import { somarEmbarquesAgendadosNaData } from "@/services/embarqueAgendado";
 import { resolverMSDieta } from "@/utils/dietaCalc";
+import { PERDAS_COCHO_PADRAO, type LoteFatores } from "@/utils/gmdCalc";
 import { escolherLeituraMaisRecente } from "@/utils/loteCalcCore";
 import {
   fsLimit,
@@ -80,13 +81,8 @@ export type LoteData = {
 
 export type InsumoMS = { id: string; percentualMateriaSeca: number; precoMedio: number };
 
-export type LoteFatores = {
-  fatorRaca: number;
-  fatorGec: number;
-  fatorImplante: number;
-  fatorCompensatorio: number;
-  fatorAditivo: number;
-};
+export { calcGmdNRC } from "@/utils/gmdCalc";
+export type { LoteFatores };
 
 export type RoteiroCalculado = {
   roteiro: RoteiroData;
@@ -115,6 +111,8 @@ export type FatorMaps = {
   aditivoFatorMap: Map<string, number>;
   tcFatorMap: Map<string, number>;
   gecFatorMap: Map<string, number>;
+  /** Fração do consumo perdida no cocho (parâmetro `perdas_cocho`, em %, dividido por 100). */
+  perdasCocho: number;
 };
 
 export type EmbarqueHojeInfo = {
@@ -161,41 +159,6 @@ export function calcPesoMedio(movs: LoteData["movimentacoes"], gmd: number): num
     else pesoTotal -= m.quantidade * pesoAjustado;
   }
   return pesoTotal / qtd;
-}
-
-// ---- NRC GMD Calculation ----
-
-export function calcGmdNRC(
-  cmsAnimalKgMS: number,
-  pesoVivo: number,
-  ndt: number,
-  fatores: LoteFatores
-): number {
-  if (cmsAnimalKgMS <= 0 || pesoVivo <= 0 || ndt <= 0) return 0;
-
-  const DE = ndt * 0.04409;
-  const ME = 0.82 * DE;
-  const NEm = 1.37 * ME - 0.138 * ME * ME + 0.0105 * ME * ME * ME - 1.12;
-  const NEg = 1.42 * ME - 0.174 * ME * ME + 0.0122 * ME * ME * ME - 1.65;
-
-  if (NEm <= 0 || NEg <= 0) return 0;
-
-  const SBW = pesoVivo * 0.96;
-  const EQSBW = SBW * fatores.fatorGec;
-  const NEmReq = 0.077 * Math.pow(EQSBW, 0.75);
-  const NEmIntake = cmsAnimalKgMS * NEm;
-
-  if (NEmIntake <= NEmReq) return 0;
-  const feedMaint = NEmReq / NEm;
-  const feedGain = cmsAnimalKgMS - feedMaint;
-  const RE = feedGain * NEg;
-
-  if (RE <= 0) return 0;
-
-  const base = RE / (0.0557 * Math.pow(EQSBW, 0.75));
-  const gmdBase = Math.pow(base, 1 / 1.097);
-
-  return gmdBase * fatores.fatorRaca * fatores.fatorImplante * fatores.fatorCompensatorio * fatores.fatorAditivo;
 }
 
 // ---- Build Calculated Data ----
@@ -253,6 +216,7 @@ export function buildCalcData(
           fatorImplante: fMaps.implanteFatorMap.get(lote.implante) ?? 1,
           fatorCompensatorio: fMaps.compensFatorMap.get(lote.compensatorio) ?? 1,
           fatorAditivo: fMaps.aditivoFatorMap.get(dieta.aditivoNome) ?? 1,
+          perdas: fMaps.perdasCocho,
         };
 
         return { lote, qtdAnimais, pesoMedio, msLote, moLote, fatores };
@@ -310,7 +274,7 @@ export function getHojeStr(date?: Date): string {
 export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFetchResult> {
   const hoje = dataStr ?? getHojeStr();
 
-  const [vagaoSnap, rotSnap, dietaSnap, lotesSnap, insumosSnap, racaSnap, implSnap, compSnap, gecSnap, aditSnap, tcSnap] = await Promise.all([
+  const [vagaoSnap, rotSnap, dietaSnap, lotesSnap, insumosSnap, racaSnap, implSnap, compSnap, gecSnap, aditSnap, tcSnap, parametrosSnap] = await Promise.all([
     getCollection("vagao"),
     getCollection("roteiros"),
     getCollection("dietas"),
@@ -322,6 +286,7 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
     getCollection("gec"),
     getCollection("aditivos"),
     getCollection("tamanhoCorporal"),
+    getCollection("parametros"),
   ]);
 
   // Vagões
@@ -367,6 +332,11 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
     const cat = d.data().categoria ?? "";
     gecFatorMap.set(`${tc}_${cat}`, d.data().fator ?? 1);
   }
+
+  // Perdas de cocho (%): descontadas do consumo no cálculo do GMD real
+  const perdasParam = parametrosSnap.docs.find((d) => d.data().descricao === "perdas_cocho");
+  const perdasPct = perdasParam ? Number(perdasParam.data().valor) : NaN;
+  const perdasCocho = perdasPct >= 0 && perdasPct < 100 ? perdasPct / 100 : PERDAS_COCHO_PADRAO;
 
   // Insumos MS map (com precoMedio via média ponderada móvel)
   const insumosMap = new Map<string, InsumoMS>();
@@ -540,7 +510,7 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
     lotesByPiquete.set(l.piqueteId, l);
   }
 
-  const fatorMaps: FatorMaps = { racaFatorMap, implanteFatorMap, compensFatorMap, aditivoFatorMap, tcFatorMap, gecFatorMap };
+  const fatorMaps: FatorMaps = { racaFatorMap, implanteFatorMap, compensFatorMap, aditivoFatorMap, tcFatorMap, gecFatorMap, perdasCocho };
 
   // Load today's historico
   const histSnap = await queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", hoje)]);

@@ -1,5 +1,6 @@
 import { Button } from "@/components/Button";
 import { useTheme } from "@/contexts/ThemeContext";
+import { calcGmdNRC, type LoteFatores } from "@/utils/gmdCalc";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
@@ -32,14 +33,6 @@ type DescargaPrevistoItem = {
   piqueteNome: string;
   loteNumero: number;
   previsto: number;
-};
-
-type LoteFatores = {
-  fatorRaca: number;
-  fatorGec: number;
-  fatorImplante: number;
-  fatorCompensatorio: number;
-  fatorAditivo: number;
 };
 
 type LoteInfoItem = {
@@ -125,7 +118,7 @@ export function DescargaModal({
     return (msRealizado / (info.qtdAnimais * info.pesoMedio)) * 100;
   }
 
-  // Calculate GMD real per lote via NRC model
+  // Calculate GMD real per lote (modelo energético, utils/gmdCalc.ts)
   function getGmdReal(piqueteId: string): number | null {
     const info = lotesInfo.find((l) => l.piqueteId === piqueteId);
     if (!info || percentualMSFinal <= 0 || ndt <= 0) return null;
@@ -140,27 +133,7 @@ export function DescargaModal({
     if (totalRealizadoLote <= 0 || info.qtdAnimais <= 0 || info.pesoMedio <= 0) return null;
     const totalMS = totalRealizadoLote * (percentualMSFinal / 100);
     const cmsAnimal = totalMS / info.qtdAnimais;
-
-    // NRC energy
-    const DE = ndt * 0.04409;
-    const ME = 0.82 * DE;
-    const NEm = 1.37 * ME - 0.138 * ME * ME + 0.0105 * ME * ME * ME - 1.12;
-    const NEg = 1.42 * ME - 0.174 * ME * ME + 0.0122 * ME * ME * ME - 1.65;
-    if (NEm <= 0 || NEg <= 0) return null;
-
-    const SBW = info.pesoMedio * 0.96;
-    const EQSBW = SBW * info.fatores.fatorGec;
-    const NEmReq = 0.077 * Math.pow(EQSBW, 0.75);
-    const NEmIntake = cmsAnimal * NEm;
-    if (NEmIntake <= NEmReq) return 0;
-
-    const feedGain = cmsAnimal - (NEmReq / NEm);
-    const RE = feedGain * NEg;
-    if (RE <= 0) return 0;
-
-    const base = RE / (0.0557 * Math.pow(EQSBW, 0.75));
-    const gmdBase = Math.pow(base, 1 / 1.097);
-    return gmdBase * info.fatores.fatorRaca * info.fatores.fatorImplante * info.fatores.fatorCompensatorio * info.fatores.fatorAditivo;
+    return calcGmdNRC(cmsAnimal, info.pesoMedio, ndt, info.fatores);
   }
 
   function updateRealizado(piqueteId: string, value: string) {

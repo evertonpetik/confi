@@ -4,7 +4,7 @@
 
 Todas as fórmulas abaixo foram extraídas do código. Convenções: pesos em **kg** (exceto conferência de MS, em gramas), percentuais de **0 a 100**, datas civis no formato `yyyy-mm-dd`, dias = `floor((hoje − data) / 86 400 000 ms)`.
 
-Os módulos puros (sem React Native) estão em `src/utils/loteCalcCore.ts`, `materiaSecaCalc.ts`, `insumoAutonomia.ts`, `piqueteOrdenacao.ts` e em `src/services/sisbov.ts`, `faixasProcesso.ts`, `eventoUtils.ts`, `protocoloUtils.ts`, `embarque.ts`, `gtaParser.ts` — por isso podem ser verificados pelos scripts `npm run verificar:*`.
+Os módulos puros (sem React Native) estão em `src/utils/loteCalcCore.ts`, `gmdCalc.ts`, `materiaSecaCalc.ts`, `insumoAutonomia.ts`, `piqueteOrdenacao.ts` e em `src/services/sisbov.ts`, `faixasProcesso.ts`, `eventoUtils.ts`, `protocoloUtils.ts`, `embarque.ts`, `gtaParser.ts` — por isso podem ser verificados pelos scripts `npm run verificar:*`.
 
 ---
 
@@ -76,56 +76,95 @@ pesoReal      = pesoEntrada + somaGmd          (0 se somaGmd = 0)
 
 ---
 
-## 2. Modelo NRC — GMD a partir do consumo
+## 2. Modelo energético — GMD a partir do consumo
 
-`utils/mapaTratoCalc.ts::calcGmdNRC(cmsAnimalKgMS, pesoVivo, ndt, fatores)` · réplica inline em `components/DescargaModal.tsx::getGmdReal`
+`utils/gmdCalc.ts::calcGmdNRC(cmsAnimalKgMS, pesoVivo, ndt, fatores)` · etapas intermediárias em `calcGmdDetalhado` · reexportado por `utils/mapaTratoCalc.ts` · verificado por `scripts/verificar-gmd.ts` (`npm run verificar:gmd`)
 
-Entradas: consumo de MS por animal (kg/dia), peso vivo (kg), NDT da dieta (%), fatores `{fatorRaca, fatorGec, fatorImplante, fatorCompensatorio, fatorAditivo}`. Retorna 0 se `cms ≤ 0`, `pesoVivo ≤ 0` ou `ndt ≤ 0`.
+O GMD real do dia **não** vem da diferença entre peso de entrada e peso de saída. Ele é estimado pelo mesmo modelo energético empírico da planilha *Controle Confinamento Pecuária RF* (energia da dieta na aba `Plan2`, linhas 36–41; GMD na aba `Resumo`): calcula-se quanta energia sobra depois da mantença e essa energia é convertida em ganho de peso.
 
-**1. Energia da dieta (Mcal/kg MS)**
 ```
-DE  = NDT × 0,04409
-ME  = 0,82 × DE
-NEm = 1,37·ME − 0,138·ME² + 0,0105·ME³ − 1,12
-NEg = 1,42·ME − 0,174·ME² + 0,0122·ME³ − 1,65
-→ se NEm ≤ 0 ou NEg ≤ 0: GMD = 0
+GMD = 13,91 × Eganho^0,9116 / ( 0,95 × (PV × 0,95 × GEC)^0,6837 )
 ```
 
-**2. Peso corporal equivalente**
+Entradas: consumo de MS por animal (kg/dia), peso vivo (kg), NDT da dieta (% de 0 a 100) e os fatores `{fatorRaca, fatorGec, fatorImplante, fatorCompensatorio, fatorAditivo, perdas}`. Retorna 0 se `cms ≤ 0`, `pesoVivo ≤ 0` ou `ndt ≤ 0`.
+
+**Etapa 1 — Energia da dieta (Mcal/kg MS)**
 ```
-SBW   = pesoVivo × 0,96
-EQSBW = SBW × fatorGec
+EM  = (NDT / 100) × 4,4 × 0,82
+NEm = (1,37·EM − 0,138·EM² + 0,0105·EM³ − 1,12) / (2 − fatorAditivo)
+NEg =  1,42·EM − 0,174·EM² + 0,0122·EM³ − 1,65
+→ se NEm ≤ 0, NEg ≤ 0 ou fatorAditivo ≥ 2: GMD = 0
+```
+O ionóforo da dieta entra só aqui, aumentando a NEm (monensina 1,12 → divide por 0,88). Ele não multiplica mais o GMD final.
+
+**Etapa 2 — Consumo efetivo**
+```
+CMSefetivo = CMS × (1 − perdas)
+```
+`perdas` vem do parâmetro `perdas_cocho` (em %, tabela *Parâmetros*). Sem o parâmetro, ou com valor fora de 0–100, usa 2 % (`PERDAS_COCHO_PADRAO`), que é o valor da planilha.
+
+**Etapa 3 — Energia destinada à mantença (Mcal/dia)**
+```
+ELm = 0,077 × (PV × 0,95)^0,75 × fatorRaca × fatorCompensatorio
 ```
 
-**3. Manutenção**
+**Etapa 4 — Consumo disponível para ganho (kg MS/dia)**
 ```
-NEmReq    = 0,077 × EQSBW^0,75          (Mcal/dia)
-NEmIntake = cms × NEm
-→ se NEmIntake ≤ NEmReq: GMD = 0
-```
-
-**4. Energia retida**
-```
-feedMaint = NEmReq / NEm                 (kg MS p/ manutenção)
-feedGain  = cms − feedMaint
-RE        = feedGain × NEg               (Mcal/dia)   → se RE ≤ 0: GMD = 0
+CMSmantença = ELm / NEm
+CMSganho    = CMSefetivo − CMSmantença
+→ se CMSganho ≤ 0: GMD = 0        (o consumo não cobre a mantença)
 ```
 
-**5. GMD base e ajustes**
+**Etapa 5 — Energia disponível para ganho (Mcal/dia)**
 ```
-gmdBase = ( RE / (0,0557 × EQSBW^0,75) ) ^ (1 / 1,097)
-GMD     = gmdBase × fatorRaca × fatorImplante × fatorCompensatorio × fatorAditivo
+Eganho = CMSganho × NEg × fatorImplante
 ```
+
+**Etapa 6 — Conversão da energia em GMD (kg/dia)**
+```
+GMD = 13,91 × Eganho^0,9116 / ( 0,95 × (PV × 0,95 × fatorGec)^0,6837 )
+```
+`PV × 0,95` é o peso em jejum; multiplicado pelo GEC vira o peso equivalente. A divisão final por 0,95 converte o ganho em jejum de volta para ganho de peso vivo.
+
+**Exemplo** — CMS 10 kg, PV 500 kg, NDT 77,5 %, Nelore (0,89), macho inteiro TC 5 (GEC 0,83), sem implante (0,95), sem compensatório (1), monensina (1,12), perdas 2 %:
+
+| Etapa | Valor |
+| --- | --- |
+| EM | 2,7962 |
+| NEm | 2,1152 |
+| NEg | 1,2269 |
+| CMS efetivo | 9,80 kg |
+| ELm | 6,973 Mcal |
+| CMS mantença | 3,296 kg |
+| CMS ganho | 6,504 kg |
+| Eganho | 7,580 Mcal |
+| **GMD** | **1,559 kg/dia** |
+
+**Conferência com a planilha** — `scripts/verificar-gmd.ts` reproduz quatro dias do Lote 1 da planilha (CMS, PV e GMD das linhas 1225, 1869 e 1666 da aba `Resumo`) com diferença menor que 10⁻⁹:
+
+| Dieta (NDT) | CMS (kg) | PV (kg) | GMD planilha = app |
+| --- | --- | --- | --- |
+| R1-26 Adap (75 %) | 8,83 | 615,7 | 0,944 |
+| R1-26 Adap (75 %) | 12,91 | 620,4 | 1,650 |
+| R14-25 Term (80,8 %) | 16,59 | 701,7 | 2,339 |
+| R4-26 Term (79 %) | 15,23 | 723,6 | 1,958 |
+
+**Diferenças para a planilha**
+- Na planilha, quando o consumo fica entre `ELm` e `ELm / NEm`, a célula dá erro (`#NÚM!`); o app devolve 0.
+- A planilha projeta o PV do dia somando o GMD calculado nos dias anteriores; o app usa o peso médio projetado com o `gmdEstimado` do lote (§1.2).
+
+**Histórico** — até 13/11/2026 o app usava outra forma do modelo NRC (`DE = NDT × 0,04409`, peso em jejum `PV × 0,96`, mantença sobre o peso equivalente e sem fatores, `GMD = (RE / (0,0557 × EQSBW^0,75))^(1/1,097) × raça × implante × compensatório × aditivo`, sem perdas). Nos quatro casos acima ela dava de 7 a 11 % menos que a planilha. Os `gmdReal` já gravados em `historicoMapaTrato` não são recalculados.
 
 **Origem dos fatores** (tabelas auxiliares, `fetchMapaTratoData`):
 
-| Fator | Tabela | Chave | Padrão |
-| --- | --- | --- | --- |
-| `fatorRaca` | `raca` | `descricao = lote.raca` | 1 |
-| `fatorGec` | `gec` | `"{tamanhoCorporal}_{categoria}"` onde `tamanhoCorporal` = `fator` da tabela `tamanhoCorporal` (padrão 5) | 1 |
-| `fatorImplante` | `implante` | `lote.implante` | 1 |
-| `fatorCompensatorio` | `compensatorio` | `lote.compensatorio` | 1 |
-| `fatorAditivo` | `aditivos` | `dieta.aditivoNome` | 1 |
+| Fator | Tabela | Chave | Padrão | Onde entra |
+| --- | --- | --- | --- | --- |
+| `fatorRaca` | `raca` | `descricao = lote.raca` | 1 | mantença (etapa 3) |
+| `fatorCompensatorio` | `compensatorio` | `lote.compensatorio` | 1 | mantença (etapa 3) |
+| `fatorAditivo` | `aditivos` | `dieta.aditivoNome` | 1 | NEm (etapa 1) |
+| `fatorImplante` | `implante` | `lote.implante` | 1 | energia de ganho (etapa 5) |
+| `fatorGec` | `gec` | `"{tamanhoCorporal}_{categoria}"` onde `tamanhoCorporal` = `fator` da tabela `tamanhoCorporal` (padrão 5) | 1 | peso equivalente (etapa 6) |
+| `perdas` | `parametros` | `descricao = "perdas_cocho"` (valor em %) | 2 % | consumo efetivo (etapa 2) |
 
 Valores do seed (`utils/seedTabelasAuxiliares.ts`):
 
@@ -134,10 +173,11 @@ Valores do seed (`utils/seedTabelasAuxiliares.ts`):
 | Raça | Nelore 0,89 · Outros Zebuínos 0,89 · F1 Britânico 0,94 · F1 Continentais 0,96 · F1 Holandês 1,1 · Sintéticas 0,96 · Britânicas 1 · Continentais 1,05 · Cont. dupla apt. 1,1 · Holandês 1,2 |
 | Implante | Nenhum 0,95 · Simples 1 · Combinação Simples 1,02 · Combinação Agressiva 1,084 |
 | Compensatório | Intenso 1,2 · Moderado 1,1 · Ausente 1 |
-| Aditivos | Nenhum 1 · Monensina 1,1 · Salinomicina 1,1 · Lasolicida 1,1 |
+| Aditivos | Nenhum 1 · Monensina 1,1 · Salinomicina 1,1 · Lasolicida 1,1 (a planilha usa 1,12 · 1,12 · 1,06) |
 | Tamanho corporal | 3 (Gir pequeno) … 9 (Holandês, Chianina, Charolês) — o `fator` é o próprio número |
-| GEC | 36 combinações TC 1–9 × categoria: ex. TC5: Macho castr. 0,83 · Macho inteiro 1,00 · Novilhas 1,25 · Vacas 1,25; TC9: 0,69 · 0,83 · 1,04 · 1,04 |
+| GEC | 36 combinações TC 1–9 × categoria: ex. TC5: Macho castr. 1,00 · Macho inteiro 0,83 · Novilhas 1,25 · Vacas 1,25; TC9: 0,83 · 0,69 · 1,04 · 1,04 |
 | Categoria | Macho castr. 1,2 · Macho inteiro 1,1 · Novilhas 1 · Vacas 1 (informativo; não entra na fórmula) |
+| Parâmetros | `perdas_cocho` 2 (%) |
 
 Onde é usado: **GMD real** diário na descarga (`cmsAnimal = totalMS realizado do lote / qtdAnimais`, `pesoVivo = pesoMedio projetado`), exibido no `DescargaModal`, gravado em `msPorLote[].gmdReal` (4 casas) e consumido pelo dashboard, análise de lote, relatório histórico e copiloto.
 

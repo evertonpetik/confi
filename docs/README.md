@@ -150,6 +150,7 @@ No WhatsApp existem ainda os papéis `produtor` e `tratador`, atribuídos quando
 | `verificar:pdf` | Extração de texto da Cloud Function `extrairTextoGta` |
 | `verificar:planilha` | Integridade estrutural do ZIP/XLSX gerado à mão |
 | `verificar:ms` | Conferência de matéria seca (bagaço de cana: tara 1306 g, 1605 g → 58,2 %) |
+| `verificar:gmd` | GMD pelo consumo contra os valores da planilha de controle (Lote 1, quatro dias) |
 
 ## 8. Glossário
 

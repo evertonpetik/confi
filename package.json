@@ -10,9 +10,10 @@
     "verificar:sisbov": "npx --yes tsx scripts/verificar-sisbov.ts",
     "verificar:gta": "npx --yes tsx scripts/verificar-gta.ts",
     "verificar:pdf": "node scripts/verificar-extracao-pdf.js",
-    "verificar": "npm run verificar:sisbov && npm run verificar:gta && npm run verificar:pdf && npm run verificar:planilha && npm run verificar:ms && npx tsc --noEmit",
+    "verificar": "npm run verificar:sisbov && npm run verificar:gta && npm run verificar:pdf && npm run verificar:planilha && npm run verificar:ms && npm run verificar:gmd && npx tsc --noEmit",
     "verificar:planilha": "npx --yes tsx scripts/verificar-planilha.ts",
-    "verificar:ms": "npx --yes tsx scripts/verificar-conferencia-ms.ts"
+    "verificar:ms": "npx --yes tsx scripts/verificar-conferencia-ms.ts",
+    "verificar:gmd": "npx --yes tsx scripts/verificar-gmd.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
