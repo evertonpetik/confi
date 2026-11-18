@@ -153,7 +153,7 @@ GMD = 13,91 × Eganho^0,9116 / ( 0,95 × (PV × 0,95 × fatorGec)^0,6837 )
 - Na planilha, quando o consumo fica entre `ELm` e `ELm / NEm`, a célula dá erro (`#NÚM!`); o app devolve 0.
 - A planilha projeta o PV do dia somando o GMD calculado nos dias anteriores; o app usa o peso médio projetado com o `gmdEstimado` do lote (§1.2).
 
-**Histórico** — até 13/11/2026 o app usava outra forma do modelo NRC (`DE = NDT × 0,04409`, peso em jejum `PV × 0,96`, mantença sobre o peso equivalente e sem fatores, `GMD = (RE / (0,0557 × EQSBW^0,75))^(1/1,097) × raça × implante × compensatório × aditivo`, sem perdas). Nos quatro casos acima ela dava de 7 a 11 % menos que a planilha. Os `gmdReal` já gravados em `historicoMapaTrato` não são recalculados.
+**Histórico** — até 13/11/2026 o app usava outra forma do modelo NRC (`DE = NDT × 0,04409`, peso em jejum `PV × 0,96`, mantença sobre o peso equivalente e sem fatores, `GMD = (RE / (0,0557 × EQSBW^0,75))^(1/1,097) × raça × implante × compensatório × aditivo`, sem perdas). Nos quatro casos acima ela dava de 7 a 11 % menos que a planilha. Em 18/11/2026 os `gmdReal` gravados em `historicoMapaTrato` foram recalculados com o modelo atual e os fatores vigentes de cada fazenda (Buriti: 564 lote-dias; Rincão: 890). Ficaram de fora os documentos `migrado_{data}` da Rincão, cujo GMD já veio pronto da planilha. Como o documento do app não guarda as cabeças do dia, elas foram reconstruídas (`totalMS ÷ cmsRealizado` = cabeças × peso médio) e conferidas reproduzindo o valor gravado com a fórmula e os fatores da época. Aparelhos com versão anterior do app continuam gravando com a fórmula antiga até serem atualizados.
 
 **Origem dos fatores** (tabelas auxiliares, `fetchMapaTratoData`):
 
@@ -173,7 +173,7 @@ Valores do seed (`utils/seedTabelasAuxiliares.ts`):
 | Raça | Nelore 0,89 · Outros Zebuínos 0,89 · F1 Britânico 0,94 · F1 Continentais 0,96 · F1 Holandês 1,1 · Sintéticas 0,96 · Britânicas 1 · Continentais 1,05 · Cont. dupla apt. 1,1 · Holandês 1,2 |
 | Implante | Nenhum 0,95 · Simples 1 · Combinação Simples 1,02 · Combinação Agressiva 1,084 |
 | Compensatório | Intenso 1,2 · Moderado 1,1 · Ausente 1 |
-| Aditivos | Nenhum 1 · Monensina 1,1 · Salinomicina 1,1 · Lasolicida 1,1 (a planilha usa 1,12 · 1,12 · 1,06) |
+| Aditivos | Nenhum 1 · Monensina 1,12 · Salinomicina 1,12 · Lasolicida 1,06 (os mesmos da planilha) |
 | Tamanho corporal | 3 (Gir pequeno) … 9 (Holandês, Chianina, Charolês) — o `fator` é o próprio número |
 | GEC | 36 combinações TC 1–9 × categoria: ex. TC5: Macho castr. 1,00 · Macho inteiro 0,83 · Novilhas 1,25 · Vacas 1,25; TC9: 0,83 · 0,69 · 1,04 · 1,04 |
 | Categoria | Macho castr. 1,2 · Macho inteiro 1,1 · Novilhas 1 · Vacas 1 (informativo; não entra na fórmula) |
