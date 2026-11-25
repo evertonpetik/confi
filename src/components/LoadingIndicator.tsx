@@ -33,6 +33,8 @@ type Props = {
   inline?: boolean;
   /** Oculta a barra fina de progresso exibida no modo grande empilhado. */
   semBarra?: boolean;
+  /** Mostra só o percentual, sem o spinner (quando o spinner fica em outro lugar apertado, ex.: dentro de um círculo). */
+  semSpinner?: boolean;
 };
 
 const INTERVALO_MS = 80;
@@ -48,6 +50,7 @@ export function LoadingIndicator({
   texto,
   inline = false,
   semBarra = false,
+  semSpinner = false,
 }: Props) {
   const { primaryColor } = useTheme();
   const cor = color ?? primaryColor;
@@ -106,7 +109,7 @@ export function LoadingIndicator({
   if (inline) {
     return (
       <View style={[styles.inline, style]}>
-        <ActivityIndicator size={size} color={cor} />
+        {!semSpinner && <ActivityIndicator size={size} color={cor} />}
         {(texto || mostrarPct) && (
           <Text style={[styles.textoInline, { color: corTexto, fontSize: fontePct }]} numberOfLines={1}>
             {texto ? `${texto} ` : ""}
@@ -119,7 +122,7 @@ export function LoadingIndicator({
 
   return (
     <View style={[styles.empilhado, style]}>
-      <ActivityIndicator size={size} color={cor} />
+      {!semSpinner && <ActivityIndicator size={size} color={cor} />}
       {(texto || mostrarPct) && (
         <Text style={[styles.textoEmpilhado, { color: corTexto, fontSize: fontePct }]}>
           {texto ? `${texto} ` : ""}

@@ -27,12 +27,22 @@ export default function SelecaoFazenda() {
   const [novaFazendaNome, setNovaFazendaNome] = useState("");
   const [criando, setCriando] = useState(false);
   const progressoCriar = useProgresso();
+  // Etapas da espera inicial: perfil carregado, fazendas prontas, fazenda única auto-selecionada
+  const progressoEspera = useProgresso();
+
+  useEffect(() => {
+    progressoEspera.iniciar(3);
+  }, []);
 
   // Dar tempo para o AuthContext carregar fazendas
   useEffect(() => {
     if (!authLoading) {
+      progressoEspera.definir(1, 3);
       // Pequeno delay para garantir que fazendas foram carregadas
-      const t = setTimeout(() => setReady(true), 500);
+      const t = setTimeout(() => {
+        progressoEspera.definir(2, 3);
+        setReady(true);
+      }, 500);
       return () => clearTimeout(t);
     }
   }, [authLoading]);
@@ -40,6 +50,7 @@ export default function SelecaoFazenda() {
   // Auto-selecionar se so tem 1 fazenda
   useEffect(() => {
     if (ready && fazendas.length === 1) {
+      progressoEspera.concluir();
       selectFazenda(fazendas[0].id, fazendas[0].nome);
     }
   }, [fazendas, ready]);
@@ -77,7 +88,7 @@ export default function SelecaoFazenda() {
   if (!ready) {
     return (
       <View style={styles.centered}>
-        <LoadingIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} progresso={progressoEspera} />
         <Text style={styles.loadingText}>Carregando...</Text>
       </View>
     );
@@ -165,7 +176,7 @@ export default function SelecaoFazenda() {
   if (fazendas.length === 1) {
     return (
       <View style={styles.centered}>
-        <LoadingIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} progresso={progressoEspera} />
       </View>
     );
   }

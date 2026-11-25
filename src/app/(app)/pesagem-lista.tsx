@@ -44,6 +44,7 @@ export const TelaListaPesagem: React.FC<TelaListaPesagemProps> = ({
   const [carregando, setCarregando] = useState(true);
   const [conectando, setConectando] = useState(true);
   const progressoConectar = useProgresso();
+  const progressoBovinos = useProgresso();
 
   // Carrega bovinos e conecta dispositivos
   useEffect(() => {
@@ -71,6 +72,7 @@ export const TelaListaPesagem: React.FC<TelaListaPesagemProps> = ({
   }, [termo, bovinos]);
 
   const carregarBovinos = async () => {
+    progressoBovinos.iniciar(1);
     try {
       // Busca bovinos ativos da fazenda
       // (Esta é uma implementação simplificada)
@@ -80,6 +82,7 @@ export const TelaListaPesagem: React.FC<TelaListaPesagemProps> = ({
       console.error("Erro ao carregar bovinos:", error);
       Alert.alert("Erro", "Não foi possível carregar os bovinos");
     } finally {
+      progressoBovinos.concluir();
       setCarregando(false);
     }
   };
@@ -171,6 +174,7 @@ export const TelaListaPesagem: React.FC<TelaListaPesagemProps> = ({
           size="large"
           color="#0066cc"
           style={styles.carregando}
+          progresso={progressoBovinos}
         />
       ) : filtrados.length === 0 ? (
         <View style={styles.vazio}>

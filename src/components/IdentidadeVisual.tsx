@@ -27,6 +27,7 @@ export function IdentidadeVisual({ fazendaId, fazendaNome, tema, onChange }: Pro
   const [logo, setLogo] = useState<string | null>(tema.logoUrl || null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const progressoLogo = useProgresso();
+  const progressoCor = useProgresso();
   const [salvandoCor, setSalvandoCor] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,14 +39,16 @@ export function IdentidadeVisual({ fazendaId, fazendaNome, tema, onChange }: Pro
     const anterior = cor;
     setCor(valor);
     setSalvandoCor(valor);
+    progressoCor.iniciar(1);
     try {
-      await salvarTemaDaFazenda(fazendaId, { primaryColor: valor });
+      await progressoCor.rastrear(salvarTemaDaFazenda(fazendaId, { primaryColor: valor }));
       onChange?.({ primaryColor: valor, logoUrl: logo });
     } catch (err) {
       console.error("Erro ao salvar cor:", err);
       setCor(anterior);
       Alert.alert("Erro", "Não foi possível salvar a cor da fazenda.");
     } finally {
+      progressoCor.concluir();
       setSalvandoCor(null);
     }
   }
@@ -111,7 +114,12 @@ export function IdentidadeVisual({ fazendaId, fazendaNome, tema, onChange }: Pro
                   selecionada && <Feather name="check" size={16} color="#FFF" />
                 )}
               </View>
-              <Text style={styles.colorLabel}>{c.label}</Text>
+              {/* O círculo (40 px) só comporta o spinner; o percentual ocupa o lugar do nome da cor enquanto salva. */}
+              {salvandoCor === c.value ? (
+                <LoadingIndicator size="small" inline semSpinner color="#666" progresso={progressoCor} style={{ marginTop: 4 }} />
+              ) : (
+                <Text style={styles.colorLabel}>{c.label}</Text>
+              )}
             </TouchableOpacity>
           );
         })}

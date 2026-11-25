@@ -799,7 +799,7 @@ export default function Tratador() {
     return (
       <DrawerSceneWrapper>
         <View style={styles.fullScreenCenter}>
-          <LoadingIndicator size="large" color={primaryColor} />
+          <LoadingIndicator size="large" color={primaryColor} progresso={progresso} />
           <Text style={styles.loadingText}>Carregando dados...</Text>
         </View>
       </DrawerSceneWrapper>

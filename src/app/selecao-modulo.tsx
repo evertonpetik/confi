@@ -1,6 +1,7 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { ModuloId, useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
@@ -52,14 +53,22 @@ export default function SelecaoModulo() {
     (m) => isAdmin || (userProfile?.modulos ?? []).includes(m.id)
   );
 
+  // Etapas da espera inicial: módulos prontos, módulo único auto-selecionado
+  const progressoEspera = useProgresso();
+
   useEffect(() => {
-    const t = setTimeout(() => setReady(true), 300);
+    progressoEspera.iniciar(2);
+    const t = setTimeout(() => {
+      progressoEspera.definir(1, 2);
+      setReady(true);
+    }, 300);
     return () => clearTimeout(t);
   }, []);
 
   // Auto-selecionar se so tem 1 modulo
   useEffect(() => {
     if (ready && availableModulos.length === 1) {
+      progressoEspera.concluir();
       selectModulo(availableModulos[0].id);
     }
   }, [ready, availableModulos.length]);
@@ -67,7 +76,7 @@ export default function SelecaoModulo() {
   if (!ready) {
     return (
       <View style={styles.centered}>
-        <LoadingIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} progresso={progressoEspera} />
       </View>
     );
   }
@@ -76,7 +85,7 @@ export default function SelecaoModulo() {
   if (availableModulos.length === 1) {
     return (
       <View style={styles.centered}>
-        <LoadingIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} progresso={progressoEspera} />
       </View>
     );
   }
