@@ -2,10 +2,12 @@ import { CargaModal, CargaTrato } from "@/components/CargaModal";
 import { DescargaModal, DescargaTrato } from "@/components/DescargaModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { RoteiroTabelas } from "@/components/RoteiroTabelas";
 import { Select, SelectOption } from "@/components/Select";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import { exportarViewComoPng } from "@/services/exportarImagem";
 import { setDocument } from "@/services/firestoreService";
@@ -25,7 +27,6 @@ import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useCallback, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -62,6 +63,8 @@ export default function MapaTrato() {
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop, isSmallPhone } = useResponsive();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const progresso = useProgresso();
+  const progressoExportar = useProgresso();
 
   const [vagaoOptions, setVagaoOptions] = useState<SelectOption[]>([]);
   const [vagoes, setVagoes] = useState<Vagao[]>([]);
@@ -95,15 +98,17 @@ export default function MapaTrato() {
   async function handleExportImagem() {
     if (exportandoImagem) return;
     setExportandoImagem(true);
+    progressoExportar.iniciar(3);
     try {
       // dois frames para a view fora da tela concluir o layout antes da captura
-      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-      await new Promise((r) => setTimeout(r, 150));
-      await exportarViewComoPng(exportViewRef, `mapa-trato-${hoje}.png`);
+      await progressoExportar.rastrear(new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+      await progressoExportar.rastrear(new Promise((r) => setTimeout(r, 150)));
+      await progressoExportar.rastrear(exportarViewComoPng(exportViewRef, `mapa-trato-${hoje}.png`));
     } catch (err) {
       console.error("Erro ao exportar imagem:", err);
       Alert.alert("Erro", "Não foi possível gerar a imagem do mapa de trato.");
     } finally {
+      progressoExportar.concluir();
       setExportandoImagem(false);
     }
   }
@@ -125,7 +130,7 @@ export default function MapaTrato() {
   async function fetchData() {
     try {
       setLoading(true);
-      const data = await fetchMapaTratoData(hoje);
+      const data = await fetchMapaTratoData(hoje, progresso);
 
       setVagoes(data.vagoes);
       setVagaoOptions(
@@ -145,6 +150,7 @@ export default function MapaTrato() {
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -831,10 +837,11 @@ export default function MapaTrato() {
             />
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progresso}
               />
             ) : !selectedVagaoId ? (
               <Text style={styles.emptyText}>
@@ -870,7 +877,7 @@ export default function MapaTrato() {
                     disabled={exportandoImagem}
                   >
                     {exportandoImagem ? (
-                      <ActivityIndicator size="small" color="#FFF" />
+                      <LoadingIndicator size="small" color="#FFF" inline progresso={progressoExportar} />
                     ) : (
                       <Feather name="image" size={18} color="#FFF" />
                     )}

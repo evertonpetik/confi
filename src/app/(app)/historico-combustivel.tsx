@@ -4,17 +4,18 @@ import {
 } from "@/components/AbastecimentoCard";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { Select } from "@/components/Select";
 import type { Tanque } from "@/components/TanqueCard";
 import type { Veiculo } from "@/components/VeiculoCard";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import { getCollection } from "@/services/firestoreService";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -37,6 +38,7 @@ export default function HistoricoCombustivel() {
 
   const [abastecimentos, setAbastecimentos] = useState<AbastecimentoItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [tanques, setTanques] = useState<Tanque[]>([]);
 
@@ -53,7 +55,8 @@ export default function HistoricoCombustivel() {
   async function fetchData() {
     try {
       setLoading(true);
-      const [abastSnap, veiculosSnap, tanquesSnap] = await Promise.all([
+      progresso.iniciar(3);
+      const [abastSnap, veiculosSnap, tanquesSnap] = await progresso.todas([
         getCollection("abastecimentos"),
         getCollection("veiculos"),
         getCollection("tanques"),
@@ -87,6 +90,7 @@ export default function HistoricoCombustivel() {
     } catch (err) {
       console.error("Erro ao buscar historico:", err);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -203,10 +207,11 @@ export default function HistoricoCombustivel() {
             )}
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progresso}
               />
             ) : filtered.length === 0 ? (
               <Text style={styles.emptyText}>

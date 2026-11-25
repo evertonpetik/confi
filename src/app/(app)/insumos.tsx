@@ -11,7 +11,9 @@ import {
   Saida,
 } from "@/components/InsumoCard";
 import { InsumoFormModal } from "@/components/InsumoFormModal";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import Aviso from "@/services/alerta";
 import {
@@ -26,7 +28,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -42,6 +43,7 @@ export default function Insumos() {
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
 
   const [formVisible, setFormVisible] = useState(false);
   const [editingInsumo, setEditingInsumo] = useState<Insumo | null>(null);
@@ -63,12 +65,15 @@ export default function Insumos() {
   async function fetchInsumos() {
     try {
       setLoading(true);
-      const insumosSnap = await getCollection("insumos");
+      progresso.iniciar(1);
+      const insumosSnap = await progresso.rastrear(getCollection("insumos"));
       const data: Insumo[] = [];
 
+      // 3 sub-consultas por insumo (compras, saidas, conferencias)
+      progresso.adicionarEtapas(insumosSnap.docs.length * 3);
       for (const insumoDoc of insumosSnap.docs) {
         const insumoData = insumoDoc.data();
-        const [comprasSnap, saidasSnap, conferenciasSnap] = await Promise.all([
+        const [comprasSnap, saidasSnap, conferenciasSnap] = await progresso.todas([
           getCollection("insumos", insumoDoc.id, "compras"),
           getCollection("insumos", insumoDoc.id, "saidas"),
           getCollection("insumos", insumoDoc.id, "conferencias"),
@@ -103,6 +108,7 @@ export default function Insumos() {
     } catch (error) {
       console.error("Erro ao buscar insumos:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -343,10 +349,11 @@ export default function Insumos() {
             </TouchableOpacity>
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progresso}
               />
             ) : insumos.length === 0 ? (
               <Text style={styles.emptyText}>

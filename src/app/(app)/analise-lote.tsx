@@ -1,5 +1,6 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
   calcularPesoMedio,
   calcularPesoMedioInicial,
@@ -9,6 +10,7 @@ import {
 } from "@/components/LoteCard";
 import { Select } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import { getCollection } from "@/services/firestoreService";
 import { calcQtdNaData } from "@/utils/loteCalcCore";
@@ -16,7 +18,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -47,9 +48,11 @@ export default function AnaliseLote() {
 
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [loadingLotes, setLoadingLotes] = useState(true);
+  const progressoLotes = useProgresso();
   const [selectedLoteId, setSelectedLoteId] = useState("");
   const [selectedLote, setSelectedLote] = useState<Lote | null>(null);
   const [loadingData, setLoadingData] = useState(false);
+  const progressoDados = useProgresso();
 
   // Computed data
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
@@ -69,11 +72,15 @@ export default function AnaliseLote() {
   async function fetchLotes() {
     try {
       setLoadingLotes(true);
-      const lotesSnap = await getCollection("lotes");
+      progressoLotes.iniciar(1);
+      const lotesSnap = await progressoLotes.rastrear(getCollection("lotes"));
       const lotesAtivosDocs = lotesSnap.docs.filter((doc) => doc.data().ativo);
 
+      progressoLotes.adicionarEtapas(lotesAtivosDocs.length);
       const movSnaps = await Promise.all(
-        lotesAtivosDocs.map((doc) => getCollection("lotes", doc.id, "movimentacoes"))
+        lotesAtivosDocs.map((doc) =>
+          progressoLotes.rastrear(getCollection("lotes", doc.id, "movimentacoes"))
+        )
       );
 
       const lotesData: Lote[] = [];
@@ -97,6 +104,7 @@ export default function AnaliseLote() {
     } catch (err) {
       console.error("Erro ao buscar lotes:", err);
     } finally {
+      progressoLotes.concluir();
       setLoadingLotes(false);
     }
   }
@@ -113,9 +121,10 @@ export default function AnaliseLote() {
   async function fetchLoteData(lote: Lote) {
     try {
       setLoadingData(true);
+      progressoDados.iniciar(4);
 
       const [historicoSnap, leiturasSnap, parametrosSnap, roteirosSnap] =
-        await Promise.all([
+        await progressoDados.todas([
           getCollection("historicoMapaTrato"),
           getCollection("lotes", lote.id, "leituras"),
           getCollection("parametros"),
@@ -178,6 +187,7 @@ export default function AnaliseLote() {
     } catch (err) {
       console.error("Erro ao buscar dados do lote:", err);
     } finally {
+      progressoDados.concluir();
       setLoadingData(false);
     }
   }
@@ -690,14 +700,16 @@ export default function AnaliseLote() {
                 }))}
                 onSelect={handleSelectLote}
                 loading={loadingLotes}
+                progresso={progressoLotes}
               />
             </View>
 
             {loadingData && (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progressoDados}
               />
             )}
 

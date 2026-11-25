@@ -2,8 +2,10 @@ import { CargaTrato } from "@/components/CargaModal";
 import { DescargaTrato } from "@/components/DescargaModal";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { Select, SelectOption } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import { setDocument } from "@/services/firestoreService";
 import {
@@ -19,7 +21,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -66,6 +67,8 @@ export default function Tratador() {
   const [step, setStep] = useState<Step>("SELECT_VAGAO");
   const [saving, setSaving] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
+  const progresso = useProgresso();
+  const progressoSalvar = useProgresso();
 
   // Data
   const [vagoes, setVagoes] = useState<Vagao[]>([]);
@@ -110,7 +113,7 @@ export default function Tratador() {
   async function loadVagoes() {
     try {
       setLoadingData(true);
-      const data = await fetchMapaTratoData();
+      const data = await fetchMapaTratoData(undefined, progresso);
       dataRef.current = data;
       setVagoes(data.vagoes);
       setVagaoOptions(
@@ -140,6 +143,7 @@ export default function Tratador() {
       console.error("Erro ao carregar dados:", error);
       Alert.alert("Erro", "Não foi possível carregar os dados.");
     } finally {
+      progresso.concluir();
       setLoadingData(false);
     }
   }
@@ -308,6 +312,7 @@ export default function Tratador() {
     if (!rc) return;
     try {
       setSaving(true);
+      progressoSalvar.iniciar(1);
 
       const cargaTrato: CargaTrato = {
         tratoNumero: currentTratoNumero,
@@ -355,16 +360,17 @@ export default function Tratador() {
         custoTotal += totalRealizado * precoMedio;
         const saidaDocId = `${rc.roteiro.id}_${hoje}_${insumoId}`;
         saidaPromises.push(
-          setDocument(["insumos", insumoId, "saidas"], saidaDocId, {
+          progressoSalvar.rastrear(setDocument(["insumos", insumoId, "saidas"], saidaDocId, {
             data: hoje,
             quantidade: totalRealizado,
             precoKg: precoMedio,
             origem: "tratador",
             roteiroId: rc.roteiro.id,
             roteiroNumero: rc.roteiro.numero,
-          })
+          }))
         );
       }
+      progressoSalvar.adicionarEtapas(saidaPromises.length);
       await Promise.all(saidaPromises);
 
       // Distribute cost proportionally (fallback to previsto)
@@ -390,7 +396,7 @@ export default function Tratador() {
 
       const vagao = vagoes.find((v) => v.id === selectedVagaoId);
       const docId = `${rc.roteiro.id}_${hoje}`;
-      await setDocument(
+      await progressoSalvar.rastrear(setDocument(
         ["historicoMapaTrato"], docId,
         {
           data: hoje,
@@ -409,7 +415,7 @@ export default function Tratador() {
           percentualMSFinal: percMSFinal,
         },
         { merge: true }
-      );
+      ));
 
       // Move to descarga
       initDescarga(rc, currentTratoNumero);
@@ -418,6 +424,7 @@ export default function Tratador() {
       console.error("Erro ao salvar carga:", error);
       Alert.alert("Erro", "Não foi possível salvar a carga.");
     } finally {
+      progressoSalvar.concluir();
       setSaving(false);
     }
   }
@@ -428,6 +435,7 @@ export default function Tratador() {
     if (!rc) return;
     try {
       setSaving(true);
+      progressoSalvar.iniciar(1);
 
       const descargaTrato: DescargaTrato = {
         tratoNumero: currentTratoNumero,
@@ -545,7 +553,7 @@ export default function Tratador() {
         }
       }
 
-      await setDocument(["historicoMapaTrato"], docId, updateData, { merge: true });
+      await progressoSalvar.rastrear(setDocument(["historicoMapaTrato"], docId, updateData, { merge: true }));
 
       // Check if more tratos
       if (currentTratoNumero < rc.numTratos) {
@@ -557,6 +565,7 @@ export default function Tratador() {
       console.error("Erro ao salvar descarga:", error);
       Alert.alert("Erro", "Não foi possível salvar a descarga.");
     } finally {
+      progressoSalvar.concluir();
       setSaving(false);
     }
   }
@@ -610,7 +619,7 @@ export default function Tratador() {
 
   async function reloadData() {
     try {
-      const data = await fetchMapaTratoData();
+      const data = await fetchMapaTratoData(undefined, progresso);
       dataRef.current = data;
       setVagoes(data.vagoes);
       setVagaoOptions(
@@ -638,6 +647,7 @@ export default function Tratador() {
     } catch (error) {
       console.error("Erro ao recarregar dados:", error);
     } finally {
+      progresso.concluir();
       setLoadingData(false);
     }
   }
@@ -710,7 +720,7 @@ export default function Tratador() {
                 {!isDesktop && <DrawerToggleButton tintColor="#000000" />}
               </View>
               {loadingData ? (
-                <ActivityIndicator size="large" color={primaryColor} style={{ marginTop: 48 }} />
+                <LoadingIndicator size="large" color={primaryColor} style={{ marginTop: 48 }} progresso={progresso} />
               ) : (
                 <>
                   <Text style={styles.stepLabel}>Selecione o Vagao</Text>
@@ -789,7 +799,7 @@ export default function Tratador() {
     return (
       <DrawerSceneWrapper>
         <View style={styles.fullScreenCenter}>
-          <ActivityIndicator size="large" color={primaryColor} />
+          <LoadingIndicator size="large" color={primaryColor} />
           <Text style={styles.loadingText}>Carregando dados...</Text>
         </View>
       </DrawerSceneWrapper>
@@ -870,7 +880,7 @@ export default function Tratador() {
                   disabled={saving}
                 >
                   {saving ? (
-                    <ActivityIndicator color="#FFF" />
+                    <LoadingIndicator size="small" color="#FFF" inline progresso={progressoSalvar} />
                   ) : (
                     <>
                       <Feather name="check" size={24} color="#FFF" />
@@ -978,7 +988,7 @@ export default function Tratador() {
                   disabled={saving}
                 >
                   {saving ? (
-                    <ActivityIndicator color="#FFF" />
+                    <LoadingIndicator size="small" color="#FFF" inline progresso={progressoSalvar} />
                   ) : (
                     <>
                       <Feather name="check" size={24} color="#FFF" />

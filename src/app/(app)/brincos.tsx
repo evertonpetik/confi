@@ -1,9 +1,10 @@
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import Aviso from "@/services/alerta";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   Platform,
   ScrollView,
@@ -69,6 +70,7 @@ export default function BrincosPage() {
   const [pedidos, setPedidos] = useState<PedidoBrinco[]>([]);
   const [locais, setLocais] = useState<LocalAnimal[]>([]);
   const [loading, setLoading] = useState(false);
+  const progresso = useProgresso();
 
   // Modal de pedido
   const [showPedidoModal, setShowPedidoModal] = useState(false);
@@ -79,6 +81,7 @@ export default function BrincosPage() {
     sisbovFinal: "",
   });
   const [salvandoPedido, setSalvandoPedido] = useState(false);
+  const progressoSalvarPedido = useProgresso();
 
   // Modal de local
   const [showLocalModal, setShowLocalModal] = useState(false);
@@ -90,18 +93,21 @@ export default function BrincosPage() {
     capacidade: "",
   });
   const [salvandoLocal, setSalvandoLocal] = useState(false);
+  const progressoSalvarLocal = useProgresso();
 
   // ─── Carregamento ────────────────────────────────────────────────────────────
 
   const carregarPedidos = useCallback(async () => {
     if (!fazendaId) return;
     setLoading(true);
+    progresso.iniciar(1);
     try {
-      const lista = await BrincoService.listarPedidos(fazendaId);
+      const lista = await progresso.rastrear(BrincoService.listarPedidos(fazendaId));
       setPedidos(lista);
     } catch (e) {
       console.error("Erro ao listar pedidos:", e);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }, [fazendaId]);
@@ -109,12 +115,14 @@ export default function BrincosPage() {
   const carregarLocais = useCallback(async () => {
     if (!fazendaId) return;
     setLoading(true);
+    progresso.iniciar(1);
     try {
-      const lista = await BrincoService.listarLocais(fazendaId);
+      const lista = await progresso.rastrear(BrincoService.listarLocais(fazendaId));
       setLocais(lista);
     } catch (e) {
       console.error("Erro ao listar locais:", e);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }, [fazendaId]);
@@ -148,29 +156,33 @@ export default function BrincosPage() {
     }
 
     setSalvandoPedido(true);
+    progressoSalvarPedido.iniciar(2);
     try {
       const total = totalSisbov(sisbovInicial, sisbovFinal);
-      await BrincoService.cadastrarPedido(
-        {
-          fabrica,
-          numeroPedidoMapa: numeroPedidoMapa.trim(),
-          sisbovInicial,
-          sisbovFinal,
-          manejoInicial: manejoFromSisbov(sisbovInicial),
-          manejoFinal: manejoFromSisbov(sisbovFinal),
-          brincosTotal: total,
-          proximoIndice: 0,
-          ativo: true,
-          farmedaId: fazendaId,
-        },
-        fazendaId
+      await progressoSalvarPedido.rastrear(
+        BrincoService.cadastrarPedido(
+          {
+            fabrica,
+            numeroPedidoMapa: numeroPedidoMapa.trim(),
+            sisbovInicial,
+            sisbovFinal,
+            manejoInicial: manejoFromSisbov(sisbovInicial),
+            manejoFinal: manejoFromSisbov(sisbovFinal),
+            brincosTotal: total,
+            proximoIndice: 0,
+            ativo: true,
+            farmedaId: fazendaId,
+          },
+          fazendaId
+        )
       );
       setShowPedidoModal(false);
       setFormPedido({ fabrica: FABRICAS[0], numeroPedidoMapa: "", sisbovInicial: "", sisbovFinal: "" });
-      await carregarPedidos();
+      await progressoSalvarPedido.rastrear(carregarPedidos());
     } catch (e) {
       Aviso.alert("Erro", "Não foi possível salvar o pedido.");
     } finally {
+      progressoSalvarPedido.concluir();
       setSalvandoPedido(false);
     }
   };
@@ -183,6 +195,7 @@ export default function BrincosPage() {
       return;
     }
     setSalvandoLocal(true);
+    progressoSalvarLocal.iniciar(2);
     try {
       const local: LocalAnimal = {
         ...(editandoLocal?.id ? { id: editandoLocal.id } : {}),
@@ -193,14 +206,15 @@ export default function BrincosPage() {
         ativo: true,
         farmedaId: fazendaId,
       };
-      await BrincoService.salvarLocal(local, fazendaId);
+      await progressoSalvarLocal.rastrear(BrincoService.salvarLocal(local, fazendaId));
       setShowLocalModal(false);
       setEditandoLocal(null);
       setFormLocal({ nome: "", tipo: "piquete", regime: RegimeAnimal.PASTO, capacidade: "" });
-      await carregarLocais();
+      await progressoSalvarLocal.rastrear(carregarLocais());
     } catch (e) {
       Aviso.alert("Erro", "Não foi possível salvar o local.");
     } finally {
+      progressoSalvarLocal.concluir();
       setSalvandoLocal(false);
     }
   };
@@ -278,7 +292,7 @@ export default function BrincosPage() {
 
       {/* Conteúdo */}
       {loading ? (
-        <ActivityIndicator style={{ flex: 1 }} size="large" color="#2196F3" />
+        <LoadingIndicator style={{ flex: 1 }} size="large" color="#2196F3" progresso={progresso} />
       ) : tab === "pedidos" ? (
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
           <TouchableOpacity style={styles.btnNovo} onPress={() => setShowPedidoModal(true)}>
@@ -463,7 +477,7 @@ export default function BrincosPage() {
                 disabled={salvandoPedido}
               >
                 {salvandoPedido ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <LoadingIndicator size="small" color="#fff" inline progresso={progressoSalvarPedido} />
                 ) : (
                   <Text style={styles.btnSalvarText}>Salvar</Text>
                 )}
@@ -545,7 +559,7 @@ export default function BrincosPage() {
                 disabled={salvandoLocal}
               >
                 {salvandoLocal ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <LoadingIndicator size="small" color="#fff" inline progresso={progressoSalvarLocal} />
                 ) : (
                   <Text style={styles.btnSalvarText}>Salvar</Text>
                 )}

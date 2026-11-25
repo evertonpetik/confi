@@ -1,14 +1,15 @@
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import { addRawDocument, setCurrentFazendaId } from "@/services/firestoreService";
 import { seedTabelasAuxiliares } from "@/utils/seedTabelasAuxiliares";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Image,
   ScrollView,
@@ -25,6 +26,7 @@ export default function SelecaoFazenda() {
   const [ready, setReady] = useState(false);
   const [novaFazendaNome, setNovaFazendaNome] = useState("");
   const [criando, setCriando] = useState(false);
+  const progressoCriar = useProgresso();
 
   // Dar tempo para o AuthContext carregar fazendas
   useEffect(() => {
@@ -50,19 +52,23 @@ export default function SelecaoFazenda() {
       return;
     }
     setCriando(true);
+    progressoCriar.iniciar(2);
     try {
-      const docRef = await addRawDocument(["fazendas"], {
-        nome: novaFazendaNome.trim(),
-      });
+      const docRef = await progressoCriar.rastrear(
+        addRawDocument(["fazendas"], {
+          nome: novaFazendaNome.trim(),
+        })
+      );
       // Setar fazendaId para que o seed use o path correto
       setCurrentFazendaId(docRef.id);
-      await seedTabelasAuxiliares();
+      await progressoCriar.rastrear(seedTabelasAuxiliares());
       // Selecionar a fazenda recem-criada diretamente
       selectFazenda(docRef.id, novaFazendaNome.trim());
     } catch (error) {
       console.error("Erro ao criar fazenda:", error);
       Alert.alert("Erro", "Nao foi possivel criar a fazenda.");
     } finally {
+      progressoCriar.concluir();
       setCriando(false);
     }
   }
@@ -71,7 +77,7 @@ export default function SelecaoFazenda() {
   if (!ready) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} />
         <Text style={styles.loadingText}>Carregando...</Text>
       </View>
     );
@@ -112,7 +118,7 @@ export default function SelecaoFazenda() {
             />
             <View style={{ marginTop: 12 }}>
               {criando ? (
-                <ActivityIndicator size="large" color={primaryColor} />
+                <LoadingIndicator size="large" color={primaryColor} progresso={progressoCriar} />
               ) : (
                 <Button label="Criar Fazenda" onPress={handleCriarFazenda} />
               )}
@@ -159,7 +165,7 @@ export default function SelecaoFazenda() {
   if (fazendas.length === 1) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} />
       </View>
     );
   }

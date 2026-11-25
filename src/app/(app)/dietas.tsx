@@ -5,8 +5,10 @@ import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Compra, Insumo } from "@/components/InsumoCard";
 import { InsumoFormModal } from "@/components/InsumoFormModal";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { SelectOption } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -18,7 +20,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -58,6 +59,7 @@ export default function Dietas() {
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [dietas, setDietas] = useState<Dieta[]>([]);
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
 
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [insumosMap, setInsumosMap] = useState<Map<string, Insumo>>(new Map());
@@ -78,20 +80,25 @@ export default function Dietas() {
   async function fetchAllData() {
     try {
       setLoading(true);
+      // 3 consultas iniciais (insumos, aditivos, dietas); as compras por insumo
+      // são acrescentadas em fetchInsumos quando a quantidade é conhecida.
+      progresso.iniciar(3);
       await Promise.all([fetchInsumos(), fetchAditivos(), fetchDietas()]);
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
 
   async function fetchInsumos() {
-    const insumosSnap = await getCollection("insumos");
+    const insumosSnap = await progresso.rastrear(getCollection("insumos"));
 
+    progresso.adicionarEtapas(insumosSnap.docs.length);
     const comprasSnaps = await Promise.all(
       insumosSnap.docs.map((insumoDoc) =>
-        getCollection("insumos", insumoDoc.id, "compras")
+        progresso.rastrear(getCollection("insumos", insumoDoc.id, "compras"))
       )
     );
 
@@ -129,7 +136,7 @@ export default function Dietas() {
   }
 
   async function fetchAditivos() {
-    const snap = await getCollection("aditivos");
+    const snap = await progresso.rastrear(getCollection("aditivos"));
     const options: SelectOption[] = snap.docs
       .map((d) => ({
         label: d.data().descricao ?? "",
@@ -140,7 +147,7 @@ export default function Dietas() {
   }
 
   async function fetchDietas() {
-    const snap = await getCollection("dietas");
+    const snap = await progresso.rastrear(getCollection("dietas"));
     const data: Dieta[] = snap.docs.map((d) => ({
       id: d.id,
       nome: d.data().nome ?? "",
@@ -273,10 +280,11 @@ export default function Dietas() {
             </TouchableOpacity>
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progresso}
               />
             ) : dietas.length === 0 ? (
               <Text style={styles.emptyText}>

@@ -1,9 +1,11 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { LinhaDoTempo } from "@/components/LinhaDoTempo";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { TarjaProprietario } from "@/components/TarjaProprietario";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import Aviso from "@/services/alerta";
 import { ehTerceiro, nomeProprietario } from "@/services/embarque";
@@ -20,7 +22,6 @@ import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   Platform,
   ScrollView,
@@ -126,12 +127,15 @@ export default function AnimalDetalhe() {
   const [formEvObs, setFormEvObs] = useState("");
   const [formEvProx, setFormEvProx] = useState("");
   const [salvandoEvento, setSalvandoEvento] = useState(false);
+  const progresso = useProgresso();
+  const progressoSalvarEvento = useProgresso();
 
   const carregar = useCallback(async () => {
     if (!animalId || !fazendaId) return;
     setCarregando(true);
+    progresso.iniciar(4);
     try {
-      const [lista, pesagensData, eventosData, historicoData] = await Promise.all([
+      const [lista, pesagensData, eventosData, historicoData] = await progresso.todas([
         PesagemFirestoreService.listarBovinos(fazendaId),
         PesagemFirestoreService.obterPesagensAnimal(animalId, fazendaId, 50),
         PesagemFirestoreService.listarEventosSanitarios(animalId, fazendaId),
@@ -143,6 +147,7 @@ export default function AnimalDetalhe() {
       setEventos(eventosData);
       setHistorico(semEstornados(historicoData));
     } finally {
+      progresso.concluir();
       setCarregando(false);
     }
   }, [animalId, fazendaId]);
@@ -179,6 +184,7 @@ export default function AnimalDetalhe() {
       return;
     }
     setSalvandoEvento(true);
+    progressoSalvarEvento.iniciar(!eventoSelecionado && animal ? 2 : 1);
     try {
       const ev: EventoSanitario = {
         ...(eventoSelecionado ?? {}),
@@ -194,28 +200,30 @@ export default function AnimalDetalhe() {
         farmedaId: fazendaId,
         criadoEm: eventoSelecionado?.criadoEm ?? new Date().toISOString(),
       };
-      await PesagemFirestoreService.salvarEventoSanitario(ev, fazendaId);
+      await progressoSalvarEvento.rastrear(PesagemFirestoreService.salvarEventoSanitario(ev, fazendaId));
 
       // Só a primeira gravação entra na linha do tempo; uma edição corrige o
       // registro sanitário sem inventar uma segunda aplicação no histórico.
       if (!eventoSelecionado && animal) {
-        await EventoService.registrar(
-          animal,
-          {
-            tipo: "sanitario",
-            dataHora: ev.dataAplicacao,
-            sanitario: {
-              tipo: ev.tipo,
-              produto: ev.descricao,
-              dose: ev.dose,
-              via: ev.via,
-              proximaEm: ev.proxAplicacao,
+        await progressoSalvarEvento.rastrear(
+          EventoService.registrar(
+            animal,
+            {
+              tipo: "sanitario",
+              dataHora: ev.dataAplicacao,
+              sanitario: {
+                tipo: ev.tipo,
+                produto: ev.descricao,
+                dose: ev.dose,
+                via: ev.via,
+                proximaEm: ev.proxAplicacao,
+              },
+              observacoes: ev.observacoes,
+              usuarioId: ev.tecnico || "sistema",
+              origem: "manual",
             },
-            observacoes: ev.observacoes,
-            usuarioId: ev.tecnico || "sistema",
-            origem: "manual",
-          },
-          fazendaId
+            fazendaId
+          )
         );
       }
 
@@ -224,6 +232,7 @@ export default function AnimalDetalhe() {
     } catch {
       Aviso.alert("Erro", "Não foi possível salvar o evento.");
     } finally {
+      progressoSalvarEvento.concluir();
       setSalvandoEvento(false);
     }
   }
@@ -246,7 +255,7 @@ export default function AnimalDetalhe() {
     return (
       <DrawerSceneWrapper>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={primaryColor} />
+          <LoadingIndicator size="large" color={primaryColor} progresso={progresso} />
         </View>
       </DrawerSceneWrapper>
     );
@@ -669,7 +678,7 @@ export default function AnimalDetalhe() {
                   disabled={salvandoEvento}
                 >
                   {salvandoEvento ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <LoadingIndicator size="small" color="#fff" inline progresso={progressoSalvarEvento} />
                   ) : (
                     <Text style={styles.btnSalvarText}>Salvar</Text>
                   )}

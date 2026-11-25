@@ -1,7 +1,9 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import Aviso from "@/services/alerta";
 import EventoService from "@/services/eventoService";
@@ -17,7 +19,6 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Modal,
   ScrollView,
@@ -57,6 +58,8 @@ export default function Animais() {
   const [modalVisible, setModalVisible] = useState(false);
   const [animalSelecionado, setAnimalSelecionado] = useState<Bovino | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const progresso = useProgresso();
+  const progressoSalvar = useProgresso();
 
   // Form state
   const [formSisbov, setFormSisbov] = useState("");
@@ -73,13 +76,15 @@ export default function Animais() {
   const carregar = useCallback(async () => {
     if (!fazendaId) return;
     setCarregando(true);
+    progresso.iniciar(1);
     try {
-      const lista = await PesagemFirestoreService.listarBovinos(fazendaId);
+      const lista = await progresso.rastrear(PesagemFirestoreService.listarBovinos(fazendaId));
       setAnimais(lista);
       setFiltrados(lista);
     } catch (e) {
       Aviso.alert("Erro", "Não foi possível carregar os animais.");
     } finally {
+      progresso.concluir();
       setCarregando(false);
     }
   }, [fazendaId]);
@@ -155,6 +160,7 @@ export default function Animais() {
       return;
     }
     setSalvando(true);
+    progressoSalvar.iniciar(animalSelecionado?.id ? 1 : 2);
     try {
       const dados: Omit<Bovino, "id"> = {
         sisbov: formSisbov,
@@ -171,21 +177,25 @@ export default function Animais() {
       };
 
       if (animalSelecionado?.id) {
-        await PesagemFirestoreService.atualizarBovino({ ...dados, id: animalSelecionado.id }, fazendaId);
+        await progressoSalvar.rastrear(
+          PesagemFirestoreService.atualizarBovino({ ...dados, id: animalSelecionado.id }, fazendaId)
+        );
       } else {
         // O SISBOV é a identidade do animal, então serve de id do documento e
         // impede que o mesmo brinco seja cadastrado duas vezes.
         const novo: Bovino = { ...dados, id: formSisbov };
-        await PesagemFirestoreService.salvarBovino(novo, fazendaId);
-        await EventoService.registrar(
-          novo,
-          {
-            tipo: "cadastro",
-            dataHora: new Date().toISOString(),
-            usuarioId: "manual",
-            origem: "manual",
-          },
-          fazendaId
+        await progressoSalvar.rastrear(PesagemFirestoreService.salvarBovino(novo, fazendaId));
+        await progressoSalvar.rastrear(
+          EventoService.registrar(
+            novo,
+            {
+              tipo: "cadastro",
+              dataHora: new Date().toISOString(),
+              usuarioId: "manual",
+              origem: "manual",
+            },
+            fazendaId
+          )
         );
       }
 
@@ -194,6 +204,7 @@ export default function Animais() {
     } catch (e) {
       Aviso.alert("Erro", "Não foi possível salvar o animal.");
     } finally {
+      progressoSalvar.concluir();
       setSalvando(false);
     }
   }
@@ -356,7 +367,7 @@ export default function Animais() {
         {/* Lista */}
         {carregando ? (
           <View style={styles.centro}>
-            <ActivityIndicator size="large" color={primaryColor} />
+            <LoadingIndicator size="large" color={primaryColor} progresso={progresso} />
           </View>
         ) : filtrados.length === 0 ? (
           <View style={styles.centro}>
@@ -511,7 +522,7 @@ export default function Animais() {
               disabled={salvando}
             >
               {salvando ? (
-                <ActivityIndicator color="#fff" />
+                <LoadingIndicator size="small" color="#fff" inline progresso={progressoSalvar} />
               ) : (
                 <Text style={styles.btnSalvarText}>
                   {animalSelecionado ? "Salvar Alterações" : "Cadastrar Animal"}

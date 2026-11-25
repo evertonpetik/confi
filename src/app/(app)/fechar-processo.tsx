@@ -7,8 +7,10 @@
  * depois como pendência de certificação.
  */
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import Aviso from "@/services/alerta";
 import BrincoService from "@/services/brincoService";
@@ -26,7 +28,6 @@ import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Platform,
   ScrollView,
   StyleSheet,
@@ -54,19 +55,24 @@ export default function FecharProcesso() {
   const [carregando, setCarregando] = useState(true);
   const [gerando, setGerando] = useState<"xlsx" | "pacote" | null>(null);
   const [concluindo, setConcluindo] = useState(false);
+  const progressoCarga = useProgresso();
+  const progressoGerar = useProgresso();
+  const progressoConcluir = useProgresso();
 
   const carregar = useCallback(async () => {
     if (!processoId || !fazendaId) return;
     setCarregando(true);
+    progressoCarga.iniciar(1);
     try {
-      const proc = await BrincoService.obterProcessoMangueiro(processoId, fazendaId);
+      const proc = await progressoCarga.rastrear(BrincoService.obterProcessoMangueiro(processoId, fazendaId));
       if (!proc) return;
       setProcesso(proc);
 
+      progressoCarga.adicionarEtapas((proc.gtaIds ?? []).length + 2);
       const [listaGtas, todosEventos, todosAnimais] = await Promise.all([
-        Promise.all((proc.gtaIds ?? []).map((id) => BrincoService.obterGta(id, fazendaId))),
-        EventoService.listarDoProcesso(processoId, fazendaId),
-        PesagemFirestoreService.listarBovinos(fazendaId),
+        Promise.all((proc.gtaIds ?? []).map((id) => progressoCarga.rastrear(BrincoService.obterGta(id, fazendaId)))),
+        progressoCarga.rastrear(EventoService.listarDoProcesso(processoId, fazendaId)),
+        progressoCarga.rastrear(PesagemFirestoreService.listarBovinos(fazendaId)),
       ]);
 
       const gtasProc = listaGtas.filter(Boolean) as GTA[];
@@ -84,6 +90,7 @@ export default function FecharProcesso() {
       setAnimais(animaisProc);
       setResumo(resumirFechamento(proc, gtasProc, animaisProc, eventosValidos));
     } finally {
+      progressoCarga.concluir();
       setCarregando(false);
     }
   }, [processoId, fazendaId]);
@@ -95,17 +102,21 @@ export default function FecharProcesso() {
   const baixarPlanilha = async () => {
     if (!processo) return;
     setGerando("xlsx");
+    progressoGerar.iniciar(1);
     try {
       const bytes = gerarXlsxPlanilhaCampo(animais);
-      await salvarArquivo(
-        `planilha-de-campo-${processo.nome.replace(/[^\w-]+/g, "_")}.xlsx`,
-        bytes,
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      await progressoGerar.rastrear(
+        salvarArquivo(
+          `planilha-de-campo-${processo.nome.replace(/[^\w-]+/g, "_")}.xlsx`,
+          bytes,
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
       );
     } catch (e) {
       console.error(e);
       Aviso.alert("Erro", "Não foi possível gerar a planilha.");
     } finally {
+      progressoGerar.concluir();
       setGerando(null);
     }
   };
@@ -113,13 +124,14 @@ export default function FecharProcesso() {
   const baixarPacote = async () => {
     if (!processo) return;
     setGerando("pacote");
+    progressoGerar.iniciar(gtas.filter((g) => g.pdfUrl).length + 1);
     try {
       // Os PDFs vivem no Storage; baixa agora para montar o pacote.
       const comPdf: GtaComPdf[] = await Promise.all(
         gtas.map(async (gta) => {
           if (!gta.pdfUrl) return { gta };
           try {
-            return { gta, pdf: await baixarBytes(gta.pdfUrl) };
+            return { gta, pdf: await progressoGerar.rastrear(baixarBytes(gta.pdfUrl)) };
           } catch (e) {
             console.warn("[GTA] falha ao baixar o PDF arquivado:", e);
             return { gta };
@@ -129,7 +141,7 @@ export default function FecharProcesso() {
       const semPdf = comPdf.filter((g) => !g.pdf).length;
 
       const pacote = montarPacoteCertificadora(processo, animais, comPdf);
-      await salvarArquivo(pacote.nome, pacote.bytes, "application/zip");
+      await progressoGerar.rastrear(salvarArquivo(pacote.nome, pacote.bytes, "application/zip"));
 
       if (semPdf > 0) {
         Aviso.alert(
@@ -142,6 +154,7 @@ export default function FecharProcesso() {
       console.error(e);
       Aviso.alert("Erro", "Não foi possível montar o pacote.");
     } finally {
+      progressoGerar.concluir();
       setGerando(null);
     }
   };
@@ -149,11 +162,14 @@ export default function FecharProcesso() {
   const concluirProcesso = async () => {
     if (!processo?.id) return;
     setConcluindo(true);
+    progressoConcluir.iniciar(1);
     try {
-      await BrincoService.atualizarProcessoMangueiro(
-        processo.id,
-        { status: "concluido", dataConclusao: new Date().toISOString() },
-        fazendaId
+      await progressoConcluir.rastrear(
+        BrincoService.atualizarProcessoMangueiro(
+          processo.id,
+          { status: "concluido", dataConclusao: new Date().toISOString() },
+          fazendaId
+        )
       );
       Aviso.alert("Processo concluído", `${animais.length} animais registrados.`, [
         { text: "OK", onPress: () => router.back() },
@@ -161,6 +177,7 @@ export default function FecharProcesso() {
     } catch {
       Aviso.alert("Erro", "Não foi possível concluir o processo.");
     } finally {
+      progressoConcluir.concluir();
       setConcluindo(false);
     }
   };
@@ -169,7 +186,7 @@ export default function FecharProcesso() {
     return (
       <DrawerSceneWrapper>
         <View style={styles.centro}>
-          <ActivityIndicator size="large" color={primaryColor} />
+          <LoadingIndicator size="large" color={primaryColor} progresso={progressoCarga} />
         </View>
       </DrawerSceneWrapper>
     );
@@ -312,7 +329,7 @@ export default function FecharProcesso() {
               disabled={gerando !== null || animais.length === 0}
             >
               {gerando === "xlsx" ? (
-                <ActivityIndicator size="small" color={primaryColor} />
+                <LoadingIndicator size="small" color={primaryColor} inline progresso={progressoGerar} />
               ) : (
                 <Feather name="file-text" size={18} color={primaryColor} />
               )}
@@ -330,7 +347,7 @@ export default function FecharProcesso() {
               disabled={gerando !== null || animais.length === 0}
             >
               {gerando === "pacote" ? (
-                <ActivityIndicator size="small" color={primaryColor} />
+                <LoadingIndicator size="small" color={primaryColor} inline progresso={progressoGerar} />
               ) : (
                 <Feather name="package" size={18} color={primaryColor} />
               )}
@@ -368,9 +385,11 @@ export default function FecharProcesso() {
             disabled={concluindo}
           >
             <Feather name="check-circle" size={18} color="#fff" />
-            <Text style={styles.btnConcluirText}>
-              {concluindo ? "Concluindo…" : "Concluir processo"}
-            </Text>
+            {concluindo ? (
+              <LoadingIndicator inline size="small" color="#fff" texto="Concluindo" progresso={progressoConcluir} />
+            ) : (
+              <Text style={styles.btnConcluirText}>Concluir processo</Text>
+            )}
           </TouchableOpacity>
 
           {Platform.OS !== "web" && (

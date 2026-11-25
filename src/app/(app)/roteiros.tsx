@@ -5,10 +5,12 @@ import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Insumo } from "@/components/InsumoCard";
 import { InsumoFormModal } from "@/components/InsumoFormModal";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { Roteiro, RoteiroCard } from "@/components/RoteiroCard";
 import { RoteiroFormModal } from "@/components/RoteiroFormModal";
 import { SelectOption } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -20,7 +22,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -46,6 +47,7 @@ export default function Roteiros() {
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [roteiros, setRoteiros] = useState<Roteiro[]>([]);
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
   const [filtro, setFiltro] = useState<FiltroStatus>("ativos");
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -117,7 +119,8 @@ export default function Roteiros() {
   async function fetchRoteiros() {
     try {
       setLoading(true);
-      const snap = await getCollection("roteiros");
+      progresso.iniciar(1);
+      const snap = await progresso.rastrear(getCollection("roteiros"));
       const data: Roteiro[] = snap.docs.map((d) => ({
         id: d.id,
         numero: d.data().numero ?? 0,
@@ -132,6 +135,7 @@ export default function Roteiros() {
     } catch (error) {
       console.error("Erro ao buscar roteiros:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -317,10 +321,11 @@ export default function Roteiros() {
             </TouchableOpacity>
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progresso}
               />
             ) : roteirosFiltrados.length === 0 ? (
               <Text style={styles.emptyText}>

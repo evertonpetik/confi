@@ -3,9 +3,14 @@ import { getCollection } from "@/services/firestoreService";
 /**
  * Pre-fetches all Firestore collections and subcollections used by the app.
  * This populates the offline cache so the app can work without internet.
+ *
+ * O progresso é reportado por etapa concluída: cada coleção raiz conta 1,
+ * e cada lote/insumo (sub-coleções) conta 1. O total cresce quando o número
+ * de lotes/insumos é descoberto, por isso `concluidas`/`total` são informados
+ * em vez de um percentual fixo.
  */
 
-type ProgressCallback = (message: string, progress: number) => void;
+type ProgressCallback = (message: string, progress: number, concluidas: number, total: number) => void;
 
 const TOP_LEVEL_COLLECTIONS = [
   "lotes",
@@ -32,41 +37,51 @@ const TOP_LEVEL_COLLECTIONS = [
 ];
 
 export async function prefetchAllData(onProgress?: ProgressCallback): Promise<void> {
-  const totalSteps = TOP_LEVEL_COLLECTIONS.length + 3; // +3 for subcollection phases
-  let currentStep = 0;
+  // Coleções raiz + 2 consultas (lotes e insumos) que descobrem as sub-coleções.
+  let total = TOP_LEVEL_COLLECTIONS.length + 2;
+  let concluidas = 0;
 
-  function reportProgress(message: string) {
-    currentStep++;
-    onProgress?.(message, Math.min((currentStep / totalSteps) * 100, 100));
+  function reportar(message: string) {
+    onProgress?.(message, Math.min((concluidas / total) * 100, 100), concluidas, total);
   }
 
   // 1. Fetch all top-level collections
   for (const col of TOP_LEVEL_COLLECTIONS) {
-    reportProgress(`Buscando ${col}...`);
+    reportar(`Buscando ${col}...`);
     await getCollection(col);
+    concluidas++;
   }
 
   // 2. Fetch lotes subcollections (movimentacoes, leituras)
-  reportProgress("Buscando movimentacoes e leituras dos lotes...");
+  reportar("Buscando movimentacoes e leituras dos lotes...");
   const lotesSnap = await getCollection("lotes");
+  concluidas++;
+  total += lotesSnap.docs.length;
   for (const loteDoc of lotesSnap.docs) {
+    reportar("Buscando movimentacoes e leituras dos lotes...");
     await Promise.all([
       getCollection("lotes", loteDoc.id, "movimentacoes"),
       getCollection("lotes", loteDoc.id, "leituras"),
     ]);
+    concluidas++;
   }
 
   // 3. Fetch insumos subcollections (compras, saidas, conferencias)
-  reportProgress("Buscando compras, saidas e conferencias dos insumos...");
+  reportar("Buscando compras, saidas e conferencias dos insumos...");
   const insumosSnap = await getCollection("insumos");
+  concluidas++;
+  total += insumosSnap.docs.length;
   for (const insumoDoc of insumosSnap.docs) {
+    reportar("Buscando compras, saidas e conferencias dos insumos...");
     await Promise.all([
       getCollection("insumos", insumoDoc.id, "compras"),
       getCollection("insumos", insumoDoc.id, "saidas"),
       getCollection("insumos", insumoDoc.id, "conferencias"),
     ]);
+    concluidas++;
   }
 
   // 4. Done
-  reportProgress("Sincronizacao concluida!");
+  concluidas = total;
+  reportar("Sincronizacao concluida!");
 }

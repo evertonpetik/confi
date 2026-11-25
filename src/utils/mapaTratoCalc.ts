@@ -1,5 +1,6 @@
 import { CargaTrato } from "@/components/CargaModal";
 import { DescargaTrato } from "@/components/DescargaModal";
+import type { RastreadorProgresso } from "@/hooks/useProgresso";
 import { somarEmbarquesAgendadosNaData } from "@/services/embarqueAgendado";
 import { resolverMSDieta } from "@/utils/dietaCalc";
 import { PERDAS_COCHO_PADRAO, type LoteFatores } from "@/utils/gmdCalc";
@@ -271,22 +272,27 @@ export function getHojeStr(date?: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFetchResult> {
+export async function fetchMapaTratoData(dataStr?: string, progresso?: RastreadorProgresso): Promise<MapaTratoFetchResult> {
   const hoje = dataStr ?? getHojeStr();
 
+  // Progresso: 12 coleções + base CMS + histórico de ontem + histórico de hoje;
+  // etapas por insumo (2) e por lote (3) são acrescentadas quando descobertas.
+  progresso?.iniciar(12 + 3);
+  const rastrear = <T,>(p: Promise<T>): Promise<T> => (progresso ? progresso.rastrear(p) : p);
+
   const [vagaoSnap, rotSnap, dietaSnap, lotesSnap, insumosSnap, racaSnap, implSnap, compSnap, gecSnap, aditSnap, tcSnap, parametrosSnap] = await Promise.all([
-    getCollection("vagao"),
-    getCollection("roteiros"),
-    getCollection("dietas"),
-    getCollection("lotes"),
-    getCollection("insumos"),
-    getCollection("raca"),
-    getCollection("implante"),
-    getCollection("compensatorio"),
-    getCollection("gec"),
-    getCollection("aditivos"),
-    getCollection("tamanhoCorporal"),
-    getCollection("parametros"),
+    rastrear(getCollection("vagao")),
+    rastrear(getCollection("roteiros")),
+    rastrear(getCollection("dietas")),
+    rastrear(getCollection("lotes")),
+    rastrear(getCollection("insumos")),
+    rastrear(getCollection("raca")),
+    rastrear(getCollection("implante")),
+    rastrear(getCollection("compensatorio")),
+    rastrear(getCollection("gec")),
+    rastrear(getCollection("aditivos")),
+    rastrear(getCollection("tamanhoCorporal")),
+    rastrear(getCollection("parametros")),
   ]);
 
   // Vagões
@@ -340,10 +346,11 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
 
   // Insumos MS map (com precoMedio via média ponderada móvel)
   const insumosMap = new Map<string, InsumoMS>();
+  progresso?.adicionarEtapas(insumosSnap.docs.length * 2);
   for (const d of insumosSnap.docs) {
     const [comprasSnap, saidasSnap] = await Promise.all([
-      getCollection("insumos", d.id, "compras"),
-      getCollection("insumos", d.id, "saidas"),
+      rastrear(getCollection("insumos", d.id, "compras")),
+      rastrear(getCollection("insumos", d.id, "saidas")),
     ]);
     type Ev = { data: string; tipo: "E" | "S"; quantidade: number; precoKg: number };
     const eventos: Ev[] = [
@@ -380,11 +387,11 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
   }
 
   // CMS base do dia anterior por lote (realizado ou previsto, conforme configuracao)
-  const baseCmsLeitura = await getBaseCmsLeitura();
+  const baseCmsLeitura = await rastrear(getBaseCmsLeitura());
   const ontem = new Date();
   ontem.setDate(ontem.getDate() - 1);
   const ontemStr = `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, "0")}-${String(ontem.getDate()).padStart(2, "0")}`;
-  const histOntemSnap = await queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", ontemStr)]);
+  const histOntemSnap = await rastrear(queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", ontemStr)]));
   const cmsOntemMap = new Map<string, number>();
   for (const hDoc of histOntemSnap.docs) {
     const msPorLote = hDoc.data().msPorLote as { loteId: string; cmsRealizado?: number; cmsPrevisto?: number }[] | undefined;
@@ -401,11 +408,14 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
   // Lotes with movimentacoes and CMS
   const lotesData: LoteData[] = [];
   const embarquesHoje: EmbarqueHojeInfo[] = [];
+  progresso?.adicionarEtapas(
+    lotesSnap.docs.filter((d) => d.data().piqueteId && d.data().ativo !== false).length * 3
+  );
   for (const loteDoc of lotesSnap.docs) {
     const ld = loteDoc.data();
     if (!ld.piqueteId || ld.ativo === false) continue;
 
-    const movSnap = await getCollection("lotes", loteDoc.id, "movimentacoes");
+    const movSnap = await rastrear(getCollection("lotes", loteDoc.id, "movimentacoes"));
     const movs = movSnap.docs.map((m) => ({
       evento: m.data().evento as string,
       quantidade: m.data().quantidade as number,
@@ -418,10 +428,10 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
     try {
       // limit(10): pode haver varias leituras no mesmo dia; o desempate é feito
       // no cliente por criadoEm (ver escolherLeituraMaisRecente)
-      const leitSnap = await queryCollection(
+      const leitSnap = await rastrear(queryCollection(
         ["lotes", loteDoc.id, "leituras"],
         [fsOrderBy("data", "desc"), fsLimit(10)]
-      );
+      ));
       const ultimaLeitura = escolherLeituraMaisRecente(
         leitSnap.docs.map((d) => d.data() as { data?: string; criadoEm?: number; cmsNovo?: number })
       );
@@ -440,7 +450,7 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
       cmsAtual = cmsOntemMap.get(loteDoc.id)!;
     }
 
-    const embarquesSnap = await getCollection("lotes", loteDoc.id, "embarquesAgendados");
+    const embarquesSnap = await rastrear(getCollection("lotes", loteDoc.id, "embarquesAgendados"));
     const embarquesDocs = embarquesSnap.docs.map((e) => ({
       data: e.data().data as string,
       quantidade: e.data().quantidade as number,
@@ -513,7 +523,7 @@ export async function fetchMapaTratoData(dataStr?: string): Promise<MapaTratoFet
   const fatorMaps: FatorMaps = { racaFatorMap, implanteFatorMap, compensFatorMap, aditivoFatorMap, tcFatorMap, gecFatorMap, perdasCocho };
 
   // Load today's historico
-  const histSnap = await queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", hoje)]);
+  const histSnap = await rastrear(queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", hoje)]));
   const historicoCargas = new Map<string, CargaTrato[]>();
   const historicoDescargas = new Map<string, DescargaTrato[]>();
   const percentualMSPorRoteiro = new Map<string, number>();

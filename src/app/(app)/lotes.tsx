@@ -3,6 +3,7 @@ import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { FaturamentoModal, LancamentoFinanceiro } from "@/components/FaturamentoModal";
 import { AgendarEmbarqueModal } from "@/components/AgendarEmbarqueModal";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { calcularQuantidadeAtual, Lote, LoteCard, Movimentacao } from "@/components/LoteCard";
 import { LoteFormModal } from "@/components/LoteFormModal";
 import { MovimentacaoFormModal } from "@/components/MovimentacaoFormModal";
@@ -10,6 +11,7 @@ import { Produtor } from "@/components/ProdutorCard";
 import { ProdutorFormModal } from "@/components/ProdutorFormModal";
 import { SelectOption } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import { proximoEmbarqueAgendado } from "@/services/embarqueAgendado";
 import {
@@ -24,7 +26,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -42,6 +43,7 @@ export default function Lotes() {
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
   const [filtro, setFiltro] = useState<FiltroStatus>("ativos");
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -157,17 +159,20 @@ export default function Lotes() {
   async function fetchLotes() {
     try {
       setLoading(true);
-      const lotesSnap = await getCollection("lotes");
+      progresso.iniciar(1);
+      const lotesSnap = await progresso.rastrear(getCollection("lotes"));
 
+      // 2 sub-consultas por lote (movimentacoes, embarquesAgendados)
+      progresso.adicionarEtapas(lotesSnap.docs.length * 2);
       const [movSnaps, embarqueSnaps] = await Promise.all([
         Promise.all(
           lotesSnap.docs.map((loteDoc) =>
-            getCollection("lotes", loteDoc.id, "movimentacoes")
+            progresso.rastrear(getCollection("lotes", loteDoc.id, "movimentacoes"))
           )
         ),
         Promise.all(
           lotesSnap.docs.map((loteDoc) =>
-            getCollection("lotes", loteDoc.id, "embarquesAgendados")
+            progresso.rastrear(getCollection("lotes", loteDoc.id, "embarquesAgendados"))
           )
         ),
       ]);
@@ -216,6 +221,7 @@ export default function Lotes() {
     } catch (error) {
       console.error("Erro ao buscar lotes:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -668,10 +674,11 @@ export default function Lotes() {
             </TouchableOpacity>
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progresso}
               />
             ) : lotesFiltrados.length === 0 ? (
               <Text style={styles.emptyText}>

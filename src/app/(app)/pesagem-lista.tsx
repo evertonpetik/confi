@@ -3,9 +3,10 @@ export default function PesagemListaPage() {
   return <Redirect href="/(app)/pesagem-balanca" />;
 }
 
+import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { useProgresso } from "@/hooks/useProgresso";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Platform,
@@ -42,6 +43,7 @@ export const TelaListaPesagem: React.FC<TelaListaPesagemProps> = ({
   const [termo, setTermo] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [conectando, setConectando] = useState(true);
+  const progressoConectar = useProgresso();
 
   // Carrega bovinos e conecta dispositivos
   useEffect(() => {
@@ -85,11 +87,13 @@ export const TelaListaPesagem: React.FC<TelaListaPesagemProps> = ({
   const conectarDispositivos = async () => {
     try {
       setConectando(true);
-      await iniciarDescoberta();
+      progressoConectar.iniciar(1);
+      await progressoConectar.rastrear(iniciarDescoberta());
     } catch (error) {
       console.error("Erro ao descobrir dispositivos:", error);
       Alert.alert("Atenção", "Verifique se Bluetooth está ativo");
     } finally {
+      progressoConectar.concluir();
       setConectando(false);
     }
   };
@@ -163,7 +167,7 @@ export const TelaListaPesagem: React.FC<TelaListaPesagemProps> = ({
 
       {/* Lista */}
       {carregando ? (
-        <ActivityIndicator
+        <LoadingIndicator
           size="large"
           color="#0066cc"
           style={styles.carregando}
@@ -189,9 +193,13 @@ export const TelaListaPesagem: React.FC<TelaListaPesagemProps> = ({
       {/* Rodapé */}
       <View style={styles.rodape}>
         {conectando && (
-          <Text style={styles.textoRodape}>
-            Procurando dispositivos Bluetooth...
-          </Text>
+          <LoadingIndicator
+            inline
+            size="small"
+            color="#666"
+            texto="Procurando dispositivos Bluetooth..."
+            progresso={progressoConectar}
+          />
         )}
       </View>
     </View>

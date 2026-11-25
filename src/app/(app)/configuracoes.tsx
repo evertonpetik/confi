@@ -1,4 +1,5 @@
 import { Button } from "@/components/Button";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
@@ -9,6 +10,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useProgresso } from "@/hooks/useProgresso";
 import {
   addDocument,
   deleteDocument,
@@ -24,7 +26,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -115,6 +116,8 @@ export default function Configuracoes() {
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState("");
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const progressoTabelas = useProgresso();
+  const progressoSync = useProgresso();
   const [baseCmsLeitura, setBaseCmsLeitura] = useState<BaseCmsLeitura>("realizado");
 
   // Data per table: colecao -> items[]
@@ -170,9 +173,10 @@ export default function Configuracoes() {
   async function fetchAllTables() {
     try {
       setLoadingData(true);
+      progressoTabelas.iniciar(TABELAS.length);
       const newDados = new Map<string, ItemAux[]>();
       const promises = TABELAS.map(async (t) => {
-        const snap = await getCollection(t.colecao);
+        const snap = await progressoTabelas.rastrear(getCollection(t.colecao));
         const items: ItemAux[] = snap.docs.map((d) => ({
           id: d.id,
           ...d.data(),
@@ -187,6 +191,7 @@ export default function Configuracoes() {
     } catch (error) {
       console.error("Erro ao buscar tabelas:", error);
     } finally {
+      progressoTabelas.concluir();
       setLoadingData(false);
     }
   }
@@ -201,8 +206,13 @@ export default function Configuracoes() {
   async function handleSync() {
     setSyncing(true);
     setSyncProgress("Iniciando sincronizacao...");
+    progressoSync.iniciar(0);
     try {
-      await prefetchAllData((msg, _pct) => setSyncProgress(msg));
+      await prefetchAllData((msg, _pct, concluidas, total) => {
+        setSyncProgress(msg);
+        progressoSync.definir(concluidas, total);
+      });
+      progressoSync.concluir();
       const now = new Date().toLocaleString("pt-BR");
       await AsyncStorage.setItem(`@lastSync:${selectedFazendaId}`, now);
       setLastSync(now);
@@ -211,6 +221,7 @@ export default function Configuracoes() {
       console.error("Erro ao sincronizar:", error);
       Alert.alert("Erro", "Nao foi possivel sincronizar os dados.");
     } finally {
+      progressoSync.concluir();
       setSyncing(false);
       setSyncProgress("");
     }
@@ -393,7 +404,7 @@ export default function Configuracoes() {
               )}
               {syncing ? (
                 <View style={{ alignItems: "center", marginTop: 12, gap: 8 }}>
-                  <ActivityIndicator size="large" color={primaryColor} />
+                  <LoadingIndicator size="large" color={primaryColor} progresso={progressoSync} />
                   <Text style={[styles.syncProgressText, { color: primaryColor }]}>{syncProgress}</Text>
                 </View>
               ) : (
@@ -406,9 +417,10 @@ export default function Configuracoes() {
               <Text style={styles.sectionTitle}>Tabelas Auxiliares</Text>
 
               {loadingData ? (
-                <ActivityIndicator
+                <LoadingIndicator
                   size="large"
                   color={primaryColor}
+                  progresso={progressoTabelas}
                   style={{ marginTop: 16 }}
                 />
               ) : (

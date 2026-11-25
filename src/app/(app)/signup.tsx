@@ -4,8 +4,10 @@ import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { IdentidadeVisual } from "@/components/IdentidadeVisual";
 import { Input } from "@/components/Input";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { ALL_MODULOS, Fazenda, ModuloId, TipoUsuario, TIPOS_USUARIO, useAuth } from "@/contexts/AuthContext";
 import { MODULO_LABEL, telasSelecionaveis } from "@/constants/telas";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useTheme } from "@/contexts/ThemeContext";
 import { createUserOnSecondaryApp } from "@/services/authService";
@@ -23,7 +25,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -59,6 +60,7 @@ export default function Signup() {
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const { userProfile } = useAuth();
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [fazendas, setFazendas] = useState<Fazenda[]>([]);
 
@@ -75,11 +77,13 @@ export default function Signup() {
   const [formRestringirTelas, setFormRestringirTelas] = useState(false);
   const [formTelas, setFormTelas] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const progressoSalvar = useProgresso();
 
   // Fazenda form modal
   const [fazendaModalVisible, setFazendaModalVisible] = useState(false);
   const [formFazendaNome, setFormFazendaNome] = useState("");
   const [savingFazenda, setSavingFazenda] = useState(false);
+  const progressoSalvarFazenda = useProgresso();
   // Identidade visual (cor e logo) da fazenda em edição
   const [temaFazenda, setTemaFazenda] = useState<Fazenda | null>(null);
 
@@ -101,7 +105,8 @@ export default function Signup() {
   async function fetchData() {
     try {
       setLoading(true);
-      const [usersSnap, fazendasSnap] = await Promise.all([
+      progresso.iniciar(2);
+      const [usersSnap, fazendasSnap] = await progresso.todas([
         getRawCollection("usuarios"),
         getRawCollection("fazendas"),
       ]);
@@ -123,6 +128,7 @@ export default function Signup() {
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -171,14 +177,18 @@ export default function Signup() {
     }
 
     setSaving(true);
+    // Edição: 1 update; novo usuário: criar no Auth + gravar perfil
+    progressoSalvar.iniciar(editingUser ? 1 : 2);
     try {
       const acesso = dadosAcesso();
       if (editingUser) {
-        await updateRawDocument(["usuarios"], editingUser.id, {
-          nome: formNome.trim(),
-          email: formEmail.trim(),
-          ...acesso,
-        });
+        await progressoSalvar.rastrear(
+          updateRawDocument(["usuarios"], editingUser.id, {
+            nome: formNome.trim(),
+            email: formEmail.trim(),
+            ...acesso,
+          })
+        );
         setUsuarios((prev) =>
           prev.map((u) =>
             u.id === editingUser.id
@@ -192,16 +202,18 @@ export default function Signup() {
           )
         );
       } else {
-        const uid = await createUserOnSecondaryApp(
-          formEmail.trim(),
-          formSenha
+        const uid = await progressoSalvar.rastrear(
+          createUserOnSecondaryApp(
+            formEmail.trim(),
+            formSenha
+          )
         );
         const userData = {
           nome: formNome.trim(),
           email: formEmail.trim(),
           ...acesso,
         };
-        await setRawDocument(["usuarios"], uid, userData);
+        await progressoSalvar.rastrear(setRawDocument(["usuarios"], uid, userData));
         setUsuarios((prev) =>
           [...prev, { id: uid, ...userData }].sort((a, b) =>
             a.nome.localeCompare(b.nome)
@@ -217,6 +229,7 @@ export default function Signup() {
           : "Nao foi possivel salvar o usuario.";
       Alert.alert("Erro", msg);
     } finally {
+      progressoSalvar.concluir();
       setSaving(false);
     }
   }
@@ -256,14 +269,17 @@ export default function Signup() {
       return;
     }
     setSavingFazenda(true);
+    progressoSalvarFazenda.iniciar(2);
     try {
-      const docRef = await addRawDocument(["fazendas"], {
-        nome: formFazendaNome.trim(),
-      });
+      const docRef = await progressoSalvarFazenda.rastrear(
+        addRawDocument(["fazendas"], {
+          nome: formFazendaNome.trim(),
+        })
+      );
       // Semear tabelas auxiliares na nova fazenda
       const previousFazendaId = getCurrentFazendaId();
       setCurrentFazendaId(docRef.id);
-      await seedTabelasAuxiliares();
+      await progressoSalvarFazenda.rastrear(seedTabelasAuxiliares());
       setCurrentFazendaId(previousFazendaId);
 
       const newFazenda: Fazenda = {
@@ -282,6 +298,7 @@ export default function Signup() {
       console.error("Erro ao criar fazenda:", error);
       Alert.alert("Erro", "Nao foi possivel criar a fazenda.");
     } finally {
+      progressoSalvarFazenda.concluir();
       setSavingFazenda(false);
     }
   }
@@ -354,10 +371,11 @@ export default function Signup() {
             </Text>
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progresso}
               />
             ) : (
               <>
@@ -696,7 +714,7 @@ export default function Signup() {
 
                   <View style={{ marginTop: 16 }}>
                     {saving ? (
-                      <ActivityIndicator size="large" color={primaryColor} />
+                      <LoadingIndicator size="large" color={primaryColor} progresso={progressoSalvar} />
                     ) : (
                       <Button
                         label={editingUser ? "Salvar" : "Cadastrar"}
@@ -742,7 +760,7 @@ export default function Signup() {
                 />
                 <View style={{ marginTop: 16 }}>
                   {savingFazenda ? (
-                    <ActivityIndicator size="large" color={primaryColor} />
+                    <LoadingIndicator size="large" color={primaryColor} progresso={progressoSalvarFazenda} />
                   ) : (
                     <Button
                       label="Criar Fazenda"

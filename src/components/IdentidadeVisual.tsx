@@ -1,9 +1,11 @@
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { caminhoLogoFazenda, COR_PADRAO, THEME_COLORS, useTheme, type TemaFazenda } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { uploadBlob } from "@/services/storageService";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 /**
  * Editor da identidade visual de UMA fazenda (cor primária e logo).
@@ -24,6 +26,7 @@ export function IdentidadeVisual({ fazendaId, fazendaNome, tema, onChange }: Pro
   const [cor, setCor] = useState<string>(tema.primaryColor || COR_PADRAO);
   const [logo, setLogo] = useState<string | null>(tema.logoUrl || null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const progressoLogo = useProgresso();
   const [salvandoCor, setSalvandoCor] = useState<string | null>(null);
 
   useEffect(() => {
@@ -57,15 +60,17 @@ export function IdentidadeVisual({ fazendaId, fazendaNome, tema, onChange }: Pro
       if (result.canceled || !result.assets[0]) return;
 
       setUploadingLogo(true);
+      progressoLogo.iniciar(2);
       // Sufixo de tempo na URL evita cache da imagem antiga ao trocar a logo
-      const url = `${await uploadBlob(caminhoLogoFazenda(fazendaId), result.assets[0].uri)}${"&v=" + Date.now()}`;
-      await salvarTemaDaFazenda(fazendaId, { logoUrl: url });
+      const url = `${await progressoLogo.rastrear(uploadBlob(caminhoLogoFazenda(fazendaId), result.assets[0].uri))}${"&v=" + Date.now()}`;
+      await progressoLogo.rastrear(salvarTemaDaFazenda(fazendaId, { logoUrl: url }));
       setLogo(url);
       onChange?.({ primaryColor: cor, logoUrl: url });
     } catch (err) {
       console.error("Erro ao fazer upload da logo:", err);
       Alert.alert("Erro", "Não foi possível enviar a logo.");
     } finally {
+      progressoLogo.concluir();
       setUploadingLogo(false);
     }
   }
@@ -101,7 +106,7 @@ export function IdentidadeVisual({ fazendaId, fazendaNome, tema, onChange }: Pro
             >
               <View style={[styles.colorCircle, { backgroundColor: c.value }, selecionada && styles.colorCircleSelected]}>
                 {salvandoCor === c.value ? (
-                  <ActivityIndicator size="small" color="#FFF" />
+                  <LoadingIndicator size="small" color="#FFF" />
                 ) : (
                   selecionada && <Feather name="check" size={16} color="#FFF" />
                 )}
@@ -132,7 +137,7 @@ export function IdentidadeVisual({ fazendaId, fazendaNome, tema, onChange }: Pro
             disabled={uploadingLogo}
           >
             {uploadingLogo ? (
-              <ActivityIndicator size="small" color="#FFF" />
+              <LoadingIndicator size="small" color="#FFF" inline progresso={progressoLogo} />
             ) : (
               <>
                 <Feather name="upload" size={16} color="#FFF" />

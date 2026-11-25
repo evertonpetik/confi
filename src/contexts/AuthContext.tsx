@@ -1,3 +1,4 @@
+import { Progresso, useProgresso } from "@/hooks/useProgresso";
 import {
   signIn as authSignIn,
   signOut as authSignOut,
@@ -57,6 +58,8 @@ type AuthContextType = {
   selectedModulo: ModuloId | null;
   fazendas: Fazenda[];
   loading: boolean;
+  /** Progresso do carregamento inicial do perfil (para o spinner de `loading`). */
+  progressoCarregamento: Progresso;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   selectFazenda: (id: string, nome: string) => void;
@@ -79,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [selectedModulo, setSelectedModulo] = useState<ModuloId | null>(null);
   const [fazendas, setFazendas] = useState<Fazenda[]>([]);
   const [loading, setLoading] = useState(true);
+  const progressoCarregamento = useProgresso();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(async (fbUser) => {
@@ -100,8 +104,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function loadUserProfile(uid: string, email: string | null) {
+    // Caso comum: perfil + fazendas + AsyncStorage (fazenda id/nome + modulo)
+    progressoCarregamento.iniciar(5);
     try {
-      const doc = await getRawDocument(["usuarios"], uid);
+      const doc = await progressoCarregamento.rastrear(getRawDocument(["usuarios"], uid));
       if (doc.exists !== false && doc.data()) {
         const data = doc.data();
         const profile: UsuarioProfile = {
@@ -118,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await restoreModulo();
       } else {
         // Documento nao existe — verificar se e o primeiro usuario (bootstrap admin)
-        const usersSnap = await getRawCollection("usuarios");
+        const usersSnap = await progressoCarregamento.rastrear(getRawCollection("usuarios"));
         if (usersSnap.empty) {
           // Primeiro usuario do sistema: criar como admin
           const adminProfile: UsuarioProfile = {
@@ -128,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             fazendas: [],
             modulos: [],
           };
-          await setRawDocument(["usuarios"], uid, adminProfile);
+          await progressoCarregamento.rastrear(setRawDocument(["usuarios"], uid, adminProfile));
           setUserProfile(adminProfile);
           await loadFazendas(adminProfile);
         } else {
@@ -140,12 +146,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Erro ao carregar perfil do usuario:", error);
       setUserProfile(null);
+    } finally {
+      progressoCarregamento.concluir();
     }
   }
 
   async function loadFazendas(profile: UsuarioProfile) {
     try {
-      const snap = await getRawCollection("fazendas");
+      const snap = await progressoCarregamento.rastrear(getRawCollection("fazendas"));
       const all: Fazenda[] = snap.docs.map((d) => ({
         id: d.id,
         nome: d.data().nome ?? "",
@@ -167,8 +175,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function restoreFazenda(profile: UsuarioProfile) {
     try {
-      const savedId = await AsyncStorage.getItem("@selectedFazendaId");
-      const savedNome = await AsyncStorage.getItem("@selectedFazendaNome");
+      const savedId = await progressoCarregamento.rastrear(AsyncStorage.getItem("@selectedFazendaId"));
+      const savedNome = await progressoCarregamento.rastrear(AsyncStorage.getItem("@selectedFazendaNome"));
       if (savedId) {
         const hasAccess =
           profile.tipo === "admin" || profile.fazendas.includes(savedId);
@@ -185,7 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function restoreModulo() {
     try {
-      const saved = await AsyncStorage.getItem("@selectedModulo");
+      const saved = await progressoCarregamento.rastrear(AsyncStorage.getItem("@selectedModulo"));
       if (saved && ALL_MODULOS.includes(saved as ModuloId)) {
         setSelectedModulo(saved as ModuloId);
       }
@@ -249,6 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         selectedModulo,
         fazendas,
         loading,
+        progressoCarregamento,
         signIn,
         signOut,
         selectFazenda,

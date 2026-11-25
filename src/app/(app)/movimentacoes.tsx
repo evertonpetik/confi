@@ -8,8 +8,10 @@
  */
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import EventoService, { semEstornados } from "@/services/eventoService";
 import { Evento, TipoEvento } from "@/services/weighing.types";
@@ -17,7 +19,6 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   ScrollView,
   StyleSheet,
@@ -66,13 +67,16 @@ export default function Movimentacoes() {
   const [carregando, setCarregando] = useState(true);
   const [filtro, setFiltro] = useState<TipoEvento | "todos">("todos");
   const [termo, setTermo] = useState("");
+  const progresso = useProgresso();
 
   const carregar = useCallback(async () => {
     if (!fazendaId) return;
     setCarregando(true);
+    progresso.iniciar(1);
     try {
-      setEventos(semEstornados(await EventoService.listarRecentes(fazendaId)));
+      setEventos(semEstornados(await progresso.rastrear(EventoService.listarRecentes(fazendaId))));
     } finally {
+      progresso.concluir();
       setCarregando(false);
     }
   }, [fazendaId]);
@@ -154,7 +158,7 @@ export default function Movimentacoes() {
         </View>
 
         {carregando ? (
-          <ActivityIndicator style={{ marginTop: 40 }} color={primaryColor} />
+          <LoadingIndicator style={{ marginTop: 40 }} size="small" color={primaryColor} progresso={progresso} />
         ) : (
           <FlatList
             data={filtrados}

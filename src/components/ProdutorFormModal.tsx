@@ -15,6 +15,7 @@ import { Input } from "@/components/Input";
 import { Produtor } from "@/components/ProdutorCard";
 import { Select, SelectOption } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import {
   formatCNPJ,
   formatCPF,
@@ -63,6 +64,8 @@ export function ProdutorFormModal({
   const [municipios, setMunicipios] = useState<SelectOption[]>([]);
   const [loadingEstados, setLoadingEstados] = useState(false);
   const [loadingMunicipios, setLoadingMunicipios] = useState(false);
+  const progressoEstados = useProgresso();
+  const progressoMunicipios = useProgresso();
 
   // Fetch estados ao abrir modal
   useEffect(() => {
@@ -108,14 +111,16 @@ export function ProdutorFormModal({
   async function fetchEstados() {
     try {
       setLoadingEstados(true);
-      const res = await fetch(`${IBGE_BASE}/estados?orderBy=nome`);
-      const data: { sigla: string; nome: string }[] = await res.json();
+      progressoEstados.iniciar(2);
+      const res = await progressoEstados.rastrear(fetch(`${IBGE_BASE}/estados?orderBy=nome`));
+      const data: { sigla: string; nome: string }[] = await progressoEstados.rastrear(res.json());
       setEstados(
         data.map((e) => ({ label: `${e.sigla} - ${e.nome}`, value: e.sigla }))
       );
     } catch {
       console.error("Erro ao buscar estados");
     } finally {
+      progressoEstados.concluir();
       setLoadingEstados(false);
     }
   }
@@ -123,14 +128,18 @@ export function ProdutorFormModal({
   async function fetchMunicipios(uf: string) {
     try {
       setLoadingMunicipios(true);
-      const res = await fetch(
-        `${IBGE_BASE}/estados/${uf}/municipios?orderBy=nome`
+      progressoMunicipios.iniciar(2);
+      const res = await progressoMunicipios.rastrear(
+        fetch(
+          `${IBGE_BASE}/estados/${uf}/municipios?orderBy=nome`
+        )
       );
-      const data: { nome: string }[] = await res.json();
+      const data: { nome: string }[] = await progressoMunicipios.rastrear(res.json());
       setMunicipios(data.map((m) => ({ label: m.nome, value: m.nome })));
     } catch {
       console.error("Erro ao buscar municipios");
     } finally {
+      progressoMunicipios.concluir();
       setLoadingMunicipios(false);
     }
   }
@@ -293,6 +302,7 @@ export function ProdutorFormModal({
                   options={estados}
                   onSelect={handleUfChange}
                   loading={loadingEstados}
+                  progresso={progressoEstados}
                 />
 
                 <Text style={styles.label}>Municipio</Text>
@@ -303,6 +313,7 @@ export function ProdutorFormModal({
                   onSelect={(v) => handleChange("cidade", v)}
                   disabled={!form.uf}
                   loading={loadingMunicipios}
+                  progresso={progressoMunicipios}
                 />
 
                 <Text style={styles.label}>Telefone</Text>

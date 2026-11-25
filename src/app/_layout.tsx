@@ -1,13 +1,14 @@
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { primeiraTelaPermitida } from "@/constants/telas";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 function AuthGate() {
-  const { user, userProfile, selectedFazendaId, selectedModulo, loading, signOut } = useAuth();
+  const { user, userProfile, selectedFazendaId, selectedModulo, loading, progressoCarregamento, signOut } = useAuth();
   const { primaryColor, carregarTemaDaFazenda } = useTheme();
   const segments = useSegments();
   const router = useRouter();
@@ -51,7 +52,7 @@ function AuthGate() {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#FDFDFD" }}>
-        <ActivityIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} progresso={progressoCarregamento} />
       </View>
     );
   }

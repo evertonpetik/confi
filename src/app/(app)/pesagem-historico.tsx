@@ -3,9 +3,10 @@ export default function PesagemHistoricoPage() {
   return <Redirect href="/(app)/pesagem-balanca" />;
 }
 
+import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { useProgresso } from "@/hooks/useProgresso";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Platform,
@@ -34,6 +35,7 @@ export const TelaHistoricoPesagens: React.FC<TelaHistoricoPesagensProps> = ({
 }) => {
   const [pesagens, setPesagens] = useState<Pesagem[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const progresso = useProgresso();
 
   useEffect(() => {
     carregarPesagens();
@@ -42,16 +44,20 @@ export const TelaHistoricoPesagens: React.FC<TelaHistoricoPesagensProps> = ({
   const carregarPesagens = async () => {
     try {
       setCarregando(true);
-      const dados = await PesagemFirestoreService.obterPesagensAnimal(
-        bovino.id || "",
-        farmedaId,
-        100
+      progresso.iniciar(1);
+      const dados = await progresso.rastrear(
+        PesagemFirestoreService.obterPesagensAnimal(
+          bovino.id || "",
+          farmedaId,
+          100
+        )
       );
       setPesagens(dados);
     } catch (error) {
       console.error("Erro ao carregar pesagens:", error);
       Alert.alert("Erro", "Não foi possível carregar o histórico de pesagens");
     } finally {
+      progresso.concluir();
       setCarregando(false);
     }
   };
@@ -176,10 +182,11 @@ export const TelaHistoricoPesagens: React.FC<TelaHistoricoPesagensProps> = ({
       </View>
 
       {carregando ? (
-        <ActivityIndicator
+        <LoadingIndicator
           size="large"
           color="#0066cc"
           style={styles.carregando}
+          progresso={progresso}
         />
       ) : pesagens.length === 0 ? (
         <View style={styles.vazio}>

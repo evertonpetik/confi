@@ -1,6 +1,7 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { calcularEstoque } from "@/components/InsumoCard";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { Movimentacao } from "@/components/LoteCard";
 import { AgendarEmbarqueModal, AgendarEmbarqueLote } from "@/components/AgendarEmbarqueModal";
 import { Roteiro, RoteiroPiquete } from "@/components/RoteiroCard";
@@ -9,6 +10,7 @@ import {
   TransferenciaLoteModal,
 } from "@/components/TransferenciaLoteModal";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import { proximoEmbarqueAgendado, somarEmbarquesAgendadosNaData } from "@/services/embarqueAgendado";
 import {
@@ -34,7 +36,6 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   KeyboardAvoidingView,
@@ -367,6 +368,7 @@ export default function Home() {
   const [totalVendas, setTotalVendas] = useState(0);
   const [totalEntradas, setTotalEntradas] = useState(0);
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
   const [reportRows, setReportRows] = useState<LoteReportRow[]>([]);
   const [insumosVencidos, setInsumosVencidos] = useState<string[]>([]);
   const [insumosEstoqueBaixo, setInsumosEstoqueBaixo] = useState<
@@ -399,7 +401,9 @@ export default function Home() {
   async function fetchDashboard() {
     try {
       setLoading(true);
-      const [lotesSnap, histSnap, insumosSnap, parametrosSnap, roteirosSnap, dietasSnap] = await Promise.all([
+      // 6 coleções + base CMS; sub-consultas por insumo/lote são acrescentadas ao descobrir N
+      progresso.iniciar(6 + 1);
+      const [lotesSnap, histSnap, insumosSnap, parametrosSnap, roteirosSnap, dietasSnap] = await progresso.todas([
         getCollection("lotes"),
         getCollection("historicoMapaTrato"),
         getCollection("insumos"),
@@ -473,8 +477,9 @@ export default function Home() {
         const vencidos: string[] = [];
 
         const insumosComMS = insumosSnap.docs.filter((d) => d.data().materiaSecaVariavel);
+        progresso.adicionarEtapas(insumosComMS.length);
         const confSnaps = await Promise.all(
-          insumosComMS.map((insumoDoc) => getCollection("insumos", insumoDoc.id, "conferencias"))
+          insumosComMS.map((insumoDoc) => progresso.rastrear(getCollection("insumos", insumoDoc.id, "conferencias")))
         );
 
         insumosComMS.forEach((insumoDoc, idx) => {
@@ -514,12 +519,13 @@ export default function Home() {
 
       // Calcular autonomia de estoque de todos os insumos
       {
+        progresso.adicionarEtapas(insumosSnap.docs.length * 2);
         const [comprasSnaps, saidasSnaps] = await Promise.all([
           Promise.all(
-            insumosSnap.docs.map((insumoDoc) => getCollection("insumos", insumoDoc.id, "compras"))
+            insumosSnap.docs.map((insumoDoc) => progresso.rastrear(getCollection("insumos", insumoDoc.id, "compras")))
           ),
           Promise.all(
-            insumosSnap.docs.map((insumoDoc) => getCollection("insumos", insumoDoc.id, "saidas"))
+            insumosSnap.docs.map((insumoDoc) => progresso.rastrear(getCollection("insumos", insumoDoc.id, "saidas")))
           ),
         ]);
 
@@ -561,7 +567,7 @@ export default function Home() {
       const ontemMSByLote = new Map<string, number>();
       const cmsRealizadoOntemByLote = new Map<string, number>();
       const cmsPrevistoOntemByLote = new Map<string, number>();
-      const baseCmsLeitura = await getBaseCmsLeitura();
+      const baseCmsLeitura = await progresso.rastrear(getBaseCmsLeitura());
 
       for (const hDoc of histSnap.docs) {
         const h = hDoc.data();
@@ -595,18 +601,19 @@ export default function Home() {
       }
 
       const lotesAtivosDocs = lotesSnap.docs.filter((d) => d.data().ativo === true);
+      progresso.adicionarEtapas(lotesAtivosDocs.length * 3);
 
       const [movSnaps, leitSnaps, embarqueSnaps] = await Promise.all([
-        Promise.all(lotesAtivosDocs.map((loteDoc) => getCollection("lotes", loteDoc.id, "movimentacoes"))),
+        Promise.all(lotesAtivosDocs.map((loteDoc) => progresso.rastrear(getCollection("lotes", loteDoc.id, "movimentacoes")))),
         Promise.all(
           lotesAtivosDocs.map((loteDoc) =>
-            queryCollection(
+            progresso.rastrear(queryCollection(
               ["lotes", loteDoc.id, "leituras"],
               [fsOrderBy("data", "desc"), fsLimit(10)]
-            ).catch(() => null)
+            ).catch(() => null))
           )
         ),
-        Promise.all(lotesAtivosDocs.map((loteDoc) => getCollection("lotes", loteDoc.id, "embarquesAgendados"))),
+        Promise.all(lotesAtivosDocs.map((loteDoc) => progresso.rastrear(getCollection("lotes", loteDoc.id, "embarquesAgendados")))),
       ]);
 
       const embarquesHojeList: {
@@ -790,6 +797,7 @@ export default function Home() {
     } catch (error) {
       console.error("Erro ao buscar dashboard:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -1132,10 +1140,11 @@ export default function Home() {
 
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 48 }}
+                progresso={progresso}
               />
             ) : (
               <>

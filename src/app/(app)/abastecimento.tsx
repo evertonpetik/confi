@@ -1,10 +1,12 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
 import { Input } from "@/components/Input";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { Select } from "@/components/Select";
 import type { Tanque } from "@/components/TanqueCard";
 import type { Veiculo } from "@/components/VeiculoCard";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -20,7 +22,6 @@ import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -56,6 +57,7 @@ export default function Abastecimento() {
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [tanques, setTanques] = useState<Tanque[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const progressoDados = useProgresso();
 
   // Selected
   const [selectedVeiculo, setSelectedVeiculo] = useState<Veiculo | null>(null);
@@ -69,6 +71,7 @@ export default function Abastecimento() {
   const [litros, setLitros] = useState("");
   const [ocrLitros, setOcrLitros] = useState<number | null>(null);
   const [ocrProcessing, setOcrProcessing] = useState(false);
+  const progressoOcr = useProgresso();
 
   const [fotoPainelUri, setFotoPainelUri] = useState<string | null>(null);
   const [marcadorAtual, setMarcadorAtual] = useState("");
@@ -76,6 +79,7 @@ export default function Abastecimento() {
 
   const [observacao, setObservacao] = useState("");
   const [saving, setSaving] = useState(false);
+  const progressoSalvar = useProgresso();
 
   // Network status
   useEffect(() => {
@@ -94,7 +98,8 @@ export default function Abastecimento() {
   async function fetchData() {
     try {
       setLoadingData(true);
-      const [veiculosSnap, tanquesSnap] = await Promise.all([
+      progressoDados.iniciar(2);
+      const [veiculosSnap, tanquesSnap] = await progressoDados.todas([
         getCollection("veiculos"),
         getCollection("tanques"),
       ]);
@@ -111,6 +116,7 @@ export default function Abastecimento() {
     } catch (err) {
       console.error("Erro ao buscar dados:", err);
     } finally {
+      progressoDados.concluir();
       setLoadingData(false);
     }
   }
@@ -182,9 +188,10 @@ export default function Abastecimento() {
 
       // Try OCR
       setOcrProcessing(true);
+      progressoOcr.iniciar(2);
       try {
-        const { recognizeFuelPumpValue } = await import("@/services/ocrService");
-        const ocrResult = await recognizeFuelPumpValue(uri);
+        const { recognizeFuelPumpValue } = await progressoOcr.rastrear(import("@/services/ocrService"));
+        const ocrResult = await progressoOcr.rastrear(recognizeFuelPumpValue(uri));
         if (ocrResult.extractedValue !== null) {
           setLitros(ocrResult.extractedValue.toString());
           setOcrLitros(ocrResult.extractedValue);
@@ -192,6 +199,7 @@ export default function Abastecimento() {
       } catch (err) {
         console.error("OCR error:", err);
       } finally {
+        progressoOcr.concluir();
         setOcrProcessing(false);
       }
     }
@@ -228,9 +236,10 @@ export default function Abastecimento() {
 
       // Try OCR
       setOcrProcessing(true);
+      progressoOcr.iniciar(2);
       try {
-        const { recognizeMeterValue } = await import("@/services/ocrService");
-        const ocrResult = await recognizeMeterValue(uri);
+        const { recognizeMeterValue } = await progressoOcr.rastrear(import("@/services/ocrService"));
+        const ocrResult = await progressoOcr.rastrear(recognizeMeterValue(uri));
         if (ocrResult.extractedValue !== null) {
           setMarcadorAtual(ocrResult.extractedValue.toString());
           setOcrMarcador(ocrResult.extractedValue);
@@ -238,6 +247,7 @@ export default function Abastecimento() {
       } catch (err) {
         console.error("OCR error:", err);
       } finally {
+        progressoOcr.concluir();
         setOcrProcessing(false);
       }
     }
@@ -266,6 +276,8 @@ export default function Abastecimento() {
   async function handleConfirm() {
     if (!selectedVeiculo || !selectedTanqueId) return;
     setSaving(true);
+    // Gravar abastecimento + atualizar nível do tanque + atualizar marcador do veículo
+    progressoSalvar.iniciar(3);
 
     try {
       const tanque = tanques.find((t) => t.id === selectedTanqueId);
@@ -307,21 +319,25 @@ export default function Abastecimento() {
       };
 
       // Save abastecimento
-      await addDocument(["abastecimentos"], abastecimentoData);
+      await progressoSalvar.rastrear(addDocument(["abastecimentos"], abastecimentoData));
 
       // Update tank level
       if (tanque) {
         const novoNivel = Math.max(0, tanque.nivelAtual - litrosNum);
-        await updateDocument(["tanques"], selectedTanqueId, {
-          nivelAtual: novoNivel,
-        });
+        await progressoSalvar.rastrear(
+          updateDocument(["tanques"], selectedTanqueId, {
+            nivelAtual: novoNivel,
+          })
+        );
       }
 
       // Update vehicle marker
       if (selectedVeiculo.tipoMarcador !== "nenhum" && marcadorNum > 0) {
-        await updateDocument(["veiculos"], selectedVeiculo.id, {
-          marcadorAtual: marcadorNum,
-        });
+        await progressoSalvar.rastrear(
+          updateDocument(["veiculos"], selectedVeiculo.id, {
+            marcadorAtual: marcadorNum,
+          })
+        );
       }
 
       setStep("SAVED");
@@ -329,6 +345,7 @@ export default function Abastecimento() {
       console.error("Erro ao salvar abastecimento:", err);
       Alert.alert("Erro", "Nao foi possivel salvar o abastecimento.");
     } finally {
+      progressoSalvar.concluir();
       setSaving(false);
     }
   }
@@ -421,6 +438,7 @@ export default function Abastecimento() {
               options={veiculoOptions}
               onSelect={handleManualSelect}
               loading={loadingData}
+              progresso={progressoDados}
             />
             {Platform.OS !== "web" && (
               <TouchableOpacity
@@ -490,6 +508,7 @@ export default function Abastecimento() {
                 options={tanqueOptions}
                 onSelect={handleTanqueSelect}
                 loading={loadingData}
+                progresso={progressoDados}
               />
             </View>
 
@@ -559,7 +578,7 @@ export default function Abastecimento() {
 
         {ocrProcessing && (
           <View style={styles.ocrStatus}>
-            <ActivityIndicator size="small" color={primaryColor} />
+            <LoadingIndicator size="small" color={primaryColor} inline progresso={progressoOcr} />
             <Text style={[styles.ocrStatusText, { color: primaryColor }]}>Lendo imagem...</Text>
           </View>
         )}
@@ -664,7 +683,7 @@ export default function Abastecimento() {
 
         {ocrProcessing && (
           <View style={styles.ocrStatus}>
-            <ActivityIndicator size="small" color={primaryColor} />
+            <LoadingIndicator size="small" color={primaryColor} inline progresso={progressoOcr} />
             <Text style={[styles.ocrStatusText, { color: primaryColor }]}>Lendo imagem...</Text>
           </View>
         )}
@@ -809,7 +828,7 @@ export default function Abastecimento() {
             disabled={saving}
           >
             {saving ? (
-              <ActivityIndicator size="small" color="#FFF" />
+              <LoadingIndicator size="small" color="#FFF" inline progresso={progressoSalvar} />
             ) : (
               <>
                 <Feather

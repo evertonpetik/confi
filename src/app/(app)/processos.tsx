@@ -5,8 +5,10 @@
  */
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import Aviso from "@/services/alerta";
 import BrincoService from "@/services/brincoService";
@@ -18,7 +20,6 @@ import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   Platform,
   ScrollView,
@@ -98,6 +99,7 @@ export default function ProcessosPage() {
 
   const [processos, setProcessos] = useState<ProcessoMangueiro[]>([]);
   const [loading, setLoading] = useState(false);
+  const progresso = useProgresso();
   const [filtro, setFiltro] = useState<"todos" | "aberto" | "em_andamento" | "concluido">("aberto");
 
   // ─── Modal: Novo Processo ──────────────────────────────────────────────────
@@ -111,9 +113,11 @@ export default function ProcessosPage() {
   const [gtasExistentes, setGtasExistentes] = useState<GTA[]>([]);
   const [gtasSelecionadas, setGtasSelecionadas] = useState<GTA[]>([]);
   const [importandoPdf, setImportandoPdf] = useState(false);
+  const progressoImportar = useProgresso();
   const [showGtaForm, setShowGtaForm] = useState(false);
   const [gtaForm, setGtaForm] = useState<Partial<GTA>>({});
   const [salvandoGta, setSalvandoGta] = useState(false);
+  const progressoSalvarGta = useProgresso();
 
   // Pedidos de brinco (apenas para entrada)
   const [pedidos, setPedidos] = useState<PedidoBrinco[]>([]);
@@ -122,16 +126,19 @@ export default function ProcessosPage() {
   const [fazendaOrigemNome, setFazendaOrigemNome] = useState("");
 
   const [salvando, setSalvando] = useState(false);
+  const progressoSalvar = useProgresso();
 
   // ─── Carregamentos ─────────────────────────────────────────────────────────
 
   const carregarProcessos = useCallback(async () => {
     if (!fazendaId) return;
     setLoading(true);
+    progresso.iniciar(1);
     try {
-      const lista = await BrincoService.listarProcessosMangueiro(fazendaId);
+      const lista = await progresso.rastrear(BrincoService.listarProcessosMangueiro(fazendaId));
       setProcessos(lista);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }, [fazendaId]);
@@ -175,23 +182,29 @@ export default function ProcessosPage() {
    */
   const importarPdf = async () => {
     setImportandoPdf(true);
+    progressoImportar.iniciar(1);
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: "application/pdf",
-        multiple: true,
-      });
+      const result = await progressoImportar.rastrear(
+        DocumentPicker.getDocumentAsync({
+          type: "application/pdf",
+          multiple: true,
+        })
+      );
       if (result.canceled || !result.assets?.length) return;
 
       const arquivos: ArquivoPdf[] = [];
+      progressoImportar.adicionarEtapas(result.assets.length);
       for (const asset of result.assets) {
         const resposta = await fetch(asset.uri);
         arquivos.push({
           nome: asset.name ?? "GTA.pdf",
           bytes: new Uint8Array(await resposta.arrayBuffer()),
         });
+        progressoImportar.avancar();
       }
 
-      const importadas = await importarGtas(arquivos);
+      progressoImportar.adicionarEtapas(1);
+      const importadas = await progressoImportar.rastrear(importarGtas(arquivos));
       const lidas = importadas.filter((i) => i.gta?.numero);
       const falhas = importadas.filter((i) => !i.gta?.numero);
 
@@ -203,22 +216,24 @@ export default function ProcessosPage() {
           Aviso.alert("Não foi possível ler", unica.erro ?? "PDF ilegível.");
           return;
         }
-        const refPdf = await arquivarPdf(unica, fazendaId);
+        progressoImportar.adicionarEtapas(1);
+        const refPdf = await progressoImportar.rastrear(arquivarPdf(unica, fazendaId));
         setGtaForm({ ...unica.gta, ...refPdf, status: "ativa", farmedaId: fazendaId });
         setShowGtaForm(true);
         return;
       }
 
       const salvas: GTA[] = [];
+      progressoImportar.adicionarEtapas(2 * lidas.length);
       for (const item of lidas) {
         const gta = {
           ...item.gta,
           // O PDF original acompanha a guia: a certificadora recebe os dois.
-          ...(await arquivarPdf(item, fazendaId)),
+          ...(await progressoImportar.rastrear(arquivarPdf(item, fazendaId))),
           status: "ativa",
           farmedaId: fazendaId,
         } as Omit<GTA, "id" | "criadoEm">;
-        const id = await BrincoService.cadastrarGta(gta, fazendaId);
+        const id = await progressoImportar.rastrear(BrincoService.cadastrarGta(gta, fazendaId));
         salvas.push({ ...gta, id, criadoEm: new Date().toISOString() });
       }
 
@@ -238,6 +253,7 @@ export default function ProcessosPage() {
       console.error(e);
       Aviso.alert("Erro", "Não foi possível processar os PDFs.");
     } finally {
+      progressoImportar.concluir();
       setImportandoPdf(false);
     }
   };
@@ -274,6 +290,7 @@ export default function ProcessosPage() {
       return;
     }
     setSalvandoGta(true);
+    progressoSalvarGta.iniciar(1);
     try {
       const novaGta: Omit<GTA, "id" | "criadoEm"> = {
         numero: gtaForm.numero ?? "",
@@ -311,7 +328,7 @@ export default function ProcessosPage() {
         farmedaId: fazendaId,
         status: "ativa",
       };
-      const id = await BrincoService.cadastrarGta(novaGta, fazendaId);
+      const id = await progressoSalvarGta.rastrear(BrincoService.cadastrarGta(novaGta, fazendaId));
       const gtaCompleta: GTA = { ...novaGta, id, criadoEm: new Date().toISOString() };
       setGtasSelecionadas((prev) => [...prev, gtaCompleta]);
       setGtasExistentes((prev) => [gtaCompleta, ...prev]);
@@ -320,6 +337,7 @@ export default function ProcessosPage() {
     } catch {
       Aviso.alert("Erro", "Não foi possível salvar a GTA.");
     } finally {
+      progressoSalvarGta.concluir();
       setSalvandoGta(false);
     }
   };
@@ -364,6 +382,7 @@ export default function ProcessosPage() {
     const total = gtasSelecionadas.reduce((acc, g) => acc + (g.total ?? 0), 0);
 
     setSalvando(true);
+    progressoSalvar.iniciar(2);
     try {
       const processo: Omit<ProcessoMangueiro, "id" | "criadoEm"> = {
         nome: nomeProcesso.trim(),
@@ -380,13 +399,14 @@ export default function ProcessosPage() {
         farmedaId: fazendaId,
         usuarioId: user?.uid ?? "sistema",
       };
-      await BrincoService.criarProcessoMangueiro(processo, fazendaId);
+      await progressoSalvar.rastrear(BrincoService.criarProcessoMangueiro(processo, fazendaId));
       setShowModal(false);
-      await carregarProcessos();
+      await progressoSalvar.rastrear(carregarProcessos());
       Aviso.alert("Sucesso", "Processo criado! Agora vá para Pesagem e selecione este processo.");
     } catch {
       Aviso.alert("Erro", "Não foi possível criar o processo.");
     } finally {
+      progressoSalvar.concluir();
       setSalvando(false);
     }
   };
@@ -449,7 +469,7 @@ export default function ProcessosPage() {
 
           {/* Lista */}
           {loading ? (
-            <ActivityIndicator color={primaryColor} style={{ marginTop: 40 }} />
+            <LoadingIndicator size="small" color={primaryColor} style={{ marginTop: 40 }} progresso={progresso} />
           ) : processosFiltrados.length === 0 ? (
             <View style={styles.vazio}>
               <Feather name="inbox" size={48} color="#ccc" />
@@ -545,7 +565,7 @@ export default function ProcessosPage() {
                       disabled={importandoPdf}
                     >
                       {importandoPdf
-                        ? <ActivityIndicator size="small" color={primaryColor} />
+                        ? <LoadingIndicator size="small" color={primaryColor} inline progresso={progressoImportar} />
                         : <Feather name="upload" size={16} color={primaryColor} />}
                       <Text style={[styles.btnGtaAcaoText, { color: primaryColor }]}>
                         {importandoPdf ? "Lendo PDFs…" : "Importar PDF"}
@@ -734,7 +754,7 @@ export default function ProcessosPage() {
                       disabled={salvando}
                     >
                       {salvando
-                        ? <ActivityIndicator size="small" color="#fff" />
+                        ? <LoadingIndicator size="small" color="#fff" inline progresso={progressoSalvar} />
                         : <>
                           <Feather name="check-circle" size={16} color="#fff" />
                           <Text style={styles.btnAvancarText}>Abrir Processo</Text>
@@ -766,7 +786,7 @@ export default function ProcessosPage() {
                 disabled={salvandoGta}
               >
                 {salvandoGta
-                  ? <ActivityIndicator size="small" color="#fff" />
+                  ? <LoadingIndicator size="small" color="#fff" inline progresso={progressoSalvarGta} />
                   : <Text style={styles.btnAvancarText}>Salvar GTA</Text>}
               </TouchableOpacity>
             </ScrollView>

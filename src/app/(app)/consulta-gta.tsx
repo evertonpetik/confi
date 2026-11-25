@@ -1,13 +1,14 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import { consultarGTA, GTAData } from "@/services/gtaService";
 import { consultarSintegra, SintegraData } from "@/services/sintegraService";
 import { Feather } from "@expo/vector-icons";
 import { useCallback, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
@@ -35,6 +36,7 @@ export default function ConsultaGTA() {
   // GTA state
   const [barcode, setBarcode] = useState("");
   const [loadingGta, setLoadingGta] = useState(false);
+  const progressoGta = useProgresso();
   const [gta, setGta] = useState<GTAData | null>(null);
   const [erroGta, setErroGta] = useState("");
   const inputGtaRef = useRef<TextInput>(null);
@@ -42,6 +44,7 @@ export default function ConsultaGTA() {
   // Sintegra state
   const [inscricaoEstadual, setInscricaoEstadual] = useState("");
   const [loadingSintegra, setLoadingSintegra] = useState(false);
+  const progressoSintegra = useProgresso();
   const [sintegra, setSintegra] = useState<SintegraData | null>(null);
   const [erroSintegra, setErroSintegra] = useState("");
   const inputSintegraRef = useRef<TextInput>(null);
@@ -54,15 +57,17 @@ export default function ConsultaGTA() {
     }
 
     setLoadingGta(true);
+    progressoGta.iniciar(1);
     setGta(null);
     setErroGta("");
 
     try {
-      const data = await consultarGTA(trimmed);
+      const data = await progressoGta.rastrear(consultarGTA(trimmed));
       setGta(data);
     } catch (error: any) {
       setErroGta(error?.message || "Erro desconhecido");
     } finally {
+      progressoGta.concluir();
       setLoadingGta(false);
     }
   }, [barcode]);
@@ -75,15 +80,17 @@ export default function ConsultaGTA() {
     }
 
     setLoadingSintegra(true);
+    progressoSintegra.iniciar(1);
     setSintegra(null);
     setErroSintegra("");
 
     try {
-      const data = await consultarSintegra(trimmed);
+      const data = await progressoSintegra.rastrear(consultarSintegra(trimmed));
       setSintegra(data);
     } catch (error: any) {
       setErroSintegra(error?.message || "Erro desconhecido");
     } finally {
+      progressoSintegra.concluir();
       setLoadingSintegra(false);
     }
   }, [inscricaoEstadual]);
@@ -213,7 +220,7 @@ export default function ConsultaGTA() {
                   disabled={loadingGta}
                 >
                   {loadingGta ? (
-                    <ActivityIndicator size="small" color="#FFF" />
+                    <LoadingIndicator size="small" color="#FFF" inline progresso={progressoGta} />
                   ) : (
                     <Feather name="search" size={20} color="#FFF" />
                   )}
@@ -266,7 +273,7 @@ export default function ConsultaGTA() {
 
               {loadingSintegra && (
                 <View style={styles.loadingBox}>
-                  <ActivityIndicator size="small" color={primaryColor} />
+                  <LoadingIndicator size="small" color={primaryColor} inline progresso={progressoSintegra} />
                   <Text style={styles.loadingText}>
                     Resolvendo captcha e consultando... isso pode levar ate 30
                     segundos.
@@ -286,7 +293,7 @@ export default function ConsultaGTA() {
                   disabled={loadingSintegra}
                 >
                   {loadingSintegra ? (
-                    <ActivityIndicator size="small" color="#FFF" />
+                    <LoadingIndicator size="small" color="#FFF" inline progresso={progressoSintegra} />
                   ) : (
                     <Feather name="search" size={20} color="#FFF" />
                   )}

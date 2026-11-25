@@ -1,10 +1,10 @@
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { ModuloId, useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -67,7 +67,7 @@ export default function SelecaoModulo() {
   if (!ready) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} />
       </View>
     );
   }
@@ -76,7 +76,7 @@ export default function SelecaoModulo() {
   if (availableModulos.length === 1) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} />
       </View>
     );
   }

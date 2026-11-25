@@ -1,4 +1,5 @@
 import { calcularPesoMedioInicial, Movimentacao } from "@/components/LoteCard";
+import type { RastreadorProgresso } from "@/hooks/useProgresso";
 import { getCollection } from "@/services/firestoreService";
 import { gerarXlsx } from "@/services/xlsx";
 
@@ -45,14 +46,23 @@ function calcularQuantidadeAteData(movimentacoes: Movimentacao[], data: string):
   }, 0);
 }
 
-export async function buscarRelatorioHistoricoLotes(): Promise<HistoricoLoteRow[]> {
+/**
+ * @param progresso rastreador opcional: 2 etapas iniciais (lotes, historico)
+ *   + 1 por lote (movimentacoes), acrescentadas quando o nº de lotes é conhecido.
+ */
+export async function buscarRelatorioHistoricoLotes(
+  progresso?: RastreadorProgresso
+): Promise<HistoricoLoteRow[]> {
+  progresso?.iniciar(2);
+  const rastrear = <T>(p: Promise<T>): Promise<T> => (progresso ? progresso.rastrear(p) : p);
   const [lotesSnap, histSnap] = await Promise.all([
-    getCollection("lotes"),
-    getCollection("historicoMapaTrato"),
+    rastrear(getCollection("lotes")),
+    rastrear(getCollection("historicoMapaTrato")),
   ]);
 
+  progresso?.adicionarEtapas(lotesSnap.docs.length);
   const movSnaps = await Promise.all(
-    lotesSnap.docs.map((loteDoc) => getCollection("lotes", loteDoc.id, "movimentacoes"))
+    lotesSnap.docs.map((loteDoc) => rastrear(getCollection("lotes", loteDoc.id, "movimentacoes")))
   );
 
   const lotesInfo = new Map<

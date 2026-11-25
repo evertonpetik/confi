@@ -1,5 +1,6 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import {
   calcularPesoMedio,
   calcularQuantidadeAtual,
@@ -8,6 +9,7 @@ import {
 } from "@/components/LoteCard";
 import { Select } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   estimarPesoPorImagem,
@@ -24,7 +26,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -45,6 +46,7 @@ export default function EstimativaPeso() {
   const [step, setStep] = useState<Step>("SELECT_LOTE");
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [loadingLotes, setLoadingLotes] = useState(true);
+  const progressoLotes = useProgresso();
   const [selectedLoteId, setSelectedLoteId] = useState("");
   const [selectedLote, setSelectedLote] = useState<Lote | null>(null);
   const [pesoProjetado, setPesoProjetado] = useState<number | null>(null);
@@ -55,7 +57,10 @@ export default function EstimativaPeso() {
 
   const [result, setResult] = useState<EstimativaPesoResult | null>(null);
   const [saving, setSaving] = useState(false);
+  const progressoSalvar = useProgresso();
   const [error, setError] = useState<string | null>(null);
+  // Progresso da etapa "ANALYZING" (offline: 2 etapas; online: 3 etapas)
+  const progressoAnalise = useProgresso();
 
   const [modoOffline, setModoOffline] = useState(false);
   const [modeloDisponivel, setModeloDisponivel] = useState(false);
@@ -79,11 +84,15 @@ export default function EstimativaPeso() {
   async function fetchLotes() {
     try {
       setLoadingLotes(true);
-      const lotesSnap = await getCollection("lotes");
+      progressoLotes.iniciar(1);
+      const lotesSnap = await progressoLotes.rastrear(getCollection("lotes"));
       const lotesAtivosDocs = lotesSnap.docs.filter((doc) => doc.data().ativo);
 
+      progressoLotes.adicionarEtapas(lotesAtivosDocs.length);
       const movSnaps = await Promise.all(
-        lotesAtivosDocs.map((doc) => getCollection("lotes", doc.id, "movimentacoes"))
+        lotesAtivosDocs.map((doc) =>
+          progressoLotes.rastrear(getCollection("lotes", doc.id, "movimentacoes"))
+        )
       );
 
       const lotesData: Lote[] = [];
@@ -111,6 +120,7 @@ export default function EstimativaPeso() {
     } catch (err) {
       console.error("Erro ao buscar lotes:", err);
     } finally {
+      progressoLotes.concluir();
       setLoadingLotes(false);
     }
   }
@@ -184,10 +194,13 @@ export default function EstimativaPeso() {
 
       setStep("ANALYZING");
       setError(null);
+      progressoAnalise.iniciar(2);
 
       try {
-        const { estimarPesoOffline } = await import("@/services/localWeightEstimation");
-        const resultado = await estimarPesoOffline(imageUri);
+        const { estimarPesoOffline } = await progressoAnalise.rastrear(
+          import("@/services/localWeightEstimation")
+        );
+        const resultado = await progressoAnalise.rastrear(estimarPesoOffline(imageUri));
         setResult(resultado);
         setStep("RESULTS");
       } catch (err: any) {
@@ -195,6 +208,8 @@ export default function EstimativaPeso() {
         setError(err.message ?? "Erro ao analisar a imagem com modelo local.");
         Alert.alert("Erro", err.message ?? "Nao foi possivel analisar a imagem.");
         setStep("CAMERA");
+      } finally {
+        progressoAnalise.concluir();
       }
       return;
     }
@@ -206,8 +221,11 @@ export default function EstimativaPeso() {
     }
 
     // Check connectivity
-    const netState = await NetInfo.fetch();
+    // (etapa 1 de 3; o indicador só aparece após setStep("ANALYZING"))
+    progressoAnalise.iniciar(3);
+    const netState = await progressoAnalise.rastrear(NetInfo.fetch());
     if (!netState.isConnected) {
+      progressoAnalise.concluir();
       Alert.alert(
         "Sem Conexao",
         "Estimativa de peso requer conexao com a internet."
@@ -220,7 +238,7 @@ export default function EstimativaPeso() {
 
     try {
       // Fetch API key from configuracoesIA
-      const configSnap = await getCollection("configuracoesIA");
+      const configSnap = await progressoAnalise.rastrear(getCollection("configuracoesIA"));
       const apiKeyDoc = configSnap.docs.find(
         (d) => d.data().descricao === "ANTHROPIC_API_KEY"
       );
@@ -245,11 +263,13 @@ export default function EstimativaPeso() {
         }
         : undefined;
 
-      const resultado = await estimarPesoPorImagem(
-        imageBase64,
-        imageMimeType,
-        apiKey,
-        contexto
+      const resultado = await progressoAnalise.rastrear(
+        estimarPesoPorImagem(
+          imageBase64,
+          imageMimeType,
+          apiKey,
+          contexto
+        )
       );
 
       setResult(resultado);
@@ -259,12 +279,15 @@ export default function EstimativaPeso() {
       setError(err.message ?? "Erro desconhecido ao analisar a imagem.");
       Alert.alert("Erro", err.message ?? "Nao foi possivel analisar a imagem.");
       setStep("CAMERA");
+    } finally {
+      progressoAnalise.concluir();
     }
   }
 
   async function handleSave() {
     if (!result) return;
     setSaving(true);
+    progressoSalvar.iniciar(1);
 
     try {
       const docData = {
@@ -287,9 +310,11 @@ export default function EstimativaPeso() {
       };
 
       if (selectedLote) {
-        await addDocument(["lotes", selectedLote.id, "estimativasPeso"], docData);
+        await progressoSalvar.rastrear(
+          addDocument(["lotes", selectedLote.id, "estimativasPeso"], docData)
+        );
       } else {
-        await addDocument(["estimativasPesoAvulsas"], docData);
+        await progressoSalvar.rastrear(addDocument(["estimativasPesoAvulsas"], docData));
       }
 
       Alert.alert("Sucesso", "Estimativa salva com sucesso!");
@@ -297,6 +322,7 @@ export default function EstimativaPeso() {
       console.error("Erro ao salvar:", err);
       Alert.alert("Erro", "Nao foi possivel salvar a estimativa.");
     } finally {
+      progressoSalvar.concluir();
       setSaving(false);
     }
   }
@@ -336,6 +362,7 @@ export default function EstimativaPeso() {
             options={loteOptions}
             onSelect={handleSelectLote}
             loading={loadingLotes}
+            progresso={progressoLotes}
           />
         </View>
 
@@ -540,7 +567,7 @@ export default function EstimativaPeso() {
   function renderAnalyzing() {
     return (
       <View style={styles.analyzingContainer}>
-        <ActivityIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} progresso={progressoAnalise} />
         <Text style={styles.analyzingTitle}>Analisando imagem...</Text>
         <Text style={styles.analyzingSubtitle}>
           {modoOffline
@@ -648,7 +675,7 @@ export default function EstimativaPeso() {
             disabled={saving}
           >
             {saving ? (
-              <ActivityIndicator size="small" color="#FFF" />
+              <LoadingIndicator size="small" color="#FFF" inline progresso={progressoSalvar} />
             ) : (
               <>
                 <Feather name="save" size={18} color="#FFF" style={{ marginRight: 8 }} />

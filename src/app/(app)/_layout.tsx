@@ -4,13 +4,14 @@ import { DrawerProvider, useDrawer } from "@/contexts/DrawerContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { WeighingProvider } from "@/contexts/WeighingContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useProgresso } from "@/hooks/useProgresso";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { prefetchAllData } from "@/utils/prefetchFirestore";
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Slot, usePathname, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Image,
   ScrollView,
@@ -201,6 +202,8 @@ export default function AppLayout() {
   const [checking, setChecking] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+  const progressoChecagem = useProgresso();
+  const progressoSync = useProgresso();
 
   // Guarda de rota: quem digita a URL ou segue um atalho para uma tela não
   // liberada no perfil é levado para a primeira tela permitida do módulo.
@@ -222,12 +225,19 @@ export default function AppLayout() {
   async function checkFirstSync() {
     const syncKey = `@lastSync:${selectedFazendaId}`;
     try {
+      progressoChecagem.iniciar(1);
       const lastSync = await AsyncStorage.getItem(syncKey);
+      progressoChecagem.concluir();
       if (!lastSync) {
+        progressoSync.iniciar(0);
         setSyncing(true);
         setChecking(false);
         setSyncMessage("Sincronizando dados para uso offline...");
-        await prefetchAllData((msg) => setSyncMessage(msg));
+        await prefetchAllData((msg, _pct, concluidas, total) => {
+          setSyncMessage(msg);
+          progressoSync.definir(concluidas, total);
+        });
+        progressoSync.concluir();
         const now = new Date().toLocaleString("pt-BR");
         await AsyncStorage.setItem(syncKey, now);
         setSyncing(false);
@@ -235,6 +245,8 @@ export default function AppLayout() {
         setChecking(false);
       }
     } catch {
+      progressoChecagem.concluir();
+      progressoSync.concluir();
       setChecking(false);
       setSyncing(false);
     }
@@ -250,7 +262,7 @@ export default function AppLayout() {
           backgroundColor: "#FDFDFD",
         }}
       >
-        <ActivityIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} progresso={progressoChecagem} />
       </View>
     );
   }
@@ -266,7 +278,7 @@ export default function AppLayout() {
           padding: 32,
         }}
       >
-        <ActivityIndicator size="large" color={primaryColor} />
+        <LoadingIndicator size="large" color={primaryColor} progresso={progressoSync} />
         <Text
           style={{
             marginTop: 16,

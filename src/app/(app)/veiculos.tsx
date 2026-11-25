@@ -1,10 +1,12 @@
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { QRCodeModal } from "@/components/QRCodeModal";
 import { Veiculo, VeiculoCard } from "@/components/VeiculoCard";
 import { VeiculoFormModal } from "@/components/VeiculoFormModal";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -16,7 +18,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -39,6 +40,7 @@ export default function Veiculos() {
   } = useResponsive();
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
 
   const [formVisible, setFormVisible] = useState(false);
   const [editingVeiculo, setEditingVeiculo] = useState<Veiculo | null>(null);
@@ -54,7 +56,8 @@ export default function Veiculos() {
   async function fetchVeiculos() {
     try {
       setLoading(true);
-      const snap = await getCollection("veiculos");
+      progresso.iniciar(1);
+      const snap = await progresso.rastrear(getCollection("veiculos"));
       const data: Veiculo[] = snap.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -64,6 +67,7 @@ export default function Veiculos() {
     } catch (error) {
       console.error("Erro ao buscar veiculos:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -171,10 +175,11 @@ export default function Veiculos() {
             </TouchableOpacity>
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progresso}
               />
             ) : veiculos.length === 0 ? (
               <Text style={styles.emptyText}>

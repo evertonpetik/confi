@@ -1,9 +1,11 @@
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { Produtor, ProdutorCard } from "@/components/ProdutorCard";
 import { ProdutorFormModal } from "@/components/ProdutorFormModal";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -15,7 +17,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -31,6 +32,7 @@ export default function Produtores() {
   const { isTablet, isDesktop, maxWidthContent, containerPadding, titleFontSize, headerPaddingTop } = useResponsive();
   const [produtores, setProdutores] = useState<Produtor[]>([]);
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
 
   const [modalVisible, setModalVisible] = useState(false);
   const [editingProdutor, setEditingProdutor] = useState<Produtor | null>(null);
@@ -46,7 +48,8 @@ export default function Produtores() {
   async function fetchProdutores() {
     try {
       setLoading(true);
-      const querySnapshot = await getCollection("produtores");
+      progresso.iniciar(1);
+      const querySnapshot = await progresso.rastrear(getCollection("produtores"));
       const data: Produtor[] = [];
       querySnapshot.forEach((docSnap) => {
         data.push({ id: docSnap.id, ...docSnap.data() } as Produtor);
@@ -55,6 +58,7 @@ export default function Produtores() {
     } catch (error) {
       console.error("Erro ao buscar produtores:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -137,10 +141,11 @@ export default function Produtores() {
             </TouchableOpacity>
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progresso}
               />
             ) : produtores.length === 0 ? (
               <Text style={styles.emptyText}>

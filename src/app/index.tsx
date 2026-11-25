@@ -1,11 +1,12 @@
 import { Button } from "@/components/Button";
 import { Input } from "@/components/Input";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -22,6 +23,7 @@ export default function Index() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const progresso = useProgresso();
   const [error, setError] = useState("");
 
   async function handleSignIn() {
@@ -31,8 +33,9 @@ export default function Index() {
     }
     setError("");
     setLoading(true);
+    progresso.iniciar(1);
     try {
-      await signIn(email.trim(), password);
+      await progresso.rastrear(signIn(email.trim(), password));
     } catch (err: any) {
       const code = err?.code ?? "";
       if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
@@ -43,6 +46,7 @@ export default function Index() {
         setError("Erro ao fazer login. Tente novamente.");
       }
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -100,10 +104,11 @@ export default function Index() {
             />
             {error !== "" && <Text style={styles.errorText}>{error}</Text>}
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 8 }}
+                progresso={progresso}
               />
             ) : (
               <Button label="Entrar" onPress={handleSignIn} />

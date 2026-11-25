@@ -1,6 +1,8 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -17,7 +19,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -69,6 +70,7 @@ export default function Leitura() {
   const [lotes, setLotes] = useState<LoteComPiquete[]>([]);
   const [notas, setNotas] = useState<NotaLeitura[]>([]);
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
   const [saving, setSaving] = useState<string | null>(null);
   const [leiturasHoje, setLeiturasHoje] = useState<Map<string, LeituraHoje>>(
     new Map()
@@ -97,11 +99,16 @@ export default function Leitura() {
   async function fetchData() {
     try {
       setLoading(true);
-      const [lotesSnap, notasSnap, baseCmsLeitura] = await Promise.all([
+      // 3 consultas iniciais + histórico de ontem; depois 1 por lote ativo com piquete
+      progresso.iniciar(3 + 1);
+      const [lotesSnap, notasSnap, baseCmsLeitura] = await progresso.todas([
         getCollection("lotes"),
         getCollection("notaLeitura"),
         getBaseCmsLeitura(),
       ]);
+      progresso.adicionarEtapas(
+        lotesSnap.docs.filter((d) => d.data().piqueteId && d.data().ativo !== false).length
+      );
 
       // Notas de leitura
       const notasData: NotaLeitura[] = notasSnap.docs
@@ -122,7 +129,7 @@ export default function Leitura() {
       const ontem = new Date(dataSelecionada);
       ontem.setDate(ontem.getDate() - 1);
       const ontemStr = `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, "0")}-${String(ontem.getDate()).padStart(2, "0")}`;
-      const histOntemSnap = await queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", ontemStr)]);
+      const histOntemSnap = await progresso.rastrear(queryCollection(["historicoMapaTrato"], [fsWhere("data", "==", ontemStr)]));
       const cmsRealizadoOntemMap = new Map<string, number>();
       const cmsPrevistoOntemMap = new Map<string, number>();
       for (const hDoc of histOntemSnap.docs) {
@@ -163,10 +170,10 @@ export default function Leitura() {
 
         // Buscar leituras recentes: pode haver várias no mesmo dia (nota
         // remarcada, ajuste fino, repetir previsto) — desempate por criadoEm
-        const leituraSnap = await queryCollection(
+        const leituraSnap = await progresso.rastrear(queryCollection(
           ["lotes", loteDoc.id, "leituras"],
           [fsOrderBy("data", "desc"), fsLimit(10)]
-        );
+        ));
         const ultimaLeitura = escolherLeituraMaisRecente(
           leituraSnap.docs.map((d) => d.data() as {
             data?: string; criadoEm?: number; nota?: string; fator?: number;
@@ -231,6 +238,7 @@ export default function Leitura() {
     } catch (error) {
       console.error("Erro ao buscar dados:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -431,10 +439,11 @@ export default function Leitura() {
             </View>
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progresso}
               />
             ) : lotes.length === 0 ? (
               <Text style={styles.emptyText}>

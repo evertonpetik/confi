@@ -1,8 +1,10 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { COR_TERCEIRO, TarjaProprietario } from "@/components/TarjaProprietario";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import Aviso from "@/services/alerta";
 import BrincoService from "@/services/brincoService";
@@ -19,7 +21,6 @@ import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated, Modal, Platform,
   ScrollView,
   StyleSheet,
@@ -152,6 +153,9 @@ export default function PesagemBalanca() {
   const [bleRfidId, setBleRfidId] = useState<string | null>(null);
   const [bleBalancaConectando, setBleBalancaConectando] = useState(false);
   const [bleRfidConectando, setBleRfidConectando] = useState(false);
+  const progressoBleBalanca = useProgresso();
+  const progressoBleRfid = useProgresso();
+  const progressoScan = useProgresso();
 
   // ─── Processo vinculado ───────────────────────────────────────────────────
   const [processos, setProcessos] = useState<ProcessoMangueiro[]>([]);
@@ -161,10 +165,12 @@ export default function PesagemBalanca() {
   const [pedidoBrinco, setPedidoBrinco] = useState<PedidoBrinco | null>(null);
   const [proximoBrinco, setProximoBrinco] = useState<{ brinco: string; controle: string } | null>(null);
   const [carregandoProcessos, setCarregandoProcessos] = useState(false);
+  const progressoProcessos = useProgresso();
   /** Compras de brinco disponíveis, trocáveis no meio do lote. */
   const [pedidosDisponiveis, setPedidosDisponiveis] = useState<PedidoBrinco[]>([]);
   const [showSelecionarPedido, setShowSelecionarPedido] = useState(false);
   const [anulando, setAnulando] = useState(false);
+  const progressoAnular = useProgresso();
 
   // ─── Campos extras para processo de entrada ───────────────────────────────
   // Estes valores são o "padrão do lote": ficam entre animais e só mudam
@@ -194,6 +200,7 @@ export default function PesagemBalanca() {
     pedidoBrincoId?: string;
   } | null>(null);
   const [desfazendo, setDesfazendo] = useState(false);
+  const progressoDesfazer = useProgresso();
 
   /** Grava sozinho após a contagem quando peso e chip já estão prontos. */
   const [modoRajada, setModoRajada] = useState(false);
@@ -205,6 +212,7 @@ export default function PesagemBalanca() {
   const [chipLido, setChipLido] = useState<string | null>(paramSisbov ?? null);
   const [animal, setAnimal] = useState<Bovino | null>(null);
   const [buscandoAnimal, setBuscandoAnimal] = useState(false);
+  const progressoBusca = useProgresso();
 
   // ─── Entrada manual ────────────────────────────────────────────────────────
   const [modoManual, setModoManual] = useState(false);
@@ -214,6 +222,7 @@ export default function PesagemBalanca() {
 
   // ─── Salvamento ────────────────────────────────────────────────────────────
   const [salvando, setSalvando] = useState(false);
+  const progressoSalvar = useProgresso();
   const [pesagemSalva, setPesagemSalva] = useState(false);
 
   // ─── Animações ─────────────────────────────────────────────────────────────
@@ -242,14 +251,16 @@ export default function PesagemBalanca() {
     async (chip: string) => {
       if (!fazendaId || chip.length !== 15) return;
       setBuscandoAnimal(true);
+      progressoBusca.iniciar(1);
       try {
-        const found = await PesagemFirestoreService.obterBovinoPorNumero(chip, fazendaId);
+        const found = await progressoBusca.rastrear(PesagemFirestoreService.obterBovinoPorNumero(chip, fazendaId));
         setAnimal(found);
         if (!found) {
           // Chip lido mas não cadastrado — avisa sem bloquear
           console.warn("[Pesagem] Animal não encontrado para chip:", chip);
         }
       } finally {
+        progressoBusca.concluir();
         setBuscandoAnimal(false);
       }
     },
@@ -299,18 +310,20 @@ export default function PesagemBalanca() {
     const service = svc ?? bleService.current;
     if (!service || !mac) return;
     setBleBalancaConectando(true);
+    progressoBleBalanca.iniciar(3);
     try {
-      const ok = await service.conectar(mac);
+      const ok = await progressoBleBalanca.rastrear(service.conectar(mac));
       if (ok) {
-        await service.subscritoPeso(mac);
+        await progressoBleBalanca.rastrear(service.subscritoPeso(mac));
         setBleBalancaId(mac);
         setBalancaConectada(true);
         setMacBalanca(mac);
-        await AsyncStorage.setItem(STORAGE_MAC_BALANCA, mac);
+        await progressoBleBalanca.rastrear(AsyncStorage.setItem(STORAGE_MAC_BALANCA, mac));
       } else {
         Aviso.alert("BLE", "Não foi possível conectar à balança. Verifique se está ligada e próxima.");
       }
     } finally {
+      progressoBleBalanca.concluir();
       setBleBalancaConectando(false);
     }
   }, []);
@@ -319,18 +332,20 @@ export default function PesagemBalanca() {
     const service = svc ?? bleService.current;
     if (!service || !mac) return;
     setBleRfidConectando(true);
+    progressoBleRfid.iniciar(3);
     try {
-      const ok = await service.conectar(mac);
+      const ok = await progressoBleRfid.rastrear(service.conectar(mac));
       if (ok) {
-        await service.subscritoChip(mac);
+        await progressoBleRfid.rastrear(service.subscritoChip(mac));
         setBleRfidId(mac);
         setRfidConectado(true);
         setMacRfid(mac);
-        await AsyncStorage.setItem(STORAGE_MAC_RFID, mac);
+        await progressoBleRfid.rastrear(AsyncStorage.setItem(STORAGE_MAC_RFID, mac));
       } else {
         Aviso.alert("BLE", "Não foi possível conectar ao leitor RFID.");
       }
     } finally {
+      progressoBleRfid.concluir();
       setBleRfidConectando(false);
     }
   }, []);
@@ -360,11 +375,13 @@ export default function PesagemBalanca() {
   const escanearBle = useCallback(async () => {
     if (!bleService.current) return;
     setScanando(true);
+    progressoScan.iniciar(1);
     setDispositivosBle([]);
     try {
-      const devs = await bleService.current.descobrirDispositivos(5000);
+      const devs = await progressoScan.rastrear<any>(bleService.current.descobrirDispositivos(5000));
       setDispositivosBle(devs.map((d: any) => ({ id: d.id, nome: d.nome || d.id, rssi: d.sinSinal })));
     } finally {
+      progressoScan.concluir();
       setScanando(false);
     }
   }, []);
@@ -373,9 +390,13 @@ export default function PesagemBalanca() {
   useEffect(() => {
     if (!fazendaId) return;
     setCarregandoProcessos(true);
-    BrincoService.listarProcessosMangueiro(fazendaId)
+    progressoProcessos.iniciar(1);
+    progressoProcessos.rastrear(BrincoService.listarProcessosMangueiro(fazendaId))
       .then((lista) => setProcessos(lista.filter((p) => p.status === "aberto" || p.status === "em_andamento")))
-      .finally(() => setCarregandoProcessos(false));
+      .finally(() => {
+        progressoProcessos.concluir();
+        setCarregandoProcessos(false);
+      });
   }, [fazendaId]);
 
   // Carrega processo pelo param (vindo da tela de processos)
@@ -761,8 +782,10 @@ export default function PesagemBalanca() {
       return;
     }
     setSalvando(true);
+    // 7 etapas fixas + 1 por evento sanitário (adicionadas quando conhecidas)
+    progressoSalvar.iniciar(7);
     try {
-      const reserva = await BrincoService.reservarBrinco(pedidoBrinco.id!, fazendaId);
+      const reserva = await progressoSalvar.rastrear(BrincoService.reservarBrinco(pedidoBrinco.id!, fazendaId));
       if (!reserva) {
         Aviso.alert("Erro", "Não há mais brincos disponíveis neste pedido.");
         return;
@@ -812,10 +835,10 @@ export default function PesagemBalanca() {
         },
       };
 
-      await PesagemFirestoreService.salvarBovino(bovino, fazendaId);
+      await progressoSalvar.rastrear(PesagemFirestoreService.salvarBovino(bovino, fazendaId));
 
       if (pesoParaSalvar && pesoParaSalvar > 0) {
-        await PesagemFirestoreService.registrarPesagemRapida(
+        await progressoSalvar.rastrear(PesagemFirestoreService.registrarPesagemRapida(
           sisbov,
           sisbov,
           pesoParaSalvar,
@@ -823,7 +846,7 @@ export default function PesagemBalanca() {
           user?.uid ?? "sistema",
           inputObs || undefined,
           chipParaSalvar ?? undefined
-        );
+        ));
       }
 
       // Histórico: uma passagem pelo mangueiro gera o cadastro e a pesagem no
@@ -888,15 +911,16 @@ export default function PesagemBalanca() {
         });
       }
 
-      await EventoService.registrarLote(bovino, eventos, fazendaId);
+      await progressoSalvar.rastrear(EventoService.registrarLote(bovino, eventos, fazendaId));
 
       // A ficha sanitária do animal é o que o veterinário consulta; sem ela a
       // carência não aparece na tela do animal.
+      progressoSalvar.adicionarEtapas(aplicacoes.length);
       for (const aplicacao of aplicacoes) {
-        await PesagemFirestoreService.salvarEventoSanitario(
+        await progressoSalvar.rastrear(PesagemFirestoreService.salvarEventoSanitario(
           eventoSanitarioDaAplicacao(aplicacao, sisbov, instante, fazendaId, user?.uid),
           fazendaId
-        );
+        ));
       }
 
       // Contador da faixa e alvo do desfazer
@@ -912,13 +936,13 @@ export default function PesagemBalanca() {
         pedidoBrincoId: pedidoBrinco.id,
       });
 
-      await BrincoService.incrementarManejados(processoSelecionado.id!, fazendaId);
+      await progressoSalvar.rastrear(BrincoService.incrementarManejados(processoSelecionado.id!, fazendaId));
 
       // Atualiza processo local e pré-visualiza próximo brinco
-      const procAtualizado = await BrincoService.obterProcessoMangueiro(processoSelecionado.id!, fazendaId);
+      const procAtualizado = await progressoSalvar.rastrear(BrincoService.obterProcessoMangueiro(processoSelecionado.id!, fazendaId));
       if (procAtualizado) setProcessoSelecionado(procAtualizado);
 
-      const pedidosAtt = await BrincoService.listarPedidos(fazendaId);
+      const pedidosAtt = await progressoSalvar.rastrear(BrincoService.listarPedidos(fazendaId));
       const pedAtt = pedidosAtt.find((p) => p.id === pedidoBrinco.id) ?? null;
       setPedidoBrinco(pedAtt);
       if (pedAtt) {
@@ -934,12 +958,14 @@ export default function PesagemBalanca() {
       console.error(err);
       Aviso.alert("Erro", "Não foi possível salvar o animal/pesagem.");
     } finally {
+      progressoSalvar.concluir();
       setSalvando(false);
     }
   };
 
   const _persistir = async () => {
     setSalvando(true);
+    progressoSalvar.iniciar(2);
     try {
       // O animal pode não estar cadastrado (pesagem registrada mesmo assim):
       // nesse caso o número lido é tudo que se tem para identificá-lo depois.
@@ -949,7 +975,7 @@ export default function PesagemBalanca() {
         manejo: manejoFromSisbov(chipParaSalvar!),
       };
 
-      await PesagemFirestoreService.registrarPesagemRapida(
+      await progressoSalvar.rastrear(PesagemFirestoreService.registrarPesagemRapida(
         animalAlvo.id,
         animalAlvo.sisbov,
         pesoParaSalvar!,
@@ -957,9 +983,9 @@ export default function PesagemBalanca() {
         user?.uid ?? "sistema",
         inputObs || undefined,
         animal?.chipRfid ?? (modoManual ? undefined : chipLido ?? undefined)
-      );
+      ));
 
-      await EventoService.registrar(
+      await progressoSalvar.rastrear(EventoService.registrar(
         animalAlvo,
         {
           tipo: "pesagem",
@@ -971,7 +997,7 @@ export default function PesagemBalanca() {
           origem: "mangueiro",
         },
         fazendaId
-      );
+      ));
 
       setPesagemSalva(true);
       leituras.current = [];
@@ -979,6 +1005,7 @@ export default function PesagemBalanca() {
     } catch {
       Aviso.alert("Erro", "Não foi possível salvar a pesagem. Verifique a conexão.");
     } finally {
+      progressoSalvar.concluir();
       setSalvando(false);
     }
   };
@@ -1011,22 +1038,24 @@ export default function PesagemBalanca() {
 
     const registrar = (motivo: "defeito" | "danificado") => async () => {
       setAnulando(true);
+      progressoAnular.iniciar(2);
       try {
-        const anulado = await BrincoService.anularBrinco(
+        const anulado = await progressoAnular.rastrear(BrincoService.anularBrinco(
           pedidoBrinco.id!,
           motivo,
           user?.uid ?? "sistema",
           fazendaId
-        );
+        ));
         if (!anulado) {
           Aviso.alert("Pedido esgotado", "Não há mais brincos nesta compra.");
           return;
         }
-        await atualizarProximoBrinco(pedidoBrinco.id!);
+        await progressoAnular.rastrear(atualizarProximoBrinco(pedidoBrinco.id!));
         resetarLeitura();
       } catch {
         Aviso.alert("Erro", "Não foi possível anular o brinco.");
       } finally {
+        progressoAnular.concluir();
         setAnulando(false);
       }
     };
@@ -1053,29 +1082,33 @@ export default function PesagemBalanca() {
   const desfazerUltimo = async () => {
     if (!ultimoGravado || !processoSelecionado) return;
     setDesfazendo(true);
+    // 6 etapas fixas + 1 por evento a estornar (adicionadas quando conhecidos)
+    progressoDesfazer.iniciar(6);
     try {
       const { bovino, faixaLabel, pedidoBrincoId } = ultimoGravado;
 
       // Estorna os eventos daquele animal neste processo
-      const eventos = await EventoService.listarDoAnimal(bovino.id, fazendaId);
-      for (const ev of semEstornados(eventos)) {
-        await EventoService.estornar(
+      const eventos = await progressoDesfazer.rastrear(EventoService.listarDoAnimal(bovino.id, fazendaId));
+      const aEstornar = semEstornados(eventos);
+      progressoDesfazer.adicionarEtapas(aEstornar.length);
+      for (const ev of aEstornar) {
+        await progressoDesfazer.rastrear(EventoService.estornar(
           bovino,
           ev,
           user?.uid ?? "sistema",
           fazendaId,
           "Desfeito no mangueiro"
-        );
+        ));
       }
 
-      await PesagemFirestoreService.atualizarBovino(
+      await progressoDesfazer.rastrear(PesagemFirestoreService.atualizarBovino(
         { ...bovino, ativo: false, metadados: { ...bovino.metadados, desfeito: true } },
         fazendaId
-      );
+      ));
 
-      if (pedidoBrincoId) await BrincoService.devolverBrinco(pedidoBrincoId, fazendaId);
+      if (pedidoBrincoId) await progressoDesfazer.rastrear(BrincoService.devolverBrinco(pedidoBrincoId, fazendaId));
       if (processoSelecionado.id) {
-        await BrincoService.decrementarManejados(processoSelecionado.id, fazendaId);
+        await progressoDesfazer.rastrear(BrincoService.decrementarManejados(processoSelecionado.id, fazendaId));
       }
 
       if (faixaLabel) {
@@ -1086,9 +1119,9 @@ export default function PesagemBalanca() {
       }
 
       // Recarrega processo e próximo brinco
-      const proc = await BrincoService.obterProcessoMangueiro(processoSelecionado.id!, fazendaId);
+      const proc = await progressoDesfazer.rastrear(BrincoService.obterProcessoMangueiro(processoSelecionado.id!, fazendaId));
       if (proc) setProcessoSelecionado(proc);
-      const pedidos = await BrincoService.listarPedidos(fazendaId);
+      const pedidos = await progressoDesfazer.rastrear(BrincoService.listarPedidos(fazendaId));
       const ped = pedidos.find((p) => p.id === pedidoBrincoId) ?? null;
       setPedidoBrinco(ped);
       if (ped) {
@@ -1102,6 +1135,7 @@ export default function PesagemBalanca() {
       console.error(err);
       Aviso.alert("Erro", "Não foi possível desfazer. Confira o animal no rebanho.");
     } finally {
+      progressoDesfazer.concluir();
       setDesfazendo(false);
     }
   };
@@ -1249,7 +1283,7 @@ export default function PesagemBalanca() {
                           disabled={bleBalancaConectando || !macBalanca}
                         >
                           {bleBalancaConectando
-                            ? <ActivityIndicator size="small" color={primaryColor} />
+                            ? <LoadingIndicator size="small" color={primaryColor} inline progresso={progressoBleBalanca} />
                             : <Feather name="wifi" size={14} color={primaryColor} />}
                           <Text style={[styles.configBtnText, { color: primaryColor }]}>
                             {bleBalancaConectando ? "Conectando..." : "Conectar"}
@@ -1293,7 +1327,7 @@ export default function PesagemBalanca() {
                           disabled={bleRfidConectando || !macRfid}
                         >
                           {bleRfidConectando
-                            ? <ActivityIndicator size="small" color={primaryColor} />
+                            ? <LoadingIndicator size="small" color={primaryColor} inline progresso={progressoBleRfid} />
                             : <Feather name="wifi" size={14} color={primaryColor} />}
                           <Text style={[styles.configBtnText, { color: primaryColor }]}>
                             {bleRfidConectando ? "Conectando..." : "Conectar"}
@@ -1310,7 +1344,7 @@ export default function PesagemBalanca() {
                     disabled={scanando}
                   >
                     {scanando
-                      ? <ActivityIndicator size="small" color={primaryColor} />
+                      ? <LoadingIndicator size="small" color={primaryColor} inline progresso={progressoScan} />
                       : <Feather name="bluetooth" size={16} color={primaryColor} />}
                     <Text style={[styles.btnScanBleText, { color: primaryColor }]}>
                       {scanando ? "Varrendo (5s)..." : "Varrer dispositivos BLE"}
@@ -1688,7 +1722,7 @@ export default function PesagemBalanca() {
                     keyboardType="numeric"
                     maxLength={15}
                   />
-                  {buscandoAnimal && <ActivityIndicator size="small" color={primaryColor} style={{ marginLeft: 8 }} />}
+                  {buscandoAnimal && <LoadingIndicator size="small" color={primaryColor} style={{ marginLeft: 8 }} inline progresso={progressoBusca} />}
                 </View>
 
                 <Text style={styles.formLabel}>Peso (kg)</Text>
@@ -1724,7 +1758,7 @@ export default function PesagemBalanca() {
                     <>
                       <Text style={styles.chipDisplay}>{formatarChip(chipLido)}</Text>
                       {buscandoAnimal && (
-                        <ActivityIndicator size="small" color={primaryColor} style={{ marginTop: 4 }} />
+                        <LoadingIndicator size="small" color={primaryColor} style={{ marginTop: 4 }} inline progresso={progressoBusca} />
                       )}
                     </>
                   ) : (
@@ -1762,7 +1796,7 @@ export default function PesagemBalanca() {
             {(animal || buscandoAnimal) && (
               <View style={[styles.animalPanel, { borderLeftColor: primaryColor }]}>
                 {buscandoAnimal ? (
-                  <ActivityIndicator size="small" color={primaryColor} />
+                  <LoadingIndicator size="small" color={primaryColor} inline progresso={progressoBusca} />
                 ) : animal ? (
                   <>
                     {/* De quem é o animal, antes de qualquer outro dado dele */}
@@ -1854,9 +1888,13 @@ export default function PesagemBalanca() {
                     disabled={anulando}
                   >
                     <Feather name="slash" size={15} color="#E65100" />
-                    <Text style={styles.btnAnularText}>
-                      {anulando ? "Anulando…" : `Anular brinco ${proximoBrinco.controle}`}
-                    </Text>
+                    {anulando ? (
+                      <LoadingIndicator inline size="small" texto="Anulando" progresso={progressoAnular} color="#E65100" />
+                    ) : (
+                      <Text style={styles.btnAnularText}>
+                        {`Anular brinco ${proximoBrinco.controle}`}
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 )}
 
@@ -2163,9 +2201,11 @@ export default function PesagemBalanca() {
                       disabled={desfazendo}
                     >
                       <Feather name="rotate-ccw" size={15} color="#C62828" />
-                      <Text style={styles.btnDesfazerText}>
-                        {desfazendo ? "Desfazendo…" : "Desfazer"}
-                      </Text>
+                      {desfazendo ? (
+                        <LoadingIndicator inline size="small" texto="Desfazendo" progresso={progressoDesfazer} color="#C62828" />
+                      ) : (
+                        <Text style={styles.btnDesfazerText}>Desfazer</Text>
+                      )}
                     </TouchableOpacity>
                   )}
                 </View>
@@ -2186,7 +2226,7 @@ export default function PesagemBalanca() {
                   disabled={salvando}
                 >
                   {salvando ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    <LoadingIndicator size="small" color="#fff" inline progresso={progressoSalvar} />
                   ) : contagemRajada !== null ? (
                     <>
                       <Feather name="clock" size={18} color="#fff" />
@@ -2313,7 +2353,7 @@ export default function PesagemBalanca() {
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               {carregandoProcessos ? (
-                <ActivityIndicator color={primaryColor} style={{ marginVertical: 40 }} />
+                <LoadingIndicator color={primaryColor} style={{ marginVertical: 40 }} progresso={progressoProcessos} />
               ) : processos.length === 0 ? (
                 <View style={{ alignItems: "center", paddingVertical: 40 }}>
                   <Feather name="inbox" size={40} color="#ccc" />

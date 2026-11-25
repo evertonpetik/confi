@@ -1,7 +1,8 @@
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useTheme } from "@/contexts/ThemeContext";
+import { Progresso } from "@/hooks/useProgresso";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -27,6 +28,8 @@ type SelectProps = {
   onSelect: (value: string) => void;
   disabled?: boolean;
   loading?: boolean;
+  /** Progresso (0–100 %) do carregamento das opções; exibido ao lado do spinner quando `loading`. */
+  progresso?: Pick<Progresso, "valor" | "teto" | "ciclo"> | null;
   onAdd?: () => void;
 };
 
@@ -37,6 +40,7 @@ export function Select({
   onSelect,
   disabled = false,
   loading = false,
+  progresso,
   onAdd,
 }: SelectProps) {
   const [open, setOpen] = useState(false);
@@ -67,7 +71,7 @@ export function Select({
           onPress={() => !disabled && setOpen(true)}
         >
           {loading ? (
-            <ActivityIndicator size="small" color="#999" />
+            <LoadingIndicator size="small" color="#999" inline progresso={progresso} texto="Carregando" />
           ) : (
             <Text
               style={[styles.triggerText, !selectedLabel && styles.placeholder]}

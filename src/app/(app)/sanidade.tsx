@@ -7,8 +7,10 @@
  */
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import Aviso from "@/services/alerta";
 import ProtocoloService from "@/services/protocoloService";
@@ -16,7 +18,6 @@ import { ItemProtocolo, ProtocoloSanitario } from "@/services/weighing.types";
 import { Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Modal,
   ScrollView,
   StyleSheet,
@@ -64,6 +65,8 @@ export default function Sanidade() {
   const [carregando, setCarregando] = useState(true);
   const [modal, setModal] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const progresso = useProgresso();
+  const progressoSalvar = useProgresso();
 
   const [editando, setEditando] = useState<ProtocoloSanitario | null>(null);
   const [nome, setNome] = useState("");
@@ -73,11 +76,13 @@ export default function Sanidade() {
   const carregar = useCallback(async () => {
     if (!fazendaId) return;
     setCarregando(true);
+    progresso.iniciar(1);
     try {
-      setProtocolos(await ProtocoloService.listar(fazendaId));
+      setProtocolos(await progresso.rastrear(ProtocoloService.listar(fazendaId)));
     } catch {
       Aviso.alert("Erro", "Não foi possível carregar os protocolos.");
     } finally {
+      progresso.concluir();
       setCarregando(false);
     }
   }, [fazendaId]);
@@ -117,23 +122,27 @@ export default function Sanidade() {
     }
 
     setSalvando(true);
+    progressoSalvar.iniciar(1);
     try {
-      await ProtocoloService.salvar(
-        {
-          id: editando?.id,
-          nome: nome.trim(),
-          descricao: descricao.trim() || undefined,
-          itens: validos.map((i) => ({ ...i, produto: i.produto.trim() })),
-          ativo: true,
-          farmedaId: fazendaId,
-        },
-        fazendaId
+      await progressoSalvar.rastrear(
+        ProtocoloService.salvar(
+          {
+            id: editando?.id,
+            nome: nome.trim(),
+            descricao: descricao.trim() || undefined,
+            itens: validos.map((i) => ({ ...i, produto: i.produto.trim() })),
+            ativo: true,
+            farmedaId: fazendaId,
+          },
+          fazendaId
+        )
       );
       setModal(false);
       carregar();
     } catch {
       Aviso.alert("Erro", "Não foi possível salvar o protocolo.");
     } finally {
+      progressoSalvar.concluir();
       setSalvando(false);
     }
   }
@@ -183,7 +192,7 @@ export default function Sanidade() {
           </TouchableOpacity>
 
           {carregando ? (
-            <ActivityIndicator style={{ marginTop: 40 }} color={primaryColor} />
+            <LoadingIndicator style={{ marginTop: 40 }} size="small" color={primaryColor} progresso={progresso} />
           ) : protocolos.length === 0 ? (
             <View style={styles.vazioBox}>
               <Feather name="shield" size={32} color="#DDD" />
@@ -397,7 +406,11 @@ export default function Sanidade() {
               onPress={salvar}
               disabled={salvando}
             >
-              <Text style={styles.btnSalvarText}>{salvando ? "Salvando…" : "Salvar protocolo"}</Text>
+              {salvando ? (
+                <LoadingIndicator inline size="small" color="#fff" texto="Salvando" progresso={progressoSalvar} />
+              ) : (
+                <Text style={styles.btnSalvarText}>Salvar protocolo</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>

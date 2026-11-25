@@ -3,9 +3,9 @@ export default function PesagemLeituraPage() {
   return <Redirect href="/(app)/pesagem-balanca" />;
 }
 
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   Platform,
@@ -132,7 +132,7 @@ export const TelaLeituraPesagem: React.FC<TelaLeituraPesagemProps> = ({
             </View>
           ) : (
             <View style={styles.aguardando}>
-              <ActivityIndicator size="large" color="#0066cc" />
+              <LoadingIndicator size="large" color="#0066cc" />
               <Text style={styles.textoAguardando}>
                 Aproxime o leitor do chip do animal...
               </Text>
@@ -193,7 +193,7 @@ export const TelaLeituraPesagem: React.FC<TelaLeituraPesagemProps> = ({
             </View>
           ) : (
             <View style={styles.aguardando}>
-              <ActivityIndicator size="large" color="#0066cc" />
+              <LoadingIndicator size="large" color="#0066cc" />
               <Text style={styles.textoAguardando}>
                 Coloque o animal na balança...
               </Text>

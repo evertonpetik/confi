@@ -1,6 +1,8 @@
 import { DatePickerInput } from "@/components/DatePickerInput";
 import { Input } from "@/components/Input";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import {
   agendarEmbarque,
   cancelarEmbarqueAgendado,
@@ -10,7 +12,6 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -54,14 +55,17 @@ export function AgendarEmbarqueModal({ visible, lote, onClose }: AgendarEmbarque
   const [observacao, setObservacao] = useState("");
   const [agendamentos, setAgendamentos] = useState<EmbarqueAgendadoDoc[]>([]);
   const [loadingLista, setLoadingLista] = useState(false);
+  const progressoLista = useProgresso();
   const [saving, setSaving] = useState(false);
 
   const carregarAgendamentos = useCallback(async (loteId: string) => {
     setLoadingLista(true);
+    progressoLista.iniciar(1);
     try {
-      const lista = await listarEmbarquesAgendados(loteId);
+      const lista = await progressoLista.rastrear(listarEmbarquesAgendados(loteId));
       setAgendamentos(lista);
     } finally {
+      progressoLista.concluir();
       setLoadingLista(false);
     }
   }, []);
@@ -140,7 +144,7 @@ export function AgendarEmbarqueModal({ visible, lote, onClose }: AgendarEmbarque
               </View>
 
               {loadingLista ? (
-                <ActivityIndicator color={primaryColor} style={{ marginVertical: 8 }} />
+                <LoadingIndicator color={primaryColor} style={{ marginVertical: 8 }} progresso={progressoLista} />
               ) : agendamentos.length > 0 ? (
                 <View style={styles.agendList}>
                   <Text style={styles.agendListTitle}>Agendamentos pendentes</Text>

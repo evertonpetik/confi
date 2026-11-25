@@ -1,9 +1,11 @@
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { Tanque, TanqueCard } from "@/components/TanqueCard";
 import { TanqueFormModal } from "@/components/TanqueFormModal";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import {
   addDocument,
@@ -15,7 +17,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -38,6 +39,7 @@ export default function Tanques() {
   } = useResponsive();
   const [tanques, setTanques] = useState<Tanque[]>([]);
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
 
   const [formVisible, setFormVisible] = useState(false);
   const [editingTanque, setEditingTanque] = useState<Tanque | null>(null);
@@ -52,7 +54,8 @@ export default function Tanques() {
   async function fetchTanques() {
     try {
       setLoading(true);
-      const snap = await getCollection("tanques");
+      progresso.iniciar(1);
+      const snap = await progresso.rastrear(getCollection("tanques"));
       const data: Tanque[] = snap.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -62,6 +65,7 @@ export default function Tanques() {
     } catch (error) {
       console.error("Erro ao buscar tanques:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -164,10 +168,11 @@ export default function Tanques() {
             </TouchableOpacity>
 
             {loading ? (
-              <ActivityIndicator
+              <LoadingIndicator
                 size="large"
                 color={primaryColor}
                 style={{ marginTop: 32 }}
+                progresso={progresso}
               />
             ) : tanques.length === 0 ? (
               <Text style={styles.emptyText}>Nenhum tanque encontrado.</Text>

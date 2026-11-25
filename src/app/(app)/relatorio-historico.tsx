@@ -1,7 +1,9 @@
 import { DrawerSceneWrapper } from "@/components/drawe-scene-wrapper";
 import { DrawerToggleButton } from "@/components/DrawerToggleButton";
+import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { Select } from "@/components/Select";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useProgresso } from "@/hooks/useProgresso";
 import { useResponsive } from "@/hooks/useResponsive";
 import Aviso from "@/services/alerta";
 import { salvarArquivo } from "@/services/downloadArquivo";
@@ -14,7 +16,6 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   ScrollView,
   StyleSheet,
@@ -65,10 +66,12 @@ export default function RelatorioHistorico() {
 
   const [rows, setRows] = useState<HistoricoLoteRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const progresso = useProgresso();
   const [loteFiltro, setLoteFiltro] = useState("");
   const [sortKey, setSortKey] = useState<ColumnKey>("data");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [exportando, setExportando] = useState(false);
+  const progressoExportar = useProgresso();
 
   useFocusEffect(
     useCallback(() => {
@@ -79,11 +82,13 @@ export default function RelatorioHistorico() {
   async function fetchData() {
     try {
       setLoading(true);
-      const data = await buscarRelatorioHistoricoLotes();
+      // etapas contadas dentro do serviço (lotes + historico + 1 por lote)
+      const data = await buscarRelatorioHistoricoLotes(progresso);
       setRows(data);
     } catch (error) {
       console.error("Erro ao buscar relatorio historico:", error);
     } finally {
+      progresso.concluir();
       setLoading(false);
     }
   }
@@ -108,17 +113,21 @@ export default function RelatorioHistorico() {
   async function exportarExcel() {
     if (visibleRows.length === 0) return;
     setExportando(true);
+    progressoExportar.iniciar(1);
     try {
       const bytes = gerarXlsxRelatorioHistoricoLotes(visibleRows);
-      await salvarArquivo(
-        `relatorio-historico-lotes.xlsx`,
-        bytes,
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      await progressoExportar.rastrear(
+        salvarArquivo(
+          `relatorio-historico-lotes.xlsx`,
+          bytes,
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
       );
     } catch (e) {
       console.error(e);
       Aviso.alert("Erro", "Não foi possível gerar a planilha.");
     } finally {
+      progressoExportar.concluir();
       setExportando(false);
     }
   }
@@ -220,7 +229,7 @@ export default function RelatorioHistorico() {
             disabled={exportando || visibleRows.length === 0}
           >
             {exportando ? (
-              <ActivityIndicator size="small" color={primaryColor} />
+              <LoadingIndicator size="small" color={primaryColor} inline progresso={progressoExportar} />
             ) : (
               <Feather name="file-text" size={16} color={primaryColor} />
             )}
@@ -231,7 +240,7 @@ export default function RelatorioHistorico() {
         </View>
 
         {loading ? (
-          <ActivityIndicator size="large" color={primaryColor} style={{ marginTop: 32 }} />
+          <LoadingIndicator size="large" color={primaryColor} style={{ marginTop: 32 }} progresso={progresso} />
         ) : visibleRows.length === 0 ? (
           <View style={styles.emptyState}>
             <Feather name="alert-circle" size={48} color="#DCDCDC" />
